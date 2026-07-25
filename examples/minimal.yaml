@@ -1,0 +1,5 @@
+format: krizovkar
+version: 1
+grid:
+  width: 15
+  height: 10

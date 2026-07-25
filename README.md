@@ -4,7 +4,7 @@ Křížovkář je připravovaný otevřený nástroj pro tvorbu švédských, kl
 
 ## Stav projektu
 
-Repozitář je v úvodní fázi. Zatím obsahuje základní dokumentaci a pravidla spolupráce; podoba editoru a technologický základ budou navrženy v dalších změnách.
+Repozitář je v úvodní fázi. Zatím obsahuje základní dokumentaci, první verzi datového modelu a pravidla spolupráce; podoba editoru a technologický základ budou navrženy v dalších změnách.
 
 ## Zaměření
 
@@ -17,6 +17,20 @@ Projekt má postupně nabídnout zejména:
 - export pro tisk i digitální použití.
 
 Konkrétní rozsah první funkční verze bude popsán v roadmapě před zahájením implementace.
+
+## Datový model
+
+Nejmenší platný dokument zatím určuje pouze rozměr mřížky:
+
+```yaml
+format: krizovkar
+version: 1
+grid:
+  width: 15
+  height: 10
+```
+
+Význam položek a pravidla dalšího rozvoje popisuje [specifikace datového modelu](docs/datovy-model.md). Úplný soubor je v [minimálním příkladu](examples/minimal.yaml) a lze ho kontrolovat pomocí [JSON Schema](schema/krizovkar-v1.schema.json).
 
 ## Vývoj
 
