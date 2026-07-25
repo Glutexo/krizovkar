@@ -9,7 +9,7 @@ from reportlab.lib.pagesizes import A0, A1, A2, A3, A4, A5, A6, LEGAL, LETTER
 from reportlab.lib.units import mm
 from reportlab.pdfgen.canvas import Canvas
 
-from krizovkar.model import Crossword
+from krizovkar.model import CrosswordGrid
 
 PAGE_MARGIN = 15 * mm
 MAX_CELL_SIZE = 12 * mm
@@ -62,7 +62,7 @@ def resolve_page_size(page_format: str) -> tuple[float, float]:
 
 
 def _write_pdf(
-    crossword: Crossword,
+    crossword: CrosswordGrid,
     target: Path,
     page_size: tuple[float, float],
 ) -> None:
@@ -116,7 +116,7 @@ def _write_pdf(
 
 
 def render_pdf(
-    crossword: Crossword,
+    crossword: CrosswordGrid,
     output: str | Path,
     *,
     overwrite: bool = False,

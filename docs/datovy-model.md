@@ -1,13 +1,25 @@
 # Datový model
 
-Křížovkář ukládá křížovky jako textové dokumenty v YAML 1.2. Model je nezávislý na budoucím editoru, aby stejné soubory mohly používat různé nástroje.
+Křížovkář ukládá data jako textové dokumenty v YAML 1.2. Model je nezávislý na budoucím editoru, aby stejné soubory mohly používat různé nástroje.
 
-## Verze 1
+Existují dva samostatné druhy dokumentů:
 
-První iterace popisuje pouze obdélníkový rozměr celé mřížky:
+- zadání `specification` popisuje, co se má do křížovky vložit,
+- cílová mřížka `grid` popisuje konkrétní výsledek po rozložení.
+
+```text
+specification → generování a rozložení → grid → vykreslení PDF
+```
+
+Každý druh má vlastní JSON Schema a vlastní Pythonový loader. Dokument proto vždy obsahuje povinnou položku `kind`; nástroj nemusí jeho význam odhadovat z ostatních položek.
+
+## Cílová mřížka, verze 1
+
+Cílová mřížka popisuje obdélníkový rozměr a případný obsah buněk:
 
 ```yaml
 format: krizovkar
+kind: grid
 version: 1
 grid:
   width: 15
@@ -17,7 +29,8 @@ grid:
 ### Položky
 
 - `format` musí mít hodnotu `krizovkar` a jednoznačně označuje formát souboru.
-- `version` musí mít hodnotu `1` a označuje hlavní verzi datového modelu.
+- `kind` musí mít hodnotu `grid`.
+- `version` musí mít hodnotu `1` a označuje hlavní verzi modelu cílové mřížky.
 - `grid.width` je šířka mřížky v buňkách, tedy počet sloupců zleva doprava.
 - `grid.height` je výška mřížky v buňkách, tedy počet řádků shora dolů.
 
@@ -45,16 +58,28 @@ Prvním podporovaným typem je písmeno:
 
 Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Další typy buněk tato iterace ještě nedefinuje.
 
+## Zadání, verze 1
+
+Zadání je zdrojový dokument, ze kterého budoucí generátor vytvoří cílovou mřížku:
+
+```yaml
+format: krizovkar
+kind: specification
+version: 1
+```
+
+Tato první iterace definuje pouze samostatnou obálku dokumentu. Struktura slov, nápověd, tajenek a pravidel skládání bude doplněna následně, aby nebyla omylem svázána s interní podobou výsledné mřížky.
+
 ## Validace
 
-Strojová pravidla jsou v [JSON Schema pro verzi 1](../src/krizovkar/schemas/krizovkar-v1.schema.json). Schéma odmítá chybějící, neznámé a chybně napsané položky i nulové, záporné nebo neceločíselné rozměry.
+Strojová pravidla jsou v samostatných schématech pro [cílovou mřížku](../src/krizovkar/schemas/grid-v1.schema.json) a [zadání](../src/krizovkar/schemas/specification-v1.schema.json). Schéma mřížky odmítá chybějící, neznámé a chybně napsané položky i nulové, záporné nebo neceločíselné rozměry.
 
-Úplný minimální dokument je v [příkladu](../examples/minimal.yaml).
+Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-minimal.yaml) a [zadání](../examples/specification-minimal.yaml).
 
-Vyplněný dokument je v [příkladu s náhodnými písmeny](../examples/random-letters.yaml).
+Vyplněná cílová mřížka je v [příkladu s náhodnými písmeny](../examples/grid-random-letters.yaml).
 
 ## Rozvoj formátu
 
 - Nová data se mají přidávat pod srozumitelně pojmenované položky, nikoli odvozovat z pořadí zápisu v YAML.
 - Zpětně kompatibilní rozšíření mohou zůstat ve verzi `1`; nekompatibilní změna vyžaduje novou hlavní verzi.
-- Příklad, dokumentace a schéma se při změně modelu aktualizují společně.
+- Příklady, dokumentace a příslušné schéma se při změně modelu aktualizují společně.

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/main/src/krizovkar/schemas/specification-v1.schema.json",
+  "title": "Zadání křížovky Křížovkáře, verze 1",
+  "description": "Datový model vstupního zadání, ze kterého vznikne cílová mřížka.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "kind",
+    "version"
+  ],
+  "properties": {
+    "format": {
+      "description": "Jednoznačný název formátu.",
+      "const": "krizovkar"
+    },
+    "kind": {
+      "description": "Druh dokumentu.",
+      "const": "specification"
+    },
+    "version": {
+      "description": "Hlavní verze datového modelu zadání.",
+      "const": 1
+    }
+  }
+}

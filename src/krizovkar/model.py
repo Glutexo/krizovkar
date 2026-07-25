@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -36,17 +36,27 @@ class Grid:
 
 
 @dataclass(frozen=True, slots=True)
-class Crossword:
-    """Křížovka načtená z datového souboru."""
+class CrosswordGrid:
+    """Cílová křížovková mřížka načtená z datového souboru."""
 
     format_name: str
+    kind: str
     version: int
     grid: Grid
 
 
-@lru_cache(maxsize=1)
-def _validator() -> Draft202012Validator:
-    schema_resource = files("krizovkar.schemas").joinpath("krizovkar-v1.schema.json")
+@dataclass(frozen=True, slots=True)
+class CrosswordSpecification:
+    """Vstupní zadání, ze kterého má vzniknout cílová mřížka."""
+
+    format_name: str
+    kind: str
+    version: int
+
+
+@cache
+def _validator(schema_name: str) -> Draft202012Validator:
+    schema_resource = files("krizovkar.schemas").joinpath(schema_name)
     schema = json.loads(schema_resource.read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     return Draft202012Validator(schema)
@@ -76,6 +86,22 @@ def _validation_path(error: ValidationError) -> str:
     return "$" + "".join(parts)
 
 
+def _validated_data(source: Path, schema_name: str) -> dict[str, Any]:
+    data = _yaml_data(source)
+    errors = sorted(
+        _validator(schema_name).iter_errors(data),
+        key=lambda error: tuple(str(part) for part in error.absolute_path),
+    )
+
+    if errors:
+        details = "; ".join(
+            f"{_validation_path(error)}: {error.message}" for error in errors
+        )
+        raise ModelError(f"neplatný datový model: {details}")
+
+    return data
+
+
 def _grid_cells(grid: dict[str, Any]) -> tuple[tuple[LetterCell, ...], ...] | None:
     raw_cells = grid.get("cells")
     if raw_cells is None:
@@ -101,29 +127,33 @@ def _grid_cells(grid: dict[str, Any]) -> tuple[tuple[LetterCell, ...], ...] | No
     return tuple(rows)
 
 
-def load_crossword(source: str | Path) -> Crossword:
-    """Načte YAML, ověří jej podle schématu a vrátí doménový model."""
+def load_crossword_grid(source: str | Path) -> CrosswordGrid:
+    """Načte a ověří YAML s cílovou křížovkovou mřížkou."""
 
     source_path = Path(source)
-    data = _yaml_data(source_path)
-    errors = sorted(
-        _validator().iter_errors(data),
-        key=lambda error: tuple(str(part) for part in error.absolute_path),
-    )
-
-    if errors:
-        details = "; ".join(
-            f"{_validation_path(error)}: {error.message}" for error in errors
-        )
-        raise ModelError(f"neplatný datový model: {details}")
-
+    data = _validated_data(source_path, "grid-v1.schema.json")
     grid = data["grid"]
-    return Crossword(
+    return CrosswordGrid(
         format_name=data["format"],
+        kind=data["kind"],
         version=data["version"],
         grid=Grid(
             width=grid["width"],
             height=grid["height"],
             cells=_grid_cells(grid),
         ),
+    )
+
+
+def load_crossword_specification(
+    source: str | Path,
+) -> CrosswordSpecification:
+    """Načte a ověří YAML se zadáním křížovky."""
+
+    source_path = Path(source)
+    data = _validated_data(source_path, "specification-v1.schema.json")
+    return CrosswordSpecification(
+        format_name=data["format"],
+        kind=data["kind"],
+        version=data["version"],
     )

@@ -1,1 +1,1 @@
-"""JSON Schema distribuovaná společně s Pythonovým balíčkem."""
+"""Schémata JSON Schema distribuovaná společně s Pythonovým balíčkem."""

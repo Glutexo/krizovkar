@@ -7,7 +7,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from krizovkar.model import ModelError, load_crossword
+from krizovkar.model import ModelError, load_crossword_grid
 from krizovkar.renderer import (
     DEFAULT_PAGE_FORMAT,
     SUPPORTED_PAGE_FORMATS,
@@ -25,16 +25,16 @@ def _parser() -> argparse.ArgumentParser:
 
     render = commands.add_parser(
         "render",
-        help="vytvoří PDF z křížovky uložené v YAML",
-        description="Načte a ověří YAML a vykreslí křížovkovou mřížku do PDF.",
+        help="vytvoří PDF z cílové mřížky uložené v YAML",
+        description=("Načte a ověří YAML typu grid a vykreslí cílovou mřížku do PDF."),
     )
-    render.add_argument("source", type=Path, metavar="VSTUP.yaml")
+    render.add_argument("source", type=Path, metavar="MŘÍŽKA.yaml")
     render.add_argument(
         "-o",
         "--output",
         type=Path,
         metavar="VÝSTUP.pdf",
-        help="cílový soubor; výchozí je VSTUP.pdf vedle YAML",
+        help="cílový soubor; výchozí je MŘÍŽKA.pdf vedle YAML",
     )
     render.add_argument(
         "--force",
@@ -60,7 +60,7 @@ def _render(arguments: argparse.Namespace) -> int:
     output = arguments.output or arguments.source.with_suffix(".pdf")
 
     try:
-        crossword = load_crossword(arguments.source)
+        crossword = load_crossword_grid(arguments.source)
         render_pdf(
             crossword,
             output,

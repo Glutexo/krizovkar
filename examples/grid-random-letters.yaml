@@ -1,5 +1,6 @@
 # Náhodná písmena vytvořená generátorem se seedem 20260725.
 format: krizovkar
+kind: grid
 version: 1
 grid:
   width: 15

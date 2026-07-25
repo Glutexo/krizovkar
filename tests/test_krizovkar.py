@@ -11,26 +11,32 @@ from pathlib import Path
 from reportlab.lib.pagesizes import A5
 
 from krizovkar.cli import main
-from krizovkar.model import ModelError, load_crossword
+from krizovkar.model import (
+    ModelError,
+    load_crossword_grid,
+    load_crossword_specification,
+)
 from krizovkar.renderer import RenderError, resolve_page_size
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "minimal.yaml"
-RANDOM_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "random-letters.yaml"
+GRID_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "grid-minimal.yaml"
+GRID_RANDOM_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-random-letters.yaml"
+SPECIFICATION_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "specification-minimal.yaml"
 
 
 class ModelTest(unittest.TestCase):
     def test_loads_minimal_example(self) -> None:
-        crossword = load_crossword(MINIMAL_EXAMPLE)
+        crossword = load_crossword_grid(GRID_MINIMAL_EXAMPLE)
 
         self.assertEqual("krizovkar", crossword.format_name)
+        self.assertEqual("grid", crossword.kind)
         self.assertEqual(1, crossword.version)
         self.assertEqual(15, crossword.grid.width)
         self.assertEqual(10, crossword.grid.height)
         self.assertIsNone(crossword.grid.cells)
 
     def test_loads_grid_filled_with_letter_cells(self) -> None:
-        crossword = load_crossword(RANDOM_LETTERS_EXAMPLE)
+        crossword = load_crossword_grid(GRID_RANDOM_LETTERS_EXAMPLE)
 
         self.assertIsNotNone(crossword.grid.cells)
         assert crossword.grid.cells is not None
@@ -39,22 +45,39 @@ class ModelTest(unittest.TestCase):
         self.assertEqual("W", crossword.grid.cells[0][0].value)
         self.assertEqual("I", crossword.grid.cells[-1][-1].value)
 
+    def test_loads_minimal_specification(self) -> None:
+        specification = load_crossword_specification(SPECIFICATION_MINIMAL_EXAMPLE)
+
+        self.assertEqual("krizovkar", specification.format_name)
+        self.assertEqual("specification", specification.kind)
+        self.assertEqual(1, specification.version)
+
+    def test_grid_loader_rejects_specification(self) -> None:
+        with self.assertRaisesRegex(ModelError, r"\$\.kind"):
+            load_crossword_grid(SPECIFICATION_MINIMAL_EXAMPLE)
+
     def test_rejects_non_positive_dimension(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "invalid.yaml"
             source.write_text(
-                "format: krizovkar\nversion: 1\ngrid:\n  width: 0\n  height: 10\n",
+                "format: krizovkar\n"
+                "kind: grid\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 0\n"
+                "  height: 10\n",
                 encoding="utf-8",
             )
 
             with self.assertRaisesRegex(ModelError, r"\$\.grid\.width"):
-                load_crossword(source)
+                load_crossword_grid(source)
 
     def test_rejects_duplicate_keys(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "duplicate.yaml"
             source.write_text(
                 "format: krizovkar\n"
+                "kind: grid\n"
                 "version: 1\n"
                 "grid:\n"
                 "  width: 15\n"
@@ -64,13 +87,14 @@ class ModelTest(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(ModelError, "duplicate key"):
-                load_crossword(source)
+                load_crossword_grid(source)
 
     def test_rejects_row_with_wrong_number_of_cells(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "short-row.yaml"
             source.write_text(
                 "format: krizovkar\n"
+                "kind: grid\n"
                 "version: 1\n"
                 "grid:\n"
                 "  width: 2\n"
@@ -81,13 +105,14 @@ class ModelTest(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(ModelError, r"grid\.width"):
-                load_crossword(source)
+                load_crossword_grid(source)
 
     def test_rejects_invalid_letter_value(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "invalid-letter.yaml"
             source.write_text(
                 "format: krizovkar\n"
+                "kind: grid\n"
                 "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
@@ -100,7 +125,7 @@ class ModelTest(unittest.TestCase):
             with self.assertRaisesRegex(
                 ModelError, r"\$\.grid\.cells\[0\]\[0\]\.value"
             ):
-                load_crossword(source)
+                load_crossword_grid(source)
 
 
 class CommandTest(unittest.TestCase):
@@ -116,7 +141,7 @@ class CommandTest(unittest.TestCase):
             output = Path(directory) / "crossword.pdf"
             command = [
                 "render",
-                str(RANDOM_LETTERS_EXAMPLE),
+                str(GRID_RANDOM_LETTERS_EXAMPLE),
                 "--output",
                 str(output),
                 "--page-format",

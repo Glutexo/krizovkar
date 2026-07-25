@@ -1,4 +1,5 @@
 format: krizovkar
+kind: grid
 version: 1
 grid:
   width: 15

@@ -1,12 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/main/src/krizovkar/schemas/krizovkar-v1.schema.json",
-  "title": "Dokument Křížovkáře, verze 1",
-  "description": "Datový model křížovky ve formátu Křížovkář.",
+  "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/main/src/krizovkar/schemas/grid-v1.schema.json",
+  "title": "Cílová mřížka Křížovkáře, verze 1",
+  "description": "Datový model výsledné křížovkové mřížky.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "format",
+    "kind",
     "version",
     "grid"
   ],
@@ -14,6 +15,10 @@
     "format": {
       "description": "Jednoznačný název formátu.",
       "const": "krizovkar"
+    },
+    "kind": {
+      "description": "Druh dokumentu.",
+      "const": "grid"
     },
     "version": {
       "description": "Hlavní verze datového modelu.",

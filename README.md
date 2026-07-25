@@ -20,17 +20,35 @@ Konkrétní rozsah první funkční verze bude popsán v roadmapě před zaháje
 
 ## Datový model
 
-Nejmenší platný dokument zatím určuje pouze rozměr mřížky:
+Křížovkář rozlišuje dva samostatné druhy YAML dokumentů:
+
+- `kind: specification` je vstupní zadání se slovy, nápovědami, tajenkami a pravidly skládání,
+- `kind: grid` je výsledná mřížka s konkrétními buňkami, kterou lze přímo vykreslit.
+
+```text
+specification → generátor (budoucí) → grid → render → PDF
+```
+
+Nejmenší platná cílová mřížka zatím určuje pouze rozměr:
 
 ```yaml
 format: krizovkar
+kind: grid
 version: 1
 grid:
   width: 15
   height: 10
 ```
 
-Význam položek a pravidla dalšího rozvoje popisuje [specifikace datového modelu](docs/datovy-model.md). Úplný soubor je v [minimálním příkladu](examples/minimal.yaml) a lze ho kontrolovat pomocí [JSON Schema](src/krizovkar/schemas/krizovkar-v1.schema.json).
+Samostatné zadání má vlastní obálku:
+
+```yaml
+format: krizovkar
+kind: specification
+version: 1
+```
+
+Jeho položky pro slova a tajenky zatím nejsou definované. Význam obou dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md). Strojová pravidla jsou oddělená v [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json) a [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json).
 
 Mřížka může obsahovat řádky explicitně typovaných buněk:
 
@@ -42,7 +60,7 @@ grid:
     - [{type: letter, value: A}, {type: letter, value: H}]
 ```
 
-Ukázka [křížovky plné náhodných písmen](examples/random-letters.yaml) obsahuje 15 × 10 buněk typu `letter`.
+Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-letters.yaml) obsahuje 15 × 10 buněk typu `letter`. Minimální soubory jsou v příkladech [mřížky](examples/grid-minimal.yaml) a [zadání](examples/specification-minimal.yaml).
 
 ## Vytvoření PDF
 
@@ -50,7 +68,7 @@ Projekt vyžaduje Python 3.11 nebo novější. Závislosti lze nainstalovat a uk
 
 ```shell
 uv sync
-uv run krizovkar render examples/random-letters.yaml \
+uv run krizovkar render examples/grid-random-letters.yaml \
   --page-format A4 \
   --output build/random-letters.pdf
 ```
