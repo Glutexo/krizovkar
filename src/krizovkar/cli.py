@@ -8,7 +8,12 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from krizovkar.model import ModelError, load_crossword
-from krizovkar.renderer import RenderError, render_pdf
+from krizovkar.renderer import (
+    DEFAULT_PAGE_FORMAT,
+    SUPPORTED_PAGE_FORMATS,
+    RenderError,
+    render_pdf,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -36,6 +41,17 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="povolí přepsání existujícího PDF",
     )
+    render.add_argument(
+        "--page-format",
+        type=str.upper,
+        choices=SUPPORTED_PAGE_FORMATS,
+        default=DEFAULT_PAGE_FORMAT,
+        metavar="FORMÁT",
+        help=(
+            "formát stránky: "
+            f"{', '.join(SUPPORTED_PAGE_FORMATS)}; výchozí je {DEFAULT_PAGE_FORMAT}"
+        ),
+    )
     render.set_defaults(handler=_render)
     return parser
 
@@ -45,7 +61,12 @@ def _render(arguments: argparse.Namespace) -> int:
 
     try:
         crossword = load_crossword(arguments.source)
-        render_pdf(crossword, output, overwrite=arguments.force)
+        render_pdf(
+            crossword,
+            output,
+            overwrite=arguments.force,
+            page_format=arguments.page_format,
+        )
     except (ModelError, RenderError) as error:
         print(f"chyba: {error}", file=sys.stderr)
         return 2

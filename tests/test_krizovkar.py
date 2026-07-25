@@ -8,8 +8,11 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
+from reportlab.lib.pagesizes import A5
+
 from krizovkar.cli import main
 from krizovkar.model import ModelError, load_crossword
+from krizovkar.renderer import RenderError, resolve_page_size
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "minimal.yaml"
@@ -101,20 +104,28 @@ class ModelTest(unittest.TestCase):
 
 
 class CommandTest(unittest.TestCase):
+    def test_page_format_names_are_case_insensitive(self) -> None:
+        self.assertEqual(A5, resolve_page_size("a5"))
+
+    def test_rejects_unsupported_page_format(self) -> None:
+        with self.assertRaisesRegex(RenderError, "nepodporovaný formát stránky"):
+            resolve_page_size("A7")
+
     def test_render_creates_pdf_and_refuses_accidental_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "crossword.pdf"
+            command = [
+                "render",
+                str(RANDOM_LETTERS_EXAMPLE),
+                "--output",
+                str(output),
+                "--page-format",
+                "A5",
+            ]
 
             stdout = io.StringIO()
             with redirect_stdout(stdout):
-                result = main(
-                    [
-                        "render",
-                        str(RANDOM_LETTERS_EXAMPLE),
-                        "--output",
-                        str(output),
-                    ]
-                )
+                result = main(command)
 
             self.assertEqual(0, result)
             self.assertIn("PDF vytvořeno:", stdout.getvalue())
@@ -124,23 +135,13 @@ class CommandTest(unittest.TestCase):
 
             stderr = io.StringIO()
             with redirect_stderr(stderr):
-                second_result = main(
-                    ["render", str(RANDOM_LETTERS_EXAMPLE), "--output", str(output)]
-                )
+                second_result = main(command)
 
             self.assertEqual(2, second_result)
             self.assertIn("již existuje", stderr.getvalue())
 
             with redirect_stdout(io.StringIO()):
-                forced_result = main(
-                    [
-                        "render",
-                        str(RANDOM_LETTERS_EXAMPLE),
-                        "--output",
-                        str(output),
-                        "--force",
-                    ]
-                )
+                forced_result = main([*command, "--force"])
 
             self.assertEqual(0, forced_result)
 

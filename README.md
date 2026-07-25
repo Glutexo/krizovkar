@@ -50,10 +50,14 @@ Projekt vyžaduje Python 3.11 nebo novější. Závislosti lze nainstalovat a uk
 
 ```shell
 uv sync
-uv run krizovkar render examples/random-letters.yaml --output build/random-letters.pdf
+uv run krizovkar render examples/random-letters.yaml \
+  --page-format A4 \
+  --output build/random-letters.pdf
 ```
 
-Výsledkem je vektorové PDF na stránce A4 s mřížkou a případnými písmeny podle datového modelu. Bez volby `--output` vznikne PDF vedle vstupního souboru se stejným názvem. Existující soubor příkaz nepřepíše, dokud není přidána volba `--force`.
+Volba `--page-format` přijímá `A0` až `A6`, `Letter` a `Legal`; nerozlišuje velikost písmen a její výchozí hodnota je `A4`. Výsledkem je vektorové PDF na zvoleném formátu s mřížkou a případnými písmeny podle datového modelu.
+
+Bez volby `--output` vznikne PDF vedle vstupního souboru se stejným názvem. Existující soubor příkaz nepřepíše, dokud není přidána volba `--force`.
 
 Nápovědu vypíše:
 

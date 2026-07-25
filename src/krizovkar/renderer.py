@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A0, A1, A2, A3, A4, A5, A6, LEGAL, LETTER
 from reportlab.lib.units import mm
 from reportlab.pdfgen.canvas import Canvas
 
@@ -18,14 +18,55 @@ OUTER_LINE_WIDTH = 1.25
 LETTER_FONT = "Helvetica-Bold"
 LETTER_SIZE_RATIO = 0.58
 LETTER_BASELINE_OFFSET = 0.35
+DEFAULT_PAGE_FORMAT = "A4"
+SUPPORTED_PAGE_FORMATS = (
+    "A0",
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "A5",
+    "A6",
+    "LETTER",
+    "LEGAL",
+)
+_PAGE_SIZES = {
+    "A0": A0,
+    "A1": A1,
+    "A2": A2,
+    "A3": A3,
+    "A4": A4,
+    "A5": A5,
+    "A6": A6,
+    "LETTER": LETTER,
+    "LEGAL": LEGAL,
+}
 
 
 class RenderError(RuntimeError):
     """PDF nelze bezpečně vytvořit."""
 
 
-def _write_pdf(crossword: Crossword, target: Path) -> None:
-    page_width, page_height = A4
+def resolve_page_size(page_format: str) -> tuple[float, float]:
+    """Vrátí rozměr stránky pro podporovaný název formátu."""
+
+    normalized = page_format.upper()
+    try:
+        return _PAGE_SIZES[normalized]
+    except KeyError as error:
+        supported = ", ".join(SUPPORTED_PAGE_FORMATS)
+        raise RenderError(
+            f"nepodporovaný formát stránky {page_format!r}; "
+            f"podporované formáty: {supported}"
+        ) from error
+
+
+def _write_pdf(
+    crossword: Crossword,
+    target: Path,
+    page_size: tuple[float, float],
+) -> None:
+    page_width, page_height = page_size
     width = crossword.grid.width
     height = crossword.grid.height
     cell_size = min(
@@ -38,7 +79,7 @@ def _write_pdf(crossword: Crossword, target: Path) -> None:
     left = (page_width - grid_width) / 2
     bottom = (page_height - grid_height) / 2
 
-    pdf = Canvas(str(target), pagesize=A4, pageCompression=1)
+    pdf = Canvas(str(target), pagesize=page_size, pageCompression=1)
     pdf.setTitle(f"Křížovkář – mřížka {width} × {height}")
     pdf.setCreator("Křížovkář")
     subject = (
@@ -79,10 +120,12 @@ def render_pdf(
     output: str | Path,
     *,
     overwrite: bool = False,
+    page_format: str = DEFAULT_PAGE_FORMAT,
 ) -> Path:
-    """Vykreslí křížovku atomicky do jednostránkového PDF na A4."""
+    """Vykreslí křížovku atomicky do jednostránkového PDF."""
 
     output_path = Path(output)
+    page_size = resolve_page_size(page_format)
     if output_path.exists() and not overwrite:
         raise RenderError(f"výstupní soubor již existuje: {output_path}")
 
@@ -96,7 +139,7 @@ def render_pdf(
         ) as temporary:
             temporary_path = Path(temporary.name)
 
-        _write_pdf(crossword, temporary_path)
+        _write_pdf(crossword, temporary_path, page_size)
         temporary_path.replace(output_path)
     except OSError as error:
         detail = error.strerror or str(error)
