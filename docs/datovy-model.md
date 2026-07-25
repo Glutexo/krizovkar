@@ -25,7 +25,7 @@ Oba rozměry jsou povinná kladná celá čísla. Hodnota `15` proto znamená pa
 
 ## Validace
 
-Strojová pravidla jsou v [JSON Schema pro verzi 1](../schema/krizovkar-v1.schema.json). Schéma odmítá chybějící, neznámé a chybně napsané položky i nulové, záporné nebo neceločíselné rozměry.
+Strojová pravidla jsou v [JSON Schema pro verzi 1](../src/krizovkar/schemas/krizovkar-v1.schema.json). Schéma odmítá chybějící, neznámé a chybně napsané položky i nulové, záporné nebo neceločíselné rozměry.
 
 Úplný minimální dokument je v [příkladu](../examples/minimal.yaml).
 

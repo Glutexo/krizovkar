@@ -4,7 +4,7 @@ Křížovkář je připravovaný otevřený nástroj pro tvorbu švédských, kl
 
 ## Stav projektu
 
-Repozitář je v úvodní fázi. Zatím obsahuje základní dokumentaci, první verzi datového modelu a pravidla spolupráce; podoba editoru a technologický základ budou navrženy v dalších změnách.
+Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu a Pythonový příkaz pro vykreslení prázdné mřížky do PDF; podoba editoru bude navržena v dalších změnách.
 
 ## Zaměření
 
@@ -30,7 +30,30 @@ grid:
   height: 10
 ```
 
-Význam položek a pravidla dalšího rozvoje popisuje [specifikace datového modelu](docs/datovy-model.md). Úplný soubor je v [minimálním příkladu](examples/minimal.yaml) a lze ho kontrolovat pomocí [JSON Schema](schema/krizovkar-v1.schema.json).
+Význam položek a pravidla dalšího rozvoje popisuje [specifikace datového modelu](docs/datovy-model.md). Úplný soubor je v [minimálním příkladu](examples/minimal.yaml) a lze ho kontrolovat pomocí [JSON Schema](src/krizovkar/schemas/krizovkar-v1.schema.json).
+
+## Vytvoření PDF
+
+Projekt vyžaduje Python 3.11 nebo novější. Závislosti lze nainstalovat a ukázkový YAML převést pomocí [uv](https://docs.astral.sh/uv/):
+
+```shell
+uv sync
+uv run krizovkar render examples/minimal.yaml --output build/minimal.pdf
+```
+
+Výsledkem je vektorové PDF na stránce A4 s prázdnou mřížkou podle `grid.width` a `grid.height`. Bez volby `--output` vznikne PDF vedle vstupního souboru se stejným názvem. Existující soubor příkaz nepřepíše, dokud není přidána volba `--force`.
+
+Nápovědu vypíše:
+
+```shell
+uv run krizovkar --help
+```
+
+Testy se spouštějí příkazem:
+
+```shell
+uv run python -m unittest discover -s tests
+```
 
 ## Vývoj
 
