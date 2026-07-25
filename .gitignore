@@ -1,0 +1,14 @@
+# Operační systém
+.DS_Store
+Thumbs.db
+
+# Editory
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Lokální nastavení a tajné údaje
+.env
+.env.*
+!.env.example
