@@ -13,6 +13,7 @@ from krizovkar.model import ModelError, load_crossword
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "minimal.yaml"
+RANDOM_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "random-letters.yaml"
 
 
 class ModelTest(unittest.TestCase):
@@ -23,6 +24,17 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(1, crossword.version)
         self.assertEqual(15, crossword.grid.width)
         self.assertEqual(10, crossword.grid.height)
+        self.assertIsNone(crossword.grid.cells)
+
+    def test_loads_grid_filled_with_letter_cells(self) -> None:
+        crossword = load_crossword(RANDOM_LETTERS_EXAMPLE)
+
+        self.assertIsNotNone(crossword.grid.cells)
+        assert crossword.grid.cells is not None
+        self.assertEqual(10, len(crossword.grid.cells))
+        self.assertTrue(all(len(row) == 15 for row in crossword.grid.cells))
+        self.assertEqual("W", crossword.grid.cells[0][0].value)
+        self.assertEqual("I", crossword.grid.cells[-1][-1].value)
 
     def test_rejects_non_positive_dimension(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -51,6 +63,42 @@ class ModelTest(unittest.TestCase):
             with self.assertRaisesRegex(ModelError, "duplicate key"):
                 load_crossword(source)
 
+    def test_rejects_row_with_wrong_number_of_cells(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "short-row.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 2\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: letter, value: A}]\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ModelError, r"grid\.width"):
+                load_crossword(source)
+
+    def test_rejects_invalid_letter_value(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "invalid-letter.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 1\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: letter, value: AA}]\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ModelError, r"\$\.grid\.cells\[0\]\[0\]\.value"
+            ):
+                load_crossword(source)
+
 
 class CommandTest(unittest.TestCase):
     def test_render_creates_pdf_and_refuses_accidental_overwrite(self) -> None:
@@ -59,7 +107,14 @@ class CommandTest(unittest.TestCase):
 
             stdout = io.StringIO()
             with redirect_stdout(stdout):
-                result = main(["render", str(MINIMAL_EXAMPLE), "--output", str(output)])
+                result = main(
+                    [
+                        "render",
+                        str(RANDOM_LETTERS_EXAMPLE),
+                        "--output",
+                        str(output),
+                    ]
+                )
 
             self.assertEqual(0, result)
             self.assertIn("PDF vytvořeno:", stdout.getvalue())
@@ -70,7 +125,7 @@ class CommandTest(unittest.TestCase):
             stderr = io.StringIO()
             with redirect_stderr(stderr):
                 second_result = main(
-                    ["render", str(MINIMAL_EXAMPLE), "--output", str(output)]
+                    ["render", str(RANDOM_LETTERS_EXAMPLE), "--output", str(output)]
                 )
 
             self.assertEqual(2, second_result)
@@ -80,7 +135,7 @@ class CommandTest(unittest.TestCase):
                 forced_result = main(
                     [
                         "render",
-                        str(MINIMAL_EXAMPLE),
+                        str(RANDOM_LETTERS_EXAMPLE),
                         "--output",
                         str(output),
                         "--force",

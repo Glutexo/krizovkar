@@ -4,7 +4,7 @@ Křížovkář je připravovaný otevřený nástroj pro tvorbu švédských, kl
 
 ## Stav projektu
 
-Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu a Pythonový příkaz pro vykreslení prázdné mřížky do PDF; podoba editoru bude navržena v dalších změnách.
+Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu a Pythonový příkaz pro vykreslení prázdné nebo písmeny vyplněné mřížky do PDF; podoba editoru bude navržena v dalších změnách.
 
 ## Zaměření
 
@@ -32,16 +32,28 @@ grid:
 
 Význam položek a pravidla dalšího rozvoje popisuje [specifikace datového modelu](docs/datovy-model.md). Úplný soubor je v [minimálním příkladu](examples/minimal.yaml) a lze ho kontrolovat pomocí [JSON Schema](src/krizovkar/schemas/krizovkar-v1.schema.json).
 
+Mřížka může obsahovat řádky explicitně typovaných buněk:
+
+```yaml
+grid:
+  width: 2
+  height: 1
+  cells:
+    - [{type: letter, value: A}, {type: letter, value: H}]
+```
+
+Ukázka [křížovky plné náhodných písmen](examples/random-letters.yaml) obsahuje 15 × 10 buněk typu `letter`.
+
 ## Vytvoření PDF
 
 Projekt vyžaduje Python 3.11 nebo novější. Závislosti lze nainstalovat a ukázkový YAML převést pomocí [uv](https://docs.astral.sh/uv/):
 
 ```shell
 uv sync
-uv run krizovkar render examples/minimal.yaml --output build/minimal.pdf
+uv run krizovkar render examples/random-letters.yaml --output build/random-letters.pdf
 ```
 
-Výsledkem je vektorové PDF na stránce A4 s prázdnou mřížkou podle `grid.width` a `grid.height`. Bez volby `--output` vznikne PDF vedle vstupního souboru se stejným názvem. Existující soubor příkaz nepřepíše, dokud není přidána volba `--force`.
+Výsledkem je vektorové PDF na stránce A4 s mřížkou a případnými písmeny podle datového modelu. Bez volby `--output` vznikne PDF vedle vstupního souboru se stejným názvem. Existující soubor příkaz nepřepíše, dokud není přidána volba `--force`.
 
 Nápovědu vypíše:
 

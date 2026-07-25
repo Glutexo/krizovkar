@@ -20,11 +20,19 @@ class ModelError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class LetterCell:
+    """Buňka obsahující jedno písmeno."""
+
+    value: str
+
+
+@dataclass(frozen=True, slots=True)
 class Grid:
-    """Rozměr obdélníkové křížovkové mřížky."""
+    """Obdélníková křížovková mřížka a její případné buňky."""
 
     width: int
     height: int
+    cells: tuple[tuple[LetterCell, ...], ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +76,31 @@ def _validation_path(error: ValidationError) -> str:
     return "$" + "".join(parts)
 
 
+def _grid_cells(grid: dict[str, Any]) -> tuple[tuple[LetterCell, ...], ...] | None:
+    raw_cells = grid.get("cells")
+    if raw_cells is None:
+        return None
+
+    if len(raw_cells) != grid["height"]:
+        raise ModelError(
+            "neplatný datový model: $.grid.cells: "
+            f"počet řádků ({len(raw_cells)}) neodpovídá "
+            f"grid.height ({grid['height']})"
+        )
+
+    rows: list[tuple[LetterCell, ...]] = []
+    for row_index, raw_row in enumerate(raw_cells):
+        if len(raw_row) != grid["width"]:
+            raise ModelError(
+                f"neplatný datový model: $.grid.cells[{row_index}]: "
+                f"počet buněk ({len(raw_row)}) neodpovídá "
+                f"grid.width ({grid['width']})"
+            )
+        rows.append(tuple(LetterCell(value=cell["value"]) for cell in raw_row))
+
+    return tuple(rows)
+
+
 def load_crossword(source: str | Path) -> Crossword:
     """Načte YAML, ověří jej podle schématu a vrátí doménový model."""
 
@@ -88,5 +121,9 @@ def load_crossword(source: str | Path) -> Crossword:
     return Crossword(
         format_name=data["format"],
         version=data["version"],
-        grid=Grid(width=grid["width"], height=grid["height"]),
+        grid=Grid(
+            width=grid["width"],
+            height=grid["height"],
+            cells=_grid_cells(grid),
+        ),
     )

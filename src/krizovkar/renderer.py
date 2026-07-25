@@ -15,6 +15,9 @@ PAGE_MARGIN = 15 * mm
 MAX_CELL_SIZE = 12 * mm
 INNER_LINE_WIDTH = 0.5
 OUTER_LINE_WIDTH = 1.25
+LETTER_FONT = "Helvetica-Bold"
+LETTER_SIZE_RATIO = 0.58
+LETTER_BASELINE_OFFSET = 0.35
 
 
 class RenderError(RuntimeError):
@@ -38,8 +41,24 @@ def _write_pdf(crossword: Crossword, target: Path) -> None:
     pdf = Canvas(str(target), pagesize=A4, pageCompression=1)
     pdf.setTitle(f"Křížovkář – mřížka {width} × {height}")
     pdf.setCreator("Křížovkář")
-    pdf.setSubject("Prázdná křížovková mřížka")
+    subject = (
+        "Křížovková mřížka s písmeny"
+        if crossword.grid.cells is not None
+        else "Prázdná křížovková mřížka"
+    )
+    pdf.setSubject(subject)
     pdf.setStrokeColorRGB(0, 0, 0)
+
+    if crossword.grid.cells is not None:
+        font_size = cell_size * LETTER_SIZE_RATIO
+        pdf.setFillColorRGB(0, 0, 0)
+        pdf.setFont(LETTER_FONT, font_size)
+        for row_index, row in enumerate(crossword.grid.cells):
+            center_y = bottom + grid_height - (row_index + 0.5) * cell_size
+            baseline = center_y - font_size * LETTER_BASELINE_OFFSET
+            for column_index, cell in enumerate(row):
+                center_x = left + (column_index + 0.5) * cell_size
+                pdf.drawCentredString(center_x, baseline, cell.value)
 
     pdf.setLineWidth(INNER_LINE_WIDTH)
     for column in range(1, width):
