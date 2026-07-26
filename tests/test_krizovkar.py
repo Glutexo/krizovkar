@@ -214,6 +214,27 @@ class ModelTest(unittest.TestCase):
         assert isinstance(double, LegendCell)
         self.assertEqual(("Česká řeka",), single.texts)
         self.assertEqual(("Savec", "Pohoří"), double.texts)
+        self.assertEqual(("right",), single.arrows)
+        self.assertEqual(("right", "down"), double.arrows)
+
+    def test_rejects_legend_with_mismatched_arrow_count(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "mismatched-arrows.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: grid\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 1\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: legend, texts: [První, Druhý], "
+                "arrows: [right]}]\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ModelError, "pro každý text"):
+                load_crossword_grid(source)
 
     def test_loads_empty_cells(self) -> None:
         crossword = load_crossword_grid(GRID_EMPTY_EXAMPLE)

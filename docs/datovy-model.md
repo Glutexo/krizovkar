@@ -65,16 +65,18 @@ Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnic
 Legenda neobsahuje `value`, ale seznam `texts` s jedním nebo dvěma neprázdnými texty:
 
 ```yaml
-{type: legend, texts: ["Česká řeka"]}
-{type: legend, texts: ["Savec", "Pohoří"]}
+{type: legend, texts: ["Česká řeka"], arrows: [right]}
+{type: legend, texts: ["Savec", "Pohoří"], arrows: [right, down]}
 ```
 
 - Jeden text využije celou buňku.
 - U dvou textů je první v horní a druhý v dolní polovině.
 - Dvě poloviny odděluje vodorovná čára.
+- Volitelné `arrows` obsahuje pro každý text jednu šipku `right` nebo `down`.
+- Dvě šipky v jedné buňce musí mít různé směry.
 - Renderer text automaticky zalamuje a zmenšuje; české znaky vkládá do PDF pomocí fontu Noto Sans.
 
-Směr odpovědi a vazba legendy na konkrétní slovo se v cílové buňce neopakují; uchovává je vyšší zadání `specification`. Konkrétní šipky v mřížce vzniknou až při generování.
+Směr odpovědi a vazba legendy na konkrétní slovo se v cílové buňce neopakují; uchovává je vyšší zadání `specification`. Generátor z nich vytvoří šipky v cílové mřížce.
 
 ## Nevyplňovaná buňka
 

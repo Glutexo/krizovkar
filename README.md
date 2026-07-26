@@ -80,11 +80,11 @@ Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajen
 Legenda používá seznam s jedním nebo dvěma texty:
 
 ```yaml
-{type: legend, texts: ["Česká řeka"]}
-{type: legend, texts: ["Savec", "Pohoří"]}
+{type: legend, texts: ["Česká řeka"], arrows: [right]}
+{type: legend, texts: ["Savec", "Pohoří"], arrows: [right, down]}
 ```
 
-Při dvou textech je první nahoře, druhý dole a odděluje je vodorovná čára. Text se automaticky zalomí a zmenší tak, aby se do buňky vešel. Obě varianty ukazuje [mřížka s legendami](examples/grid-legend.yaml).
+Volitelné šipky `right` a `down` se přiřazují k textům ve stejném pořadí. Při dvou textech je první nahoře, druhý dole a odděluje je vodorovná čára. Text se automaticky zalomí a zmenší tak, aby se do buňky vešel. Obě varianty ukazuje [mřížka s legendami](examples/grid-legend.yaml).
 
 Explicitně nevyplňovaná buňka nemá písmeno ani legendu:
 
