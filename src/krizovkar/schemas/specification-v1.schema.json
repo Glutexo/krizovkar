@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/main/src/krizovkar/schemas/specification-v1.schema.json",
+  "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/master/src/krizovkar/schemas/specification-v1.schema.json",
   "title": "Zadání křížovky Křížovkáře, verze 1",
   "description": "Datový model vstupního zadání, ze kterého vznikne cílová mřížka.",
   "type": "object",

@@ -16,7 +16,7 @@ Pokud push selže, nejprve vyřeš příčinu nebo nahlas blokaci. Dokončené z
 
 ## Historie a větve
 
-- Výchozí větev je `main`.
+- Výchozí větev je `master`.
 - Pro větší práci lze použít samostatnou větev a pull request; i průběžné dokončené commity se ihned pushují na tuto větev.
 - Bez výslovného souhlasu nepoužívej force push a nepřepisuj již zveřejněnou historii.
 - Commit nemá obsahovat nesouvisející změny jiných přispěvatelů.

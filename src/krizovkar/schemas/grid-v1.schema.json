@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/main/src/krizovkar/schemas/grid-v1.schema.json",
+  "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/master/src/krizovkar/schemas/grid-v1.schema.json",
   "title": "Cílová mřížka Křížovkáře, verze 1",
   "description": "Datový model výsledné křížovkové mřížky.",
   "type": "object",
