@@ -18,7 +18,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import Paragraph
 
-from krizovkar.model import CrosswordGrid, EmptyCell, LegendCell, SecretCell
+from krizovkar.model import CrosswordGrid, EmptyCell, HelpCell, LegendCell, SecretCell
 
 PAGE_MARGIN = 15 * mm
 MAX_CELL_SIZE = 12 * mm
@@ -29,11 +29,13 @@ LETTER_SIZE_RATIO = 0.58
 LETTER_BASELINE_OFFSET = 0.35
 SECRET_FILL_GRAY = 0.85
 LEGEND_FILL_GRAY = 0.93
-LEGEND_FONT = "KrizovkarNotoSans"
-LEGEND_MAX_FONT_SIZE = 6.0
-LEGEND_MIN_FONT_SIZE = 2.0
-LEGEND_FONT_STEP = 0.25
-LEGEND_PADDING = 1.5
+HELP_FILL_GRAY = 0.93
+TEXT_CELL_FONT = "KrizovkarNotoSans"
+TEXT_CELL_BOLD_FONT = "KrizovkarNotoSansBold"
+TEXT_CELL_MAX_FONT_SIZE = 6.0
+TEXT_CELL_MIN_FONT_SIZE = 2.0
+TEXT_CELL_FONT_STEP = 0.25
+TEXT_CELL_PADDING = 1.5
 LEGEND_SEPARATOR_LINE_WIDTH = 0.4
 EMPTY_SYMBOL_INSET_RATIO = 0.3
 EMPTY_SYMBOL_LINE_WIDTH = 0.65
@@ -67,28 +69,40 @@ class RenderError(RuntimeError):
 
 
 @cache
-def _register_legend_font() -> None:
-    font_data = pymupdf_fonts.fontbuffers["notos"]()
-    pdfmetrics.registerFont(TTFont(LEGEND_FONT, BytesIO(font_data)))
+def _register_text_cell_fonts() -> None:
+    regular_data = pymupdf_fonts.fontbuffers["notos"]()
+    bold_data = pymupdf_fonts.fontbuffers["notosbo"]()
+    pdfmetrics.registerFont(TTFont(TEXT_CELL_FONT, BytesIO(regular_data)))
+    pdfmetrics.registerFont(TTFont(TEXT_CELL_BOLD_FONT, BytesIO(bold_data)))
+    pdfmetrics.registerFontFamily(
+        TEXT_CELL_FONT,
+        normal=TEXT_CELL_FONT,
+        bold=TEXT_CELL_BOLD_FONT,
+    )
 
 
-def _draw_fitted_legend_text(
+def _draw_fitted_text(
     pdf: Canvas,
     text: str,
     left: float,
     bottom: float,
     width: float,
     height: float,
+    *,
+    prefix: str | None = None,
 ) -> None:
-    _register_legend_font()
-    maximum = min(LEGEND_MAX_FONT_SIZE, height * 0.45)
-    minimum = min(LEGEND_MIN_FONT_SIZE, maximum)
+    _register_text_cell_fonts()
+    maximum = min(TEXT_CELL_MAX_FONT_SIZE, height * 0.45)
+    minimum = min(TEXT_CELL_MIN_FONT_SIZE, maximum)
     font_size = maximum
+    content = escape(text)
+    if prefix is not None:
+        content = f"<b>{escape(prefix)}</b> {content}"
 
     while font_size >= minimum:
         style = ParagraphStyle(
-            name="legend",
-            fontName=LEGEND_FONT,
+            name="text-cell",
+            fontName=TEXT_CELL_FONT,
             fontSize=font_size,
             leading=font_size * 1.05,
             alignment=TA_CENTER,
@@ -96,7 +110,7 @@ def _draw_fitted_legend_text(
             spaceBefore=0,
             spaceAfter=0,
         )
-        paragraph = Paragraph(escape(text), style)
+        paragraph = Paragraph(content, style)
         _, text_height = paragraph.wrap(width, height)
         if text_height <= height:
             paragraph.drawOn(
@@ -105,9 +119,9 @@ def _draw_fitted_legend_text(
                 bottom + (height - text_height) / 2,
             )
             return
-        font_size -= LEGEND_FONT_STEP
+        font_size -= TEXT_CELL_FONT_STEP
 
-    raise RenderError(f"text legendy je příliš dlouhý pro buňku: {text!r}")
+    raise RenderError(f"text je příliš dlouhý pro buňku: {text!r}")
 
 
 def _draw_legend_cell(
@@ -131,9 +145,9 @@ def _draw_legend_cell(
     else:
         sections = ((cell.texts[0], bottom, size),)
 
-    padding = min(LEGEND_PADDING, size * 0.08)
+    padding = min(TEXT_CELL_PADDING, size * 0.08)
     for text, section_bottom, section_height in sections:
-        _draw_fitted_legend_text(
+        _draw_fitted_text(
             pdf,
             text,
             left + padding,
@@ -141,6 +155,27 @@ def _draw_legend_cell(
             size - 2 * padding,
             section_height - 2 * padding,
         )
+
+
+def _draw_help_cell(
+    pdf: Canvas,
+    cell: HelpCell,
+    left: float,
+    bottom: float,
+    size: float,
+) -> None:
+    pdf.setFillGray(HELP_FILL_GRAY)
+    pdf.rect(left, bottom, size, size, stroke=0, fill=1)
+    padding = min(TEXT_CELL_PADDING, size * 0.08)
+    _draw_fitted_text(
+        pdf,
+        ", ".join(cell.words),
+        left + padding,
+        bottom + padding,
+        size - 2 * padding,
+        size - 2 * padding,
+        prefix="Pomůcka:",
+    )
 
 
 def _draw_empty_cell(
@@ -244,6 +279,15 @@ def _write_pdf(
                         cell_bottom,
                         cell_size,
                     )
+                elif isinstance(cell, HelpCell):
+                    cell_left = left + column_index * cell_size
+                    _draw_help_cell(
+                        pdf,
+                        cell,
+                        cell_left,
+                        cell_bottom,
+                        cell_size,
+                    )
 
         font_size = cell_size * LETTER_SIZE_RATIO
         pdf.setFillColorRGB(0, 0, 0)
@@ -252,7 +296,7 @@ def _write_pdf(
             center_y = bottom + grid_height - (row_index + 0.5) * cell_size
             baseline = center_y - font_size * LETTER_BASELINE_OFFSET
             for column_index, cell in enumerate(row):
-                if isinstance(cell, (LegendCell, EmptyCell)):
+                if isinstance(cell, (LegendCell, EmptyCell, HelpCell)):
                     continue
                 center_x = left + (column_index + 0.5) * cell_size
                 pdf.drawCentredString(center_x, baseline, cell.value)

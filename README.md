@@ -79,6 +79,14 @@ Explicitně nevyplňovaná buňka nemá písmeno ani legendu:
 
 V PDF ji označuje jemný diagonální křížek. Tím se liší od dosud neurčené prázdné buňky v mřížce bez položky `cells`. Použití ukazuje [mřížka s nevyplňovanými buňkami](examples/grid-empty.yaml).
 
+Pomocná buňka obsahuje jeden nebo více výrazů:
+
+```yaml
+{type: help, words: [ARA, EMU, ÍRÁN]}
+```
+
+V PDF renderer doplní tučný nadpis „Pomůcka:“ a položky vypíše za ním oddělené čárkou a mezerou. Celý text automaticky zalomí a zmenší tak, aby se vešel do buňky. Výsledek ukazuje [mřížka s pomůckou](examples/grid-help.yaml).
+
 Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-letters.yaml) obsahuje 15 × 10 běžných buněk. Minimální soubory jsou v příkladech [mřížky](examples/grid-minimal.yaml) a [zadání](examples/specification-minimal.yaml).
 
 ## Vytvoření PDF

@@ -45,7 +45,14 @@ class EmptyCell:
     """Nevyplňovaná buňka bez písmene a legendy."""
 
 
-GridCell = LetterCell | SecretCell | LegendCell | EmptyCell
+@dataclass(frozen=True, slots=True)
+class HelpCell:
+    """Pomocná buňka se seznamem slov."""
+
+    words: tuple[str, ...]
+
+
+GridCell = LetterCell | SecretCell | LegendCell | EmptyCell | HelpCell
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +140,8 @@ def _grid_cell(cell: dict[str, Any]) -> GridCell:
         return LegendCell(texts=tuple(cell["texts"]))
     if cell["type"] == "empty":
         return EmptyCell()
+    if cell["type"] == "help":
+        return HelpCell(words=tuple(cell["words"]))
     raise ModelError(f"nepodporovaný typ buňky: {cell['type']!r}")
 
 

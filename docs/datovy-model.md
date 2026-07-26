@@ -86,6 +86,16 @@ Buňka bez písmene a bez legendy používá typ `empty`:
 
 Nemá položku `value` ani `texts`. Renderer ji v PDF označí jemným diagonálním křížkem, aby byla na první pohled rozeznatelná jako nevyplňovaná. Jde o explicitně určenou součást vyplněné matice; vynechaná položka `grid.cells` naproti tomu znamená dosud neurčenou prázdnou mřížku.
 
+## Pomocná buňka
+
+Pomůcka používá typ `help` a seznam `words` s alespoň jedním neprázdným textem:
+
+```yaml
+{type: help, words: [ARA, EMU, ÍRÁN]}
+```
+
+Nemá položku `value` ani `texts`. Renderer před seznam vloží tučný nadpis „Pomůcka:“, jednotlivé položky oddělí čárkou a mezerou a celý obsah automaticky zalomí a zmenší. Položky se v datovém modelu uchovávají odděleně, aby je nebylo nutné zpětně parsovat z jednoho textu.
+
 ## Zadání, verze 1
 
 Zadání je zdrojový dokument, ze kterého budoucí generátor vytvoří cílovou mřížku:
@@ -111,6 +121,8 @@ Smíšené typy buněk ukazuje [příklad s tajenkou](../examples/grid-secret.ya
 Jednoduchou i dvojitou legendu ukazuje [příklad s legendami](../examples/grid-legend.yaml).
 
 Nevyplňované buňky ukazuje [příklad s diagonálními křížky](../examples/grid-empty.yaml).
+
+Pomocnou buňku ukazuje [příklad se seznamem slov](../examples/grid-help.yaml).
 
 ## Rozvoj formátu
 

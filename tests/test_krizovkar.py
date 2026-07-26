@@ -13,6 +13,7 @@ from reportlab.lib.pagesizes import A5
 from krizovkar.cli import main
 from krizovkar.model import (
     EmptyCell,
+    HelpCell,
     LegendCell,
     ModelError,
     SecretCell,
@@ -24,6 +25,7 @@ from krizovkar.renderer import RenderError, resolve_page_size
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GRID_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "grid-minimal.yaml"
 GRID_EMPTY_EXAMPLE = PROJECT_ROOT / "examples" / "grid-empty.yaml"
+GRID_HELP_EXAMPLE = PROJECT_ROOT / "examples" / "grid-help.yaml"
 GRID_LEGEND_EXAMPLE = PROJECT_ROOT / "examples" / "grid-legend.yaml"
 GRID_RANDOM_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-random-letters.yaml"
 GRID_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret.yaml"
@@ -90,6 +92,15 @@ class ModelTest(unittest.TestCase):
             if isinstance(cell, EmptyCell)
         ]
         self.assertEqual(10, len(empty_cells))
+
+    def test_loads_help_cell(self) -> None:
+        crossword = load_crossword_grid(GRID_HELP_EXAMPLE)
+
+        assert crossword.grid.cells is not None
+        help_cell = crossword.grid.cells[2][3]
+        self.assertIsInstance(help_cell, HelpCell)
+        assert isinstance(help_cell, HelpCell)
+        self.assertEqual(("ARA", "EMU", "ÍRÁN"), help_cell.words)
 
     def test_grid_loader_rejects_specification(self) -> None:
         with self.assertRaisesRegex(ModelError, r"\$\.kind"):
@@ -205,7 +216,7 @@ class ModelTest(unittest.TestCase):
                 load_crossword_grid(source)
 
     def test_rejects_content_in_empty_cell(self) -> None:
-        invalid_contents = ("value: A", "texts: [Legenda]")
+        invalid_contents = ("value: A", "texts: [Legenda]", "words: [Pomůcka]")
         for content in invalid_contents:
             with (
                 self.subTest(content=content),
@@ -226,6 +237,49 @@ class ModelTest(unittest.TestCase):
 
                 with self.assertRaisesRegex(ModelError, r"\$\.grid\.cells\[0\]\[0\]"):
                     load_crossword_grid(source)
+
+    def test_rejects_invalid_help_words(self) -> None:
+        invalid_words = ("[]", '["   "]')
+        for words in invalid_words:
+            with (
+                self.subTest(words=words),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                source = Path(directory) / "invalid-help.yaml"
+                source.write_text(
+                    "format: krizovkar\n"
+                    "kind: grid\n"
+                    "version: 1\n"
+                    "grid:\n"
+                    "  width: 1\n"
+                    "  height: 1\n"
+                    "  cells:\n"
+                    f"    - [{{type: help, words: {words}}}]\n",
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(
+                    ModelError, r"\$\.grid\.cells\[0\]\[0\]\.words"
+                ):
+                    load_crossword_grid(source)
+
+    def test_rejects_help_without_words(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "help-without-words.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: grid\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 1\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: help}]\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ModelError, r"\$\.grid\.cells\[0\]\[0\]"):
+                load_crossword_grid(source)
 
 
 class CommandTest(unittest.TestCase):
@@ -279,6 +333,23 @@ class CommandTest(unittest.TestCase):
                     [
                         "render",
                         str(GRID_EMPTY_EXAMPLE),
+                        "--output",
+                        str(output),
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            self.assertTrue(output.read_bytes().startswith(b"%PDF-"))
+
+    def test_render_handles_help_cell(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "help-cell.pdf"
+
+            with redirect_stdout(io.StringIO()):
+                result = main(
+                    [
+                        "render",
+                        str(GRID_HELP_EXAMPLE),
                         "--output",
                         str(output),
                     ]
