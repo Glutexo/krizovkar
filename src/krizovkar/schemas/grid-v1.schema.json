@@ -60,25 +60,84 @@
   },
   "$defs": {
     "gridCell": {
-      "description": "Běžná nebo tajenková buňka obsahující jedno velké písmeno.",
+      "description": "Běžná, tajenková nebo legendová buňka.",
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "type",
-        "value"
+        "type"
       ],
       "properties": {
         "type": {
           "enum": [
             "letter",
-            "secret"
+            "secret",
+            "legend"
           ]
         },
         "value": {
           "type": "string",
           "pattern": "^[A-Z]$"
+        },
+        "texts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "letter",
+                  "secret"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "value"
+            ],
+            "not": {
+              "required": [
+                "texts"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "legend"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "texts"
+            ],
+            "not": {
+              "required": [
+                "value"
+              ]
+            }
+          }
+        }
+      ]
     }
   }
 }

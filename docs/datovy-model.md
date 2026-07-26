@@ -60,6 +60,22 @@ U obou typů musí být `value` právě jedno velké písmeno anglické abecedy 
 
 Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Cílová mřížka pouze označuje buňky tajenky. Její pořadí, seskupení a význam budou součástí zadání `specification`.
 
+## Buňka legendy
+
+Legenda neobsahuje `value`, ale seznam `texts` s jedním nebo dvěma neprázdnými texty:
+
+```yaml
+{type: legend, texts: ["Česká řeka"]}
+{type: legend, texts: ["Savec", "Pohoří"]}
+```
+
+- Jeden text využije celou buňku.
+- U dvou textů je první v horní a druhý v dolní polovině.
+- Dvě poloviny odděluje vodorovná čára.
+- Renderer text automaticky zalamuje a zmenšuje; české znaky vkládá do PDF pomocí fontu Noto Sans.
+
+Směr odpovědi, šipky a vazba legendy na konkrétní slovo zatím nejsou součástí cílové buňky. Tyto informace budou definované spolu se zadáním `specification`.
+
 ## Zadání, verze 1
 
 Zadání je zdrojový dokument, ze kterého budoucí generátor vytvoří cílovou mřížku:
@@ -81,6 +97,8 @@ Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-
 Vyplněná cílová mřížka je v [příkladu s náhodnými písmeny](../examples/grid-random-letters.yaml).
 
 Smíšené typy buněk ukazuje [příklad s tajenkou](../examples/grid-secret.yaml).
+
+Jednoduchou i dvojitou legendu ukazuje [příklad s legendami](../examples/grid-legend.yaml).
 
 ## Rozvoj formátu
 

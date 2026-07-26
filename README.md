@@ -62,6 +62,15 @@ grid:
 
 Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. Tajenková buňka má v PDF světle šedé pozadí. V [ukázkové mřížce s tajenkou](examples/grid-secret.yaml) zvýrazněné buňky skládají slovo „TAJENKA“.
 
+Legenda používá seznam s jedním nebo dvěma texty:
+
+```yaml
+{type: legend, texts: ["Česká řeka"]}
+{type: legend, texts: ["Savec", "Pohoří"]}
+```
+
+Při dvou textech je první nahoře, druhý dole a odděluje je vodorovná čára. Text se automaticky zalomí a zmenší tak, aby se do buňky vešel. Obě varianty ukazuje [mřížka s legendami](examples/grid-legend.yaml).
+
 Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-letters.yaml) obsahuje 15 × 10 běžných buněk. Minimální soubory jsou v příkladech [mřížky](examples/grid-minimal.yaml) a [zadání](examples/specification-minimal.yaml).
 
 ## Vytvoření PDF
