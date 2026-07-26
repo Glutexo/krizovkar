@@ -60,7 +60,7 @@
   },
   "$defs": {
     "gridCell": {
-      "description": "Běžná, tajenková nebo legendová buňka.",
+      "description": "Běžná, tajenková, legendová nebo nevyplňovaná buňka.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -71,7 +71,8 @@
           "enum": [
             "letter",
             "secret",
-            "legend"
+            "legend",
+            "empty"
           ]
         },
         "value": {
@@ -133,6 +134,34 @@
             "not": {
               "required": [
                 "value"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "empty"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "value"
+                  ]
+                },
+                {
+                  "required": [
+                    "texts"
+                  ]
+                }
               ]
             }
           }

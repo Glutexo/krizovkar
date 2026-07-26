@@ -12,6 +12,7 @@ from reportlab.lib.pagesizes import A5
 
 from krizovkar.cli import main
 from krizovkar.model import (
+    EmptyCell,
     LegendCell,
     ModelError,
     SecretCell,
@@ -22,6 +23,7 @@ from krizovkar.renderer import RenderError, resolve_page_size
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GRID_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "grid-minimal.yaml"
+GRID_EMPTY_EXAMPLE = PROJECT_ROOT / "examples" / "grid-empty.yaml"
 GRID_LEGEND_EXAMPLE = PROJECT_ROOT / "examples" / "grid-legend.yaml"
 GRID_RANDOM_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-random-letters.yaml"
 GRID_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret.yaml"
@@ -76,6 +78,18 @@ class ModelTest(unittest.TestCase):
         assert isinstance(double, LegendCell)
         self.assertEqual(("Česká řeka",), single.texts)
         self.assertEqual(("Savec", "Pohoří"), double.texts)
+
+    def test_loads_empty_cells(self) -> None:
+        crossword = load_crossword_grid(GRID_EMPTY_EXAMPLE)
+
+        assert crossword.grid.cells is not None
+        empty_cells = [
+            cell
+            for row in crossword.grid.cells
+            for cell in row
+            if isinstance(cell, EmptyCell)
+        ]
+        self.assertEqual(10, len(empty_cells))
 
     def test_grid_loader_rejects_specification(self) -> None:
         with self.assertRaisesRegex(ModelError, r"\$\.kind"):
@@ -190,6 +204,29 @@ class ModelTest(unittest.TestCase):
             ):
                 load_crossword_grid(source)
 
+    def test_rejects_content_in_empty_cell(self) -> None:
+        invalid_contents = ("value: A", "texts: [Legenda]")
+        for content in invalid_contents:
+            with (
+                self.subTest(content=content),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                source = Path(directory) / "nonempty-empty-cell.yaml"
+                source.write_text(
+                    "format: krizovkar\n"
+                    "kind: grid\n"
+                    "version: 1\n"
+                    "grid:\n"
+                    "  width: 1\n"
+                    "  height: 1\n"
+                    "  cells:\n"
+                    f"    - [{{type: empty, {content}}}]\n",
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(ModelError, r"\$\.grid\.cells\[0\]\[0\]"):
+                    load_crossword_grid(source)
+
 
 class CommandTest(unittest.TestCase):
     def test_page_format_names_are_case_insensitive(self) -> None:
@@ -232,6 +269,23 @@ class CommandTest(unittest.TestCase):
                 forced_result = main([*command, "--force"])
 
             self.assertEqual(0, forced_result)
+
+    def test_render_handles_empty_cells(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "empty-cells.pdf"
+
+            with redirect_stdout(io.StringIO()):
+                result = main(
+                    [
+                        "render",
+                        str(GRID_EMPTY_EXAMPLE),
+                        "--output",
+                        str(output),
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            self.assertTrue(output.read_bytes().startswith(b"%PDF-"))
 
 
 if __name__ == "__main__":

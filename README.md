@@ -71,6 +71,14 @@ Legenda používá seznam s jedním nebo dvěma texty:
 
 Při dvou textech je první nahoře, druhý dole a odděluje je vodorovná čára. Text se automaticky zalomí a zmenší tak, aby se do buňky vešel. Obě varianty ukazuje [mřížka s legendami](examples/grid-legend.yaml).
 
+Explicitně nevyplňovaná buňka nemá písmeno ani legendu:
+
+```yaml
+{type: empty}
+```
+
+V PDF ji označuje jemný diagonální křížek. Tím se liší od dosud neurčené prázdné buňky v mřížce bez položky `cells`. Použití ukazuje [mřížka s nevyplňovanými buňkami](examples/grid-empty.yaml).
+
 Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-letters.yaml) obsahuje 15 × 10 běžných buněk. Minimální soubory jsou v příkladech [mřížky](examples/grid-minimal.yaml) a [zadání](examples/specification-minimal.yaml).
 
 ## Vytvoření PDF

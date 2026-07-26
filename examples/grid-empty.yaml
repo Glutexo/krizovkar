@@ -1,0 +1,12 @@
+format: krizovkar
+kind: grid
+version: 1
+grid:
+  width: 7
+  height: 5
+  cells:
+    - [{type: empty}, {type: letter, value: A}, {type: letter, value: B}, {type: letter, value: C}, {type: empty}, {type: letter, value: D}, {type: letter, value: E}]
+    - [{type: letter, value: F}, {type: empty}, {type: letter, value: G}, {type: letter, value: H}, {type: letter, value: I}, {type: empty}, {type: letter, value: J}]
+    - [{type: letter, value: K}, {type: letter, value: L}, {type: empty}, {type: letter, value: M}, {type: empty}, {type: letter, value: N}, {type: letter, value: O}]
+    - [{type: letter, value: P}, {type: empty}, {type: letter, value: Q}, {type: letter, value: R}, {type: letter, value: S}, {type: empty}, {type: letter, value: T}]
+    - [{type: empty}, {type: letter, value: U}, {type: letter, value: V}, {type: letter, value: W}, {type: empty}, {type: letter, value: X}, {type: letter, value: Y}]

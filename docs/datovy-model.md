@@ -76,6 +76,16 @@ Legenda neobsahuje `value`, ale seznam `texts` s jedním nebo dvěma neprázdný
 
 Směr odpovědi, šipky a vazba legendy na konkrétní slovo zatím nejsou součástí cílové buňky. Tyto informace budou definované spolu se zadáním `specification`.
 
+## Nevyplňovaná buňka
+
+Buňka bez písmene a bez legendy používá typ `empty`:
+
+```yaml
+{type: empty}
+```
+
+Nemá položku `value` ani `texts`. Renderer ji v PDF označí jemným diagonálním křížkem, aby byla na první pohled rozeznatelná jako nevyplňovaná. Jde o explicitně určenou součást vyplněné matice; vynechaná položka `grid.cells` naproti tomu znamená dosud neurčenou prázdnou mřížku.
+
 ## Zadání, verze 1
 
 Zadání je zdrojový dokument, ze kterého budoucí generátor vytvoří cílovou mřížku:
@@ -99,6 +109,8 @@ Vyplněná cílová mřížka je v [příkladu s náhodnými písmeny](../exampl
 Smíšené typy buněk ukazuje [příklad s tajenkou](../examples/grid-secret.yaml).
 
 Jednoduchou i dvojitou legendu ukazuje [příklad s legendami](../examples/grid-legend.yaml).
+
+Nevyplňované buňky ukazuje [příklad s diagonálními křížky](../examples/grid-empty.yaml).
 
 ## Rozvoj formátu
 

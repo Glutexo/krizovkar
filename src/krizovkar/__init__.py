@@ -3,6 +3,7 @@
 from krizovkar.model import (
     CrosswordGrid,
     CrosswordSpecification,
+    EmptyCell,
     Grid,
     GridCell,
     LegendCell,
@@ -17,6 +18,7 @@ from krizovkar.renderer import RenderError, render_pdf
 __all__ = [
     "CrosswordGrid",
     "CrosswordSpecification",
+    "EmptyCell",
     "Grid",
     "GridCell",
     "LegendCell",

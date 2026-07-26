@@ -18,7 +18,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import Paragraph
 
-from krizovkar.model import CrosswordGrid, LegendCell, SecretCell
+from krizovkar.model import CrosswordGrid, EmptyCell, LegendCell, SecretCell
 
 PAGE_MARGIN = 15 * mm
 MAX_CELL_SIZE = 12 * mm
@@ -35,6 +35,8 @@ LEGEND_MIN_FONT_SIZE = 2.0
 LEGEND_FONT_STEP = 0.25
 LEGEND_PADDING = 1.5
 LEGEND_SEPARATOR_LINE_WIDTH = 0.4
+EMPTY_SYMBOL_INSET_RATIO = 0.3
+EMPTY_SYMBOL_LINE_WIDTH = 0.65
 DEFAULT_PAGE_FORMAT = "A4"
 SUPPORTED_PAGE_FORMATS = (
     "A0",
@@ -141,6 +143,32 @@ def _draw_legend_cell(
         )
 
 
+def _draw_empty_cell(
+    pdf: Canvas,
+    left: float,
+    bottom: float,
+    size: float,
+) -> None:
+    inset = size * EMPTY_SYMBOL_INSET_RATIO
+    pdf.saveState()
+    pdf.setStrokeColorRGB(0.25, 0.25, 0.25)
+    pdf.setLineWidth(EMPTY_SYMBOL_LINE_WIDTH)
+    pdf.setLineCap(1)
+    pdf.line(
+        left + inset,
+        bottom + inset,
+        left + size - inset,
+        bottom + size - inset,
+    )
+    pdf.line(
+        left + inset,
+        bottom + size - inset,
+        left + size - inset,
+        bottom + inset,
+    )
+    pdf.restoreState()
+
+
 def resolve_page_size(page_format: str) -> tuple[float, float]:
     """Vrátí rozměr stránky pro podporovaný název formátu."""
 
@@ -208,6 +236,14 @@ def _write_pdf(
                         cell_bottom,
                         cell_size,
                     )
+                elif isinstance(cell, EmptyCell):
+                    cell_left = left + column_index * cell_size
+                    _draw_empty_cell(
+                        pdf,
+                        cell_left,
+                        cell_bottom,
+                        cell_size,
+                    )
 
         font_size = cell_size * LETTER_SIZE_RATIO
         pdf.setFillColorRGB(0, 0, 0)
@@ -216,7 +252,7 @@ def _write_pdf(
             center_y = bottom + grid_height - (row_index + 0.5) * cell_size
             baseline = center_y - font_size * LETTER_BASELINE_OFFSET
             for column_index, cell in enumerate(row):
-                if isinstance(cell, LegendCell):
+                if isinstance(cell, (LegendCell, EmptyCell)):
                     continue
                 center_x = left + (column_index + 0.5) * cell_size
                 pdf.drawCentredString(center_x, baseline, cell.value)
