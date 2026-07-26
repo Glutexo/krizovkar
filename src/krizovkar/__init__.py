@@ -6,6 +6,7 @@ from krizovkar.dictionary import (
     DictionaryError,
     load_dictionary,
 )
+from krizovkar.generator import GenerationError, generate_swedish_grid
 
 from krizovkar.model import (
     Coordinate,
@@ -39,6 +40,7 @@ __all__ = [
     "Grid",
     "GridCell",
     "GridDimensions",
+    "GenerationError",
     "HelpCell",
     "LegendArrow",
     "LegendCell",
@@ -48,6 +50,7 @@ __all__ = [
     "SecretCell",
     "WordDirection",
     "WordPlacement",
+    "generate_swedish_grid",
     "load_dictionary",
     "load_crossword_grid",
     "load_crossword_specification",
