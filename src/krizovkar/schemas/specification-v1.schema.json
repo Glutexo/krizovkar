@@ -114,7 +114,7 @@
         "answer": {
           "description": "Přesná posloupnost písmen v mřížce.",
           "type": "string",
-          "pattern": "^[A-Z]+$"
+          "pattern": "^[A-ZÁÄČĎÉĚÍŇÓÔÖŘŠŤÚŮÜÝŽ]+$"
         },
         "start": {
           "description": "Souřadnice prvního písmene.",

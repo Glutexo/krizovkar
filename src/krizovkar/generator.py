@@ -7,6 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Literal
 
+from krizovkar.alphabet import split_answer_letters
 from krizovkar.dictionary import CrosswordDictionary
 from krizovkar.model import (
     CrosswordGrid,
@@ -40,6 +41,7 @@ class GenerationError(RuntimeError):
 class _Entry:
     answer: str
     clue: str
+    letters: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +70,7 @@ class _Board:
                 placement.row + offset * row_step,
                 placement.column + offset * column_step,
             )
-            for offset in range(len(placement.entry.answer))
+            for offset in range(len(placement.entry.letters))
         )
 
     def _legend_position(self, placement: _Placement) -> Coordinate:
@@ -106,7 +108,9 @@ class _Board:
             return None
 
         crossings = 0
-        for coordinate, letter in zip(positions, placement.entry.answer, strict=True):
+        for coordinate, letter in zip(
+            positions, placement.entry.letters, strict=True
+        ):
             if coordinate in self.legends:
                 return None
 
@@ -129,7 +133,9 @@ class _Board:
 
     def place(self, placement: _Placement) -> None:
         positions = self._positions(placement)
-        for coordinate, letter in zip(positions, placement.entry.answer, strict=True):
+        for coordinate, letter in zip(
+            positions, placement.entry.letters, strict=True
+        ):
             self.letters.setdefault(coordinate, letter)
             self.orientations[coordinate].add(placement.direction)
 
@@ -176,7 +182,7 @@ class _Board:
         return 0 <= row < self.height and 0 <= column < self.width
 
     def _position_after(self, placement: _Placement) -> Coordinate:
-        length = len(placement.entry.answer)
+        length = len(placement.entry.letters)
         if placement.direction == "horizontal":
             return (placement.row, placement.column + length)
         return (placement.row + length, placement.column)
@@ -200,14 +206,17 @@ def _usable_entries(
     maximum_length = max(width - 1, height - 1)
     entries = []
     for entry in dictionary.entries:
-        if not MIN_WORD_LENGTH <= len(entry.answer) <= maximum_length:
+        letters = split_answer_letters(entry.answer)
+        if not MIN_WORD_LENGTH <= len(letters) <= maximum_length:
             continue
         clue = next(
             (clue for clue in entry.clues if len(clue) <= MAX_CLUE_LENGTH),
             None,
         )
         if clue is not None:
-            entries.append(_Entry(answer=entry.answer, clue=clue))
+            entries.append(
+                _Entry(answer=entry.answer, clue=clue, letters=letters)
+            )
     return tuple(entries)
 
 
@@ -224,15 +233,15 @@ def _initial_placement(
     else:
         direction = randomizer.choice(("horizontal", "vertical"))
     available_space = width - 1 if direction == "horizontal" else height - 1
-    fitting = tuple(entry for entry in entries if len(entry.answer) <= available_space)
+    fitting = tuple(entry for entry in entries if len(entry.letters) <= available_space)
     if not fitting:
         raise GenerationError("slovník neobsahuje heslo, které se vejde do mřížky")
 
-    longest = max(len(entry.answer) for entry in fitting)
-    seeds = tuple(entry for entry in fitting if len(entry.answer) == longest)
+    longest = max(len(entry.letters) for entry in fitting)
+    seeds = tuple(entry for entry in fitting if len(entry.letters) == longest)
     entry = randomizer.choice(seeds)
     if direction == "horizontal":
-        legend_column = (width - len(entry.answer) - 1) // 2
+        legend_column = (width - len(entry.letters) - 1) // 2
         return _Placement(
             entry=entry,
             row=height // 2,
@@ -240,7 +249,7 @@ def _initial_placement(
             direction=direction,
         )
 
-    legend_row = (height - len(entry.answer) - 1) // 2
+    legend_row = (height - len(entry.letters) - 1) // 2
     return _Placement(
         entry=entry,
         row=legend_row + 1,
@@ -254,7 +263,7 @@ def _entry_index(
 ) -> dict[str, tuple[tuple[_Entry, int], ...]]:
     indexed: dict[str, list[tuple[_Entry, int]]] = defaultdict(list)
     for entry in entries:
-        for offset, letter in enumerate(entry.answer):
+        for offset, letter in enumerate(entry.letters):
             indexed[letter].append((entry, offset))
     return {letter: tuple(options) for letter, options in indexed.items()}
 
@@ -306,7 +315,7 @@ def _crossing_placement(
         score = (
             crossings * 100
             + shared_legend * 25
-            + len(entry.answer) * 2
+            + len(entry.letters) * 2
             - center_distance
             + randomizer.random()
         )
@@ -330,7 +339,7 @@ def generate_swedish_grid(
     """Vytvoří propojenou mřížku s hesly doprava a dolů.
 
     Neobsazené buňky označí jako nevyplňované. Písmenné buňky obsahují
-    řešení, aby šlo v první experimentální verzi přímo zkontrolovat křížení.
+    řešení, aby šlo v první experimentální verzi zkontrolovat křížení.
     """
 
     if width < 3 or height < 3:

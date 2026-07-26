@@ -24,7 +24,7 @@ PAGE_MARGIN = 15 * mm
 MAX_CELL_SIZE = 12 * mm
 INNER_LINE_WIDTH = 0.5
 OUTER_LINE_WIDTH = 1.25
-LETTER_FONT = "Helvetica-Bold"
+LETTER_FONT = "KrizovkarNotoSansBold"
 LETTER_SIZE_RATIO = 0.58
 LETTER_BASELINE_OFFSET = 0.35
 SECRET_FILL_GRAY = 0.85
@@ -337,15 +337,25 @@ def _write_pdf(
                     )
 
         font_size = cell_size * LETTER_SIZE_RATIO
+        _register_text_cell_fonts()
         pdf.setFillColorRGB(0, 0, 0)
-        pdf.setFont(LETTER_FONT, font_size)
         for row_index, row in enumerate(crossword.grid.cells):
             center_y = bottom + grid_height - (row_index + 0.5) * cell_size
-            baseline = center_y - font_size * LETTER_BASELINE_OFFSET
             for column_index, cell in enumerate(row):
                 if isinstance(cell, (LegendCell, EmptyCell, HelpCell)):
                     continue
                 center_x = left + (column_index + 0.5) * cell_size
+                text_width = pdfmetrics.stringWidth(
+                    cell.value,
+                    LETTER_FONT,
+                    font_size,
+                )
+                fitted_size = min(
+                    font_size,
+                    font_size * cell_size * 0.8 / text_width,
+                )
+                baseline = center_y - fitted_size * LETTER_BASELINE_OFFSET
+                pdf.setFont(LETTER_FONT, fitted_size)
                 pdf.drawCentredString(center_x, baseline, cell.value)
 
     pdf.setLineWidth(INNER_LINE_WIDTH)

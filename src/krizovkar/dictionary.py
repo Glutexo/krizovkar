@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
-ANSWER_PATTERN = re.compile(r"[A-Z]+")
+from krizovkar.alphabet import ANSWER_PATTERN
 
 
 class DictionaryError(ValueError):
@@ -77,7 +75,8 @@ def load_dictionary(source: str | Path) -> CrosswordDictionary:
     for answer in sorted(data):
         if ANSWER_PATTERN.fullmatch(answer) is None:
             raise DictionaryError(
-                f"heslo {answer!r} musí obsahovat pouze písmena A–Z"
+                f"heslo {answer!r} musí obsahovat pouze podporovaná "
+                "velká písmena"
             )
 
         raw_clues = data[answer]

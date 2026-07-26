@@ -1,0 +1,8 @@
+format: krizovkar
+kind: grid
+version: 1
+grid:
+  width: 7
+  height: 1
+  cells:
+    - [{type: letter, value: O}, {type: letter, value: CH}, {type: letter, value: O}, {type: letter, value: Č}, {type: letter, value: E}, {type: letter, value: N}, {type: letter, value: Á}]

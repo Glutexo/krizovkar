@@ -70,13 +70,13 @@ Mřížka může obsahovat řádky explicitně typovaných buněk:
 
 ```yaml
 grid:
-  width: 2
+  width: 3
   height: 1
   cells:
-    - [{type: letter, value: A}, {type: secret, value: H}]
+    - [{type: letter, value: Č}, {type: letter, value: CH}, {type: secret, value: Á}]
 ```
 
-Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. Tajenková buňka má v PDF světle šedé pozadí. V [ukázkové mřížce s tajenkou](examples/grid-secret.yaml) zvýrazněné buňky skládají slovo „TAJENKA“.
+Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. České `CH` zabírá jednu buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku. Tajenková buňka má v PDF světle šedé pozadí. Zápis ukazuje [mřížka s českými písmeny](examples/grid-czech-letters.yaml); v [ukázkové mřížce s tajenkou](examples/grid-secret.yaml) zvýrazněné buňky skládají slovo „TAJENKA“.
 
 Legenda používá seznam s jedním nebo dvěma texty:
 
@@ -107,12 +107,12 @@ Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-lett
 
 ## Pokusné generování
 
-Generátor přijímá slovník jako JSON objekt. Klíčem je heslo složené z velkých písmen `A`–`Z` a hodnotou neprázdný seznam možných legend v preferovaném pořadí:
+Generátor přijímá slovník jako JSON objekt. Klíčem je heslo složené z podporovaných velkých písmen včetně diakritiky a hodnotou neprázdný seznam možných legend v preferovaném pořadí:
 
 ```json
 {
-  "LABE": ["Česká řeka"],
-  "LES": ["Porost stromů", "Hvozd"]
+  "OCHOČENÁ": ["Zkrocená"],
+  "ŘEKA": ["Vodní tok"]
 }
 ```
 

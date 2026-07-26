@@ -29,6 +29,7 @@ from krizovkar.renderer import RenderError, resolve_page_size
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GRID_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "grid-minimal.yaml"
+GRID_CZECH_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-czech-letters.yaml"
 GRID_EMPTY_EXAMPLE = PROJECT_ROOT / "examples" / "grid-empty.yaml"
 GRID_HELP_EXAMPLE = PROJECT_ROOT / "examples" / "grid-help.yaml"
 GRID_LEGEND_EXAMPLE = PROJECT_ROOT / "examples" / "grid-legend.yaml"
@@ -60,6 +61,15 @@ class ModelTest(unittest.TestCase):
         self.assertTrue(all(len(row) == 15 for row in crossword.grid.cells))
         self.assertEqual("W", crossword.grid.cells[0][0].value)
         self.assertEqual("I", crossword.grid.cells[-1][-1].value)
+
+    def test_loads_czech_letters_and_ch_in_one_cell(self) -> None:
+        crossword = load_crossword_grid(GRID_CZECH_LETTERS_EXAMPLE)
+
+        assert crossword.grid.cells is not None
+        self.assertEqual(
+            ("O", "CH", "O", "Č", "E", "N", "Á"),
+            tuple(cell.value for cell in crossword.grid.cells[0]),
+        )
 
     def test_loads_minimal_specification(self) -> None:
         specification = load_crossword_specification(SPECIFICATION_MINIMAL_EXAMPLE)
@@ -111,6 +121,26 @@ class ModelTest(unittest.TestCase):
             specification = load_crossword_specification(source)
 
             self.assertEqual(Coordinate(row=3, column=3), specification.help_position)
+
+    def test_specification_counts_ch_as_one_cell(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "czech-answer.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 7, height: 1}\n"
+                "words:\n"
+                "  - answer: OCHOČENÁ\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Zkrocená\n",
+                encoding="utf-8",
+            )
+
+            specification = load_crossword_specification(source)
+
+            self.assertEqual("OCHOČENÁ", specification.words[0].answer)
 
     def test_rejects_word_outside_specification_grid(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -591,6 +621,23 @@ class CommandTest(unittest.TestCase):
                     [
                         "render",
                         str(GRID_HELP_EXAMPLE),
+                        "--output",
+                        str(output),
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            self.assertTrue(output.read_bytes().startswith(b"%PDF-"))
+
+    def test_render_handles_czech_letters_and_ch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "czech-letters.pdf"
+
+            with redirect_stdout(io.StringIO()):
+                result = main(
+                    [
+                        "render",
+                        str(GRID_CZECH_LETTERS_EXAMPLE),
                         "--output",
                         str(output),
                     ]

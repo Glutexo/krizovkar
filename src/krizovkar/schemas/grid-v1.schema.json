@@ -78,7 +78,7 @@
         },
         "value": {
           "type": "string",
-          "pattern": "^[A-Z]$"
+          "pattern": "^(?:CH|[A-ZÁÄČĎÉĚÍŇÓÔÖŘŠŤÚŮÜÝŽ])$"
         },
         "texts": {
           "type": "array",

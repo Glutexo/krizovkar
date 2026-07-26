@@ -19,14 +19,17 @@ class DictionaryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             source = self._source(
                 directory,
-                '{"LES": ["Porost stromů", "Hvozd"], "ARA": ["Papoušek"]}',
+                '{"ŘEKA": ["Vodní tok", "Říčka"], "CHATA": ["Stavení"]}',
             )
 
             dictionary = load_dictionary(source)
 
         self.assertEqual(2, len(dictionary))
-        self.assertEqual(("ARA", "LES"), tuple(e.answer for e in dictionary.entries))
-        self.assertEqual(("Porost stromů", "Hvozd"), dictionary.entries[1].clues)
+        self.assertEqual(
+            ("CHATA", "ŘEKA"),
+            tuple(entry.answer for entry in dictionary.entries),
+        )
+        self.assertEqual(("Vodní tok", "Říčka"), dictionary.entries[1].clues)
 
     def test_rejects_invalid_json(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -49,7 +52,7 @@ class DictionaryTest(unittest.TestCase):
         invalid_contents = {
             "pole místo objektu": "[]",
             "prázdný objekt": "{}",
-            "neplatné heslo": '{"ŘEKA": ["Vodní tok"]}',
+            "neplatné heslo": '{"Řeka": ["Vodní tok"]}',
             "legenda místo seznamu": '{"REKA": "Vodní tok"}',
             "prázdný seznam": '{"REKA": []}',
             "prázdná legenda": '{"REKA": ["   "]}',

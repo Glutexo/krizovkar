@@ -15,6 +15,8 @@ from jsonschema.exceptions import ValidationError
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
+from krizovkar.alphabet import split_answer_letters
+
 
 class ModelError(ValueError):
     """Datový dokument Křížovkáře nelze načíst, ověřit nebo zapsat."""
@@ -290,7 +292,7 @@ def _validate_specification_placements(
     for word_index, word in enumerate(words):
         row_step = 1 if word.direction == "vertical" else 0
         column_step = 1 if word.direction == "horizontal" else 0
-        for offset, letter in enumerate(word.answer):
+        for offset, letter in enumerate(split_answer_letters(word.answer)):
             row = word.start.row + offset * row_step
             column = word.start.column + offset * column_step
             if row > grid.height or column > grid.width:

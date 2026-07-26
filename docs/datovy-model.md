@@ -42,11 +42,11 @@ Volitelná položka `grid.cells` obsahuje matici buněk. Vnější seznam předs
 
 ```yaml
 grid:
-  width: 2
+  width: 3
   height: 2
   cells:
-    - [{type: letter, value: A}, {type: secret, value: H}]
-    - [{type: letter, value: O}, {type: secret, value: J}]
+    - [{type: letter, value: Č}, {type: letter, value: CH}, {type: secret, value: Á}]
+    - [{type: letter, value: O}, {type: letter, value: Ř}, {type: secret, value: J}]
 ```
 
 Pokud je `cells` uvedené, musí obsahovat přesně `grid.height` řádků a každý řádek přesně `grid.width` buněk. Jeho vynechání znamená prázdnou mřížku bez určených buněk.
@@ -56,7 +56,7 @@ Podporované typy jsou:
 - `type: letter` pro běžnou písmennou buňku,
 - `type: secret` pro zvýrazněnou buňku, jejíž písmeno patří do tajenky.
 
-U obou typů musí být `value` právě jedno velké písmeno anglické abecedy od `A` do `Z`. Renderer odlišuje tajenkovou buňku světle šedým pozadím.
+U obou typů musí být `value` právě jedno podporované velké písmeno. Písmena si zachovávají diakritiku; české `CH` se zapisuje jako jedna hodnota a zabírá jednu buňku. Renderer odlišuje tajenkovou buňku světle šedým pozadím.
 
 Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Cílová mřížka pouze označuje buňky tajenky. Její pořadí, seskupení a význam budou součástí zadání `specification`.
 
@@ -127,7 +127,7 @@ Položky `grid` a `words` jsou navzájem provázané: jsou buď uvedené obě, n
 
 Každá položka `words` obsahuje:
 
-- `answer`: neprázdnou posloupnost velkých písmen `A`–`Z`, tedy přesný obsah budoucích písmenných buněk,
+- `answer`: neprázdnou posloupnost podporovaných velkých písmen včetně diakritiky; české `CH` představuje jednu budoucí buňku,
 - `start`: souřadnici prvního písmene,
 - `direction`: hodnotu `horizontal` pro postup doprava nebo `vertical` pro postup dolů,
 - `legend`: neprázdný text legendy,
@@ -161,6 +161,8 @@ Vyšší zadání ukazuje [příklad s umístěnými slovy a automatickou pomůc
 Vyplněná cílová mřížka je v [příkladu s náhodnými písmeny](../examples/grid-random-letters.yaml).
 
 Smíšené typy buněk ukazuje [příklad s tajenkou](../examples/grid-secret.yaml).
+
+Česká písmena s diakritikou a jednopísmenné `CH` ukazuje [mřížka s českými písmeny](../examples/grid-czech-letters.yaml).
 
 Jednoduchou i dvojitou legendu ukazuje [příklad s legendami](../examples/grid-legend.yaml).
 
