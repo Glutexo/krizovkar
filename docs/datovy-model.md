@@ -36,7 +36,7 @@ grid:
 
 Oba rozměry jsou povinná kladná celá čísla. Hodnota `15` proto znamená patnáct buněk, nikoli fyzickou délku nebo počet pixelů.
 
-## Buňka písmene
+## Buňky s písmeny
 
 Volitelná položka `grid.cells` obsahuje matici buněk. Vnější seznam představuje řádky shora dolů a každý vnitřní seznam buňky zleva doprava:
 
@@ -45,18 +45,20 @@ grid:
   width: 2
   height: 2
   cells:
-    - [{type: letter, value: A}, {type: letter, value: H}]
-    - [{type: letter, value: O}, {type: letter, value: J}]
+    - [{type: letter, value: A}, {type: secret, value: H}]
+    - [{type: letter, value: O}, {type: secret, value: J}]
 ```
 
 Pokud je `cells` uvedené, musí obsahovat přesně `grid.height` řádků a každý řádek přesně `grid.width` buněk. Jeho vynechání znamená prázdnou mřížku bez určených buněk.
 
-Prvním podporovaným typem je písmeno:
+Podporované typy jsou:
 
-- `type` musí mít hodnotu `letter`,
-- `value` musí být právě jedno velké písmeno anglické abecedy od `A` do `Z`.
+- `type: letter` pro běžnou písmennou buňku,
+- `type: secret` pro zvýrazněnou buňku, jejíž písmeno patří do tajenky.
 
-Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Další typy buněk tato iterace ještě nedefinuje.
+U obou typů musí být `value` právě jedno velké písmeno anglické abecedy od `A` do `Z`. Renderer odlišuje tajenkovou buňku světle šedým pozadím.
+
+Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Cílová mřížka pouze označuje buňky tajenky. Její pořadí, seskupení a význam budou součástí zadání `specification`.
 
 ## Zadání, verze 1
 
@@ -77,6 +79,8 @@ Strojová pravidla jsou v samostatných schématech pro [cílovou mřížku](../
 Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-minimal.yaml) a [zadání](../examples/specification-minimal.yaml).
 
 Vyplněná cílová mřížka je v [příkladu s náhodnými písmeny](../examples/grid-random-letters.yaml).
+
+Smíšené typy buněk ukazuje [příklad s tajenkou](../examples/grid-secret.yaml).
 
 ## Rozvoj formátu
 

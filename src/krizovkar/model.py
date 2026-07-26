@@ -27,12 +27,22 @@ class LetterCell:
 
 
 @dataclass(frozen=True, slots=True)
+class SecretCell:
+    """Zvýrazněná buňka, jejíž písmeno patří do tajenky."""
+
+    value: str
+
+
+GridCell = LetterCell | SecretCell
+
+
+@dataclass(frozen=True, slots=True)
 class Grid:
     """Obdélníková křížovková mřížka a její případné buňky."""
 
     width: int
     height: int
-    cells: tuple[tuple[LetterCell, ...], ...] | None = None
+    cells: tuple[tuple[GridCell, ...], ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,7 +112,15 @@ def _validated_data(source: Path, schema_name: str) -> dict[str, Any]:
     return data
 
 
-def _grid_cells(grid: dict[str, Any]) -> tuple[tuple[LetterCell, ...], ...] | None:
+def _grid_cell(cell: dict[str, Any]) -> GridCell:
+    if cell["type"] == "letter":
+        return LetterCell(value=cell["value"])
+    if cell["type"] == "secret":
+        return SecretCell(value=cell["value"])
+    raise ModelError(f"nepodporovaný typ buňky: {cell['type']!r}")
+
+
+def _grid_cells(grid: dict[str, Any]) -> tuple[tuple[GridCell, ...], ...] | None:
     raw_cells = grid.get("cells")
     if raw_cells is None:
         return None
@@ -114,7 +132,7 @@ def _grid_cells(grid: dict[str, Any]) -> tuple[tuple[LetterCell, ...], ...] | No
             f"grid.height ({grid['height']})"
         )
 
-    rows: list[tuple[LetterCell, ...]] = []
+    rows: list[tuple[GridCell, ...]] = []
     for row_index, raw_row in enumerate(raw_cells):
         if len(raw_row) != grid["width"]:
             raise ModelError(
@@ -122,7 +140,7 @@ def _grid_cells(grid: dict[str, Any]) -> tuple[tuple[LetterCell, ...], ...] | No
                 f"počet buněk ({len(raw_row)}) neodpovídá "
                 f"grid.width ({grid['width']})"
             )
-        rows.append(tuple(LetterCell(value=cell["value"]) for cell in raw_row))
+        rows.append(tuple(_grid_cell(cell) for cell in raw_row))
 
     return tuple(rows)
 

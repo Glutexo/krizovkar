@@ -9,7 +9,7 @@ from reportlab.lib.pagesizes import A0, A1, A2, A3, A4, A5, A6, LEGAL, LETTER
 from reportlab.lib.units import mm
 from reportlab.pdfgen.canvas import Canvas
 
-from krizovkar.model import CrosswordGrid
+from krizovkar.model import CrosswordGrid, SecretCell
 
 PAGE_MARGIN = 15 * mm
 MAX_CELL_SIZE = 12 * mm
@@ -18,6 +18,7 @@ OUTER_LINE_WIDTH = 1.25
 LETTER_FONT = "Helvetica-Bold"
 LETTER_SIZE_RATIO = 0.58
 LETTER_BASELINE_OFFSET = 0.35
+SECRET_FILL_GRAY = 0.85
 DEFAULT_PAGE_FORMAT = "A4"
 SUPPORTED_PAGE_FORMATS = (
     "A0",
@@ -91,6 +92,21 @@ def _write_pdf(
     pdf.setStrokeColorRGB(0, 0, 0)
 
     if crossword.grid.cells is not None:
+        pdf.setFillGray(SECRET_FILL_GRAY)
+        for row_index, row in enumerate(crossword.grid.cells):
+            cell_bottom = bottom + grid_height - (row_index + 1) * cell_size
+            for column_index, cell in enumerate(row):
+                if isinstance(cell, SecretCell):
+                    cell_left = left + column_index * cell_size
+                    pdf.rect(
+                        cell_left,
+                        cell_bottom,
+                        cell_size,
+                        cell_size,
+                        stroke=0,
+                        fill=1,
+                    )
+
         font_size = cell_size * LETTER_SIZE_RATIO
         pdf.setFillColorRGB(0, 0, 0)
         pdf.setFont(LETTER_FONT, font_size)

@@ -57,10 +57,12 @@ grid:
   width: 2
   height: 1
   cells:
-    - [{type: letter, value: A}, {type: letter, value: H}]
+    - [{type: letter, value: A}, {type: secret, value: H}]
 ```
 
-Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-letters.yaml) obsahuje 15 × 10 buněk typu `letter`. Minimální soubory jsou v příkladech [mřížky](examples/grid-minimal.yaml) a [zadání](examples/specification-minimal.yaml).
+Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. Tajenková buňka má v PDF světle šedé pozadí. V [ukázkové mřížce s tajenkou](examples/grid-secret.yaml) zvýrazněné buňky skládají slovo „TAJENKA“.
+
+Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-letters.yaml) obsahuje 15 × 10 běžných buněk. Minimální soubory jsou v příkladech [mřížky](examples/grid-minimal.yaml) a [zadání](examples/specification-minimal.yaml).
 
 ## Vytvoření PDF
 

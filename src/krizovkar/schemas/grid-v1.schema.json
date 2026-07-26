@@ -51,7 +51,7 @@
             "type": "array",
             "minItems": 1,
             "items": {
-              "$ref": "#/$defs/letterCell"
+              "$ref": "#/$defs/gridCell"
             }
           }
         }
@@ -59,8 +59,8 @@
     }
   },
   "$defs": {
-    "letterCell": {
-      "description": "Buňka obsahující jedno velké písmeno.",
+    "gridCell": {
+      "description": "Běžná nebo tajenková buňka obsahující jedno velké písmeno.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -69,7 +69,10 @@
       ],
       "properties": {
         "type": {
-          "const": "letter"
+          "enum": [
+            "letter",
+            "secret"
+          ]
         },
         "value": {
           "type": "string",
