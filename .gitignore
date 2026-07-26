@@ -13,6 +13,9 @@ Thumbs.db
 .env.*
 !.env.example
 
+# Lokální referenční zdroje
+/reference-sources/
+
 # Python
 __pycache__/
 *.py[cod]
