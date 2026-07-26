@@ -246,12 +246,10 @@ class ModelTest(unittest.TestCase):
         assert isinstance(double, LegendCell)
         self.assertEqual(("Česká řeka",), single.texts)
         self.assertEqual(("Savec", "Pohoří"), double.texts)
-        self.assertEqual(("right",), single.arrows)
-        self.assertEqual(("right", "down"), double.arrows)
 
-    def test_rejects_legend_with_mismatched_arrow_count(self) -> None:
+    def test_rejects_legend_with_arrow(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "mismatched-arrows.yaml"
+            source = Path(directory) / "legend-arrow.yaml"
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
@@ -260,12 +258,11 @@ class ModelTest(unittest.TestCase):
                 "  width: 1\n"
                 "  height: 1\n"
                 "  cells:\n"
-                "    - [{type: legend, texts: [První, Druhý], "
-                "arrows: [right]}]\n",
+                "    - [{type: legend, texts: [Legenda], arrows: [right]}]\n",
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(ModelError, "pro každý text"):
+            with self.assertRaisesRegex(ModelError, "arrows"):
                 load_crossword_grid(source)
 
     def test_loads_empty_cells(self) -> None:
@@ -541,6 +538,7 @@ class CommandTest(unittest.TestCase):
             crossword = load_crossword_grid(output)
             self.assertEqual(9, crossword.grid.width)
             self.assertEqual(9, crossword.grid.height)
+            self.assertNotIn("arrows:", output.read_text(encoding="utf-8"))
 
             stderr = io.StringIO()
             with redirect_stderr(stderr):

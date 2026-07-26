@@ -13,7 +13,6 @@ from krizovkar.model import (
     CrosswordGrid,
     EmptyCell,
     Grid,
-    LegendArrow,
     LegendCell,
     LetterCell,
 )
@@ -58,7 +57,8 @@ class _Board:
         self.height = height
         self.letters: dict[Coordinate, str] = {}
         self.orientations: dict[Coordinate, set[Direction]] = defaultdict(set)
-        self.legends: dict[Coordinate, dict[LegendArrow, str]] = defaultdict(dict)
+        self.legends: dict[Coordinate, str] = {}
+        self.blocked_letters: set[Coordinate] = set()
         self.placements: list[_Placement] = []
         self.used_answers: set[str] = set()
 
@@ -78,8 +78,11 @@ class _Board:
             return (placement.row, placement.column - 1)
         return (placement.row - 1, placement.column)
 
-    def _arrow(self, direction: Direction) -> LegendArrow:
-        return "right" if direction == "horizontal" else "down"
+    def _unused_exit_position(self, placement: _Placement) -> Coordinate:
+        legend_row, legend_column = self._legend_position(placement)
+        if placement.direction == "horizontal":
+            return (legend_row + 1, legend_column)
+        return (legend_row, legend_column + 1)
 
     def evaluate(
         self,
@@ -95,12 +98,15 @@ class _Board:
             return None
 
         legend_position = self._legend_position(placement)
-        if not self._inside(legend_position) or legend_position in self.letters:
+        if (
+            not self._inside(legend_position)
+            or legend_position in self.letters
+            or legend_position in self.legends
+        ):
             return None
 
-        arrow = self._arrow(placement.direction)
-        legend = self.legends.get(legend_position, {})
-        if arrow in legend or len(legend) >= 2:
+        unused_exit = self._unused_exit_position(placement)
+        if self._inside(unused_exit) and unused_exit in self.letters:
             return None
 
         after = self._position_after(placement)
@@ -111,7 +117,7 @@ class _Board:
         for coordinate, letter in zip(
             positions, placement.entry.letters, strict=True
         ):
-            if coordinate in self.legends:
+            if coordinate in self.legends or coordinate in self.blocked_letters:
                 return None
 
             existing = self.letters.get(coordinate)
@@ -140,9 +146,10 @@ class _Board:
             self.orientations[coordinate].add(placement.direction)
 
         legend_position = self._legend_position(placement)
-        self.legends[legend_position][self._arrow(placement.direction)] = (
-            placement.entry.clue
-        )
+        self.legends[legend_position] = placement.entry.clue
+        unused_exit = self._unused_exit_position(placement)
+        if self._inside(unused_exit):
+            self.blocked_letters.add(unused_exit)
         self.placements.append(placement)
         self.used_answers.add(placement.entry.answer)
 
@@ -154,12 +161,7 @@ class _Board:
                 coordinate = (row, column)
                 legend = self.legends.get(coordinate)
                 if legend is not None:
-                    arrow_order: tuple[LegendArrow, ...] = ("right", "down")
-                    arrows = tuple(
-                        arrow for arrow in arrow_order if arrow in legend
-                    )
-                    texts = tuple(legend[arrow] for arrow in arrows)
-                    cell_row.append(LegendCell(texts=texts, arrows=arrows))
+                    cell_row.append(LegendCell(texts=(legend,)))
                 elif coordinate in self.letters:
                     cell_row.append(LetterCell(value=self.letters[coordinate]))
                 else:
@@ -309,12 +311,9 @@ def _crossing_placement(
         if crossings is None:
             continue
 
-        legend = board._legend_position(placement)
-        shared_legend = int(legend in board.legends)
         center_distance = abs(row - board.height / 2) + abs(column - board.width / 2)
         score = (
             crossings * 100
-            + shared_legend * 25
             + len(entry.letters) * 2
             - center_distance
             + randomizer.random()

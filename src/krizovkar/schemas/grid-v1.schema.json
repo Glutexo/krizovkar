@@ -90,19 +90,6 @@
             "pattern": "\\S"
           }
         },
-        "arrows": {
-          "description": "Volitelné směrové šipky přiřazené postupně k textům legendy.",
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 2,
-          "uniqueItems": true,
-          "items": {
-            "enum": [
-              "right",
-              "down"
-            ]
-          }
-        },
         "words": {
           "type": "array",
           "minItems": 1,
@@ -142,11 +129,6 @@
                 {
                   "required": [
                     "words"
-                  ]
-                },
-                {
-                  "required": [
-                    "arrows"
                   ]
                 }
               ]
@@ -212,11 +194,6 @@
                   "required": [
                     "words"
                   ]
-                },
-                {
-                  "required": [
-                    "arrows"
-                  ]
                 }
               ]
             }
@@ -247,11 +224,6 @@
                 {
                   "required": [
                     "texts"
-                  ]
-                },
-                {
-                  "required": [
-                    "arrows"
                   ]
                 }
               ]

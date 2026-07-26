@@ -81,11 +81,11 @@ Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajen
 Legenda používá seznam s jedním nebo dvěma texty:
 
 ```yaml
-{type: legend, texts: ["Česká řeka"], arrows: [right]}
-{type: legend, texts: ["Savec", "Pohoří"], arrows: [right, down]}
+{type: legend, texts: ["Česká řeka"]}
+{type: legend, texts: ["Savec", "Pohoří"]}
 ```
 
-Volitelné šipky `right` a `down` se přiřazují k textům ve stejném pořadí. Při dvou textech je první nahoře, druhý dole a odděluje je vodorovná čára. Text se automaticky zalomí a zmenší tak, aby se do buňky vešel. Obě varianty ukazuje [mřížka s legendami](examples/grid-legend.yaml).
+Při dvou textech je první nahoře, druhý dole a odděluje je vodorovná čára. Text se automaticky zalomí a zmenší tak, aby se do buňky vešel. Obě varianty ukazuje [mřížka s legendami](examples/grid-legend.yaml).
 
 Explicitně nevyplňovaná buňka nemá písmeno ani legendu:
 
@@ -128,7 +128,7 @@ uv run krizovkar render build/generated-grid.yaml \
   --output build/generated-grid.pdf
 ```
 
-Stejný slovník, rozměr a seed vytvoří stejnou mřížku. První experimentální verze používá hesla dlouhá alespoň tři znaky, skládá pouze propojená hesla doprava a dolů, neobsazené buňky uzavírá a v PDF zobrazuje řešení. Zatím nevytváří tajenku ani pomůcku a nehodnotí jazykovou kvalitu hesel. Zdrojový slovník není součástí projektu; uživatel musí mít právo jeho obsah použít.
+Stejný slovník, rozměr a seed vytvoří stejnou mřížku. První experimentální verze používá hesla dlouhá alespoň tři písmena, skládá pouze propojená hesla doprava a dolů, neobsazené buňky uzavírá a v PDF zobrazuje řešení. Každá generovaná legenda má jediný text a právě jeden možný směr navazujícího hesla; směr je proto patrný z rozložení bez šipky. Zatím nevytváří tajenku ani pomůcku a nehodnotí jazykovou kvalitu hesel. Zdrojový slovník není součástí projektu; uživatel musí mít právo jeho obsah použít.
 
 ## Vytvoření PDF
 

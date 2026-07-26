@@ -23,7 +23,6 @@ class ModelError(ValueError):
 
 
 WordDirection = Literal["horizontal", "vertical"]
-LegendArrow = Literal["right", "down"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +44,6 @@ class LegendCell:
     """Buňka s jedním nebo dvěma texty legendy."""
 
     texts: tuple[str, ...]
-    arrows: tuple[LegendArrow, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,14 +173,7 @@ def _grid_cell(cell: dict[str, Any]) -> GridCell:
     if cell["type"] == "secret":
         return SecretCell(value=cell["value"])
     if cell["type"] == "legend":
-        texts = tuple(cell["texts"])
-        arrows = tuple(cell.get("arrows", ()))
-        if arrows and len(arrows) != len(texts):
-            raise ModelError(
-                "neplatný datový model: legendová buňka musí mít "
-                "pro každý text právě jednu šipku"
-            )
-        return LegendCell(texts=texts, arrows=arrows)
+        return LegendCell(texts=tuple(cell["texts"]))
     if cell["type"] == "empty":
         return EmptyCell()
     if cell["type"] == "help":
@@ -347,10 +338,7 @@ def _grid_cell_data(cell: GridCell) -> dict[str, Any]:
     if isinstance(cell, SecretCell):
         return {"type": "secret", "value": cell.value}
     if isinstance(cell, LegendCell):
-        data: dict[str, Any] = {"type": "legend", "texts": list(cell.texts)}
-        if cell.arrows:
-            data["arrows"] = list(cell.arrows)
-        return data
+        return {"type": "legend", "texts": list(cell.texts)}
     if isinstance(cell, EmptyCell):
         return {"type": "empty"}
     if isinstance(cell, HelpCell):

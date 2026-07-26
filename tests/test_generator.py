@@ -59,23 +59,26 @@ class GeneratorTest(unittest.TestCase):
         self.assertGreaterEqual(sum(len(cell.texts) for cell in legends), 3)
         self.assertTrue(any(isinstance(cell, LetterCell) for cell in cells))
         self.assertTrue(any(isinstance(cell, EmptyCell) for cell in cells))
-        for legend in legends:
-            self.assertEqual(len(legend.texts), len(legend.arrows))
-            self.assertEqual(len(legend.arrows), len(set(legend.arrows)))
         for row_index, row in enumerate(first.grid.cells):
             for column_index, cell in enumerate(row):
                 if not isinstance(cell, LegendCell):
                     continue
-                if "right" in cell.arrows:
-                    self.assertIsInstance(
+                self.assertEqual(1, len(cell.texts))
+                right_is_letter = (
+                    column_index + 1 < first.grid.width
+                    and isinstance(
                         first.grid.cells[row_index][column_index + 1],
                         LetterCell,
                     )
-                if "down" in cell.arrows:
-                    self.assertIsInstance(
+                )
+                down_is_letter = (
+                    row_index + 1 < first.grid.height
+                    and isinstance(
                         first.grid.cells[row_index + 1][column_index],
                         LetterCell,
                     )
+                )
+                self.assertNotEqual(right_is_letter, down_is_letter)
 
     def test_seed_can_change_generated_grid(self) -> None:
         first = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=1)
