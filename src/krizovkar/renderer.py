@@ -38,6 +38,8 @@ TEXT_CELL_MIN_FONT_SIZE = 2.0
 TEXT_CELL_FONT_STEP = 0.25
 TEXT_CELL_PADDING = 1.5
 LEGEND_SEPARATOR_LINE_WIDTH = 0.4
+LEGEND_ARROW_LINE_WIDTH = 0.75
+LEGEND_ARROW_LENGTH_RATIO = 0.18
 EMPTY_SYMBOL_INSET_RATIO = 0.3
 EMPTY_SYMBOL_LINE_WIDTH = 0.65
 DEFAULT_PAGE_FORMAT = "A4"
@@ -138,19 +140,27 @@ def _draw_legend_cell(
     pdf.setFillGray(LEGEND_FILL_GRAY)
     pdf.rect(left, bottom, size, size, stroke=0, fill=1)
 
-    if len(cell.texts) == 2:
+    section_height = size / len(cell.texts)
+    if len(cell.texts) > 1:
         pdf.setStrokeColorRGB(0, 0, 0)
         pdf.setLineWidth(LEGEND_SEPARATOR_LINE_WIDTH)
-        pdf.line(left, bottom + size / 2, left + size, bottom + size / 2)
-        sections = (
-            (cell.texts[0], bottom + size / 2, size / 2),
-            (cell.texts[1], bottom, size / 2),
-        )
-    else:
-        sections = ((cell.texts[0], bottom, size),)
+        for section_index in range(1, len(cell.texts)):
+            separator_y = bottom + size - section_index * section_height
+            pdf.line(left, separator_y, left + size, separator_y)
 
-    padding = min(TEXT_CELL_PADDING, size * 0.08)
-    for text, section_bottom, section_height in sections:
+    sections = tuple(
+        (
+            text,
+            bottom + size - (section_index + 1) * section_height,
+            section_height,
+        )
+        for section_index, text in enumerate(cell.texts)
+    )
+
+    for section_index, (text, section_bottom, section_height) in enumerate(
+        sections
+    ):
+        padding = min(TEXT_CELL_PADDING, size * 0.08, section_height * 0.15)
         _draw_fitted_text(
             pdf,
             text,
@@ -159,6 +169,51 @@ def _draw_legend_cell(
             size - 2 * padding,
             section_height - 2 * padding,
         )
+        if section_index < len(cell.arrows):
+            _draw_legend_arrow(
+                pdf,
+                cell.arrows[section_index],
+                left,
+                bottom,
+                size,
+                section_bottom,
+                section_height,
+            )
+
+
+def _draw_legend_arrow(
+    pdf: Canvas,
+    direction: str,
+    left: float,
+    bottom: float,
+    size: float,
+    section_bottom: float,
+    section_height: float,
+) -> None:
+    length = size * LEGEND_ARROW_LENGTH_RATIO
+    head = length * 0.38
+    inset = max(INNER_LINE_WIDTH, size * 0.04)
+
+    pdf.saveState()
+    pdf.setStrokeColorRGB(0, 0, 0)
+    pdf.setLineWidth(LEGEND_ARROW_LINE_WIDTH)
+    pdf.setLineCap(1)
+    pdf.setLineJoin(1)
+
+    if direction == "right":
+        tip_x = left + size - inset
+        tip_y = section_bottom + section_height * 0.22
+        pdf.line(tip_x - length, tip_y, tip_x, tip_y)
+        pdf.line(tip_x, tip_y, tip_x - head, tip_y + head)
+        pdf.line(tip_x, tip_y, tip_x - head, tip_y - head)
+    else:
+        tip_x = left + size * 0.78
+        tip_y = bottom + inset
+        pdf.line(tip_x, tip_y + length, tip_x, tip_y)
+        pdf.line(tip_x, tip_y, tip_x - head, tip_y + head)
+        pdf.line(tip_x, tip_y, tip_x + head, tip_y + head)
+
+    pdf.restoreState()
 
 
 def _draw_help_cell(

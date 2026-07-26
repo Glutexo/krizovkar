@@ -248,7 +248,7 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(("Nejzajímavější v Československu",), single.texts)
         self.assertEqual(("Savec", "Pohoří"), double.texts)
 
-    def test_rejects_legend_with_arrow(self) -> None:
+    def test_loads_legend_with_arrows(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "legend-arrow.yaml"
             source.write_text(
@@ -263,7 +263,30 @@ class ModelTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(ModelError, "arrows"):
+            crossword = load_crossword_grid(source)
+
+            assert crossword.grid.cells is not None
+            legend = crossword.grid.cells[0][0]
+            self.assertIsInstance(legend, LegendCell)
+            assert isinstance(legend, LegendCell)
+            self.assertEqual(("right",), legend.arrows)
+
+    def test_rejects_unknown_legend_arrow(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "unknown-legend-arrow.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: grid\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 1\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: legend, texts: [Legenda], arrows: [left]}]\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ModelError, r"\.arrows\[0\]"):
                 load_crossword_grid(source)
 
     def test_loads_empty_cells(self) -> None:
@@ -393,7 +416,7 @@ class ModelTest(unittest.TestCase):
             with self.assertRaisesRegex(ModelError, r"\$\.grid\.cells\[0\]\[0\]\.type"):
                 load_crossword_grid(source)
 
-    def test_rejects_legend_with_three_texts(self) -> None:
+    def test_loads_legend_with_three_texts_and_mismatched_arrows(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "long-legend.yaml"
             source.write_text(
@@ -404,17 +427,31 @@ class ModelTest(unittest.TestCase):
                 "  width: 1\n"
                 "  height: 1\n"
                 "  cells:\n"
-                "    - [{type: legend, texts: [První, Druhý, Třetí]}]\n",
+                "    - [{type: legend, texts: [První, Druhý, Třetí], "
+                "arrows: [right]}]\n",
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(
-                ModelError, r"\$\.grid\.cells\[0\]\[0\]\.texts"
-            ):
-                load_crossword_grid(source)
+            crossword = load_crossword_grid(source)
+
+            assert crossword.grid.cells is not None
+            legend = crossword.grid.cells[0][0]
+            self.assertIsInstance(legend, LegendCell)
+            assert isinstance(legend, LegendCell)
+            self.assertEqual(("První", "Druhý", "Třetí"), legend.texts)
+            self.assertEqual(("right",), legend.arrows)
+
+            output = Path(directory) / "round-trip.yaml"
+            write_crossword_grid(crossword, output)
+            self.assertEqual(crossword, load_crossword_grid(output))
 
     def test_rejects_content_in_empty_cell(self) -> None:
-        invalid_contents = ("value: A", "texts: [Legenda]", "words: [Pomůcka]")
+        invalid_contents = (
+            "value: A",
+            "texts: [Legenda]",
+            "words: [Pomůcka]",
+            "arrows: [right]",
+        )
         for content in invalid_contents:
             with (
                 self.subTest(content=content),
@@ -605,6 +642,29 @@ class CommandTest(unittest.TestCase):
                         str(output),
                     ]
                 )
+
+            self.assertEqual(0, result)
+            self.assertTrue(output.read_bytes().startswith(b"%PDF-"))
+
+    def test_render_handles_three_legend_texts_and_arrow(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "three-legends.yaml"
+            output = Path(directory) / "three-legends.pdf"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: grid\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 1\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: legend, texts: [První, Druhý, Třetí], "
+                "arrows: [right]}]\n",
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(io.StringIO()):
+                result = main(["render", str(source), "--output", str(output)])
 
             self.assertEqual(0, result)
             self.assertTrue(output.read_bytes().startswith(b"%PDF-"))

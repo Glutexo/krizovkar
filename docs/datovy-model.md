@@ -62,19 +62,19 @@ Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnic
 
 ## Buňka legendy
 
-Legenda neobsahuje `value`, ale seznam `texts` s jedním nebo dvěma neprázdnými texty:
+Legenda neobsahuje `value`, ale neprázdný seznam `texts` s neprázdnými texty. Volitelné `arrows` může obsahovat směrové šipky:
 
 ```yaml
 {type: legend, texts: ["Česká řeka"]}
-{type: legend, texts: ["Savec", "Pohoří"]}
+{type: legend, texts: ["Savec", "Pohoří"], arrows: [right, down]}
 ```
 
-- Jeden text využije celou buňku.
-- U dvou textů je první v horní a druhý v dolní polovině.
-- Dvě poloviny odděluje vodorovná čára.
+- Texty se vykreslují do stejně vysokých částí v pořadí shora dolů.
+- Části oddělují vodorovné čáry.
+- Šipky `right` a `down` se přiřazují textům ve stejném pořadí.
 - Renderer text automaticky zalamuje a zmenšuje; české znaky vkládá do PDF pomocí fontu Noto Sans.
 
-Směr odpovědi a vazba legendy na konkrétní slovo se v cílové buňce neopakují; uchovává je vyšší zadání `specification`. Experimentální generátor vytváří pro každou legendu jediný text a rozloží okolní buňky tak, aby z ní vedl právě jeden možný směr hesla doprava nebo dolů.
+Počet textů ani přítomnost šipek nejsou omezením datového formátu. Experimentální generátor přesto vytváří pro každou legendu jediný text bez šipky a rozloží okolní buňky tak, aby z ní vedl právě jeden možný směr hesla doprava nebo dolů.
 
 Generovanou mřížku dělí souvislé legendové řádky a sloupce na plně vyplněné písmenné obdélníky. Jejich průsečíky jsou nevyplňované buňky; jiné nevyplňované buňky generátor nevytváří. Každý písmenný řádek obdélníku je platné vodorovné heslo a každý jeho sloupec platné svislé heslo. Horní a levý okraj tvoří legendy s výjimkou průsečíků s další legendovou osou.
 

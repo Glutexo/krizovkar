@@ -78,14 +78,14 @@ grid:
 
 Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. České `CH` zabírá jednu buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku. Tajenková buňka má v PDF světle šedé pozadí. Zápis ukazuje [mřížka s českými písmeny](examples/grid-czech-letters.yaml); v [ukázkové mřížce s tajenkou](examples/grid-secret.yaml) zvýrazněné buňky skládají slovo „TAJENKA“.
 
-Legenda používá seznam s jedním nebo dvěma texty:
+Legenda používá neprázdný seznam textů a může u nich výslovně uvést směrové šipky:
 
 ```yaml
 {type: legend, texts: ["Česká řeka"]}
-{type: legend, texts: ["Savec", "Pohoří"]}
+{type: legend, texts: ["Savec", "Pohoří"], arrows: [right, down]}
 ```
 
-Při dvou textech je první nahoře, druhý dole a odděluje je vodorovná čára. Text se automaticky zalomí a zmenší tak, aby se do buňky vešel. Dlouhá česká slova se dělí podle slovníku knihovny Pyphen; renderer je neláme na libovolném znaku. Jednopísmenné souhláskové předložky `k`, `s`, `v` a `z` se při vykreslení spojí s následujícím výrazem nezalomitelnou mezerou. Obě varianty ukazuje [mřížka s legendami](examples/grid-legend.yaml).
+Formát počet textů neomezuje estetickým pravidlem. Renderer rozdělí buňku na stejně vysoké části v pořadí shora dolů; případné šipky `right` a `down` přiřadí textům ve stejném pořadí. Text se automaticky zalomí a zmenší tak, aby se do buňky vešel. Dlouhá česká slova se dělí podle slovníku knihovny Pyphen; renderer je neláme na libovolném znaku. Jednopísmenné souhláskové předložky `k`, `s`, `v` a `z` se při vykreslení spojí s následujícím výrazem nezalomitelnou mezerou. Jednoduchou a dvojitou variantu ukazuje [mřížka s legendami](examples/grid-legend.yaml).
 
 Explicitně nevyplňovaná buňka nemá písmeno ani legendu:
 
