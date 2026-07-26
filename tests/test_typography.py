@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import unittest
 
-from krizovkar.typography import NON_BREAKING_SPACE, protect_czech_prepositions
+from krizovkar.typography import (
+    NON_BREAKING_SPACE,
+    SOFT_HYPHEN,
+    mark_czech_hyphenation,
+    protect_czech_prepositions,
+)
 
 
 class TypographyTest(unittest.TestCase):
@@ -31,6 +36,31 @@ class TypographyTest(unittest.TestCase):
         protected = f"v{NON_BREAKING_SPACE}Praze"
 
         self.assertEqual(protected, protect_czech_prepositions(protected))
+
+    def test_marks_dictionary_hyphenation_points(self) -> None:
+        self.assertEqual(
+            SOFT_HYPHEN.join(("Čes", "ko", "slo", "ven", "sku")),
+            mark_czech_hyphenation("Československu"),
+        )
+
+    def test_preserves_text_when_hyphenation_marks_are_removed(self) -> None:
+        text = "Nejzajímavější dobrodružství u řeky."
+
+        marked = mark_czech_hyphenation(text)
+
+        self.assertIn(SOFT_HYPHEN, marked)
+        self.assertEqual(text, marked.replace(SOFT_HYPHEN, ""))
+
+    def test_hyphenates_word_joined_to_preposition(self) -> None:
+        marked = mark_czech_hyphenation(
+            protect_czech_prepositions("v Československu")
+        )
+
+        self.assertEqual(
+            f"v{NON_BREAKING_SPACE}Čes{SOFT_HYPHEN}ko{SOFT_HYPHEN}"
+            f"slo{SOFT_HYPHEN}ven{SOFT_HYPHEN}sku",
+            marked,
+        )
 
 
 if __name__ == "__main__":

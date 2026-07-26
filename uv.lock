@@ -119,6 +119,7 @@ source = { editable = "." }
 dependencies = [
     { name = "jsonschema" },
     { name = "pymupdf-fonts" },
+    { name = "pyphen" },
     { name = "reportlab" },
     { name = "ruamel-yaml" },
 ]
@@ -127,6 +128,7 @@ dependencies = [
 requires-dist = [
     { name = "jsonschema", specifier = ">=4.26,<5" },
     { name = "pymupdf-fonts", specifier = ">=1.0.5,<2" },
+    { name = "pyphen", specifier = ">=0.17.2,<0.18" },
     { name = "reportlab", specifier = ">=5.0,<6" },
     { name = "ruamel-yaml", specifier = ">=0.19.1,<0.20" },
 ]
@@ -223,6 +225,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e7/15/e4f3b2acecf4209ff593e85b3646f224093a08f6e9824230a3d11885407d/pymupdf_fonts-1.0.5.tar.gz", hash = "sha256:ac12e3ec4affa35e9a0aca29135ef41c23bdbe5758c3355dac236986309e6bc6", size = 4230874, upload-time = "2021-12-27T11:49:44.714Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/80/a3/1701c6109a1cf31f4c24156f3242db0afe669fecedf4d27c72e3b7e67591/pymupdf_fonts-1.0.5-py3-none-any.whl", hash = "sha256:8e4bb70a4a8f6bb895ef8f3b77b98f6c43e2f39c31cfdec5fd21c3d512c38b25", size = 4230320, upload-time = "2021-12-27T11:50:12.651Z" },
+]
+
+[[package]]
+name = "pyphen"
+version = "0.17.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/56/e4d7e1bd70d997713649c5ce530b2d15a5fc2245a74ca820fc2d51d89d4d/pyphen-0.17.2.tar.gz", hash = "sha256:f60647a9c9b30ec6c59910097af82bc5dd2d36576b918e44148d8b07ef3b4aa3", size = 2079470, upload-time = "2025-01-20T13:18:36.296Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7b/1f/c2142d2edf833a90728e5cdeb10bdbdc094dde8dbac078cee0cf33f5e11b/pyphen-0.17.2-py3-none-any.whl", hash = "sha256:3a07fb017cb2341e1d9ff31b8634efb1ae4dc4b130468c7c39dd3d32e7c3affd", size = 2079358, upload-time = "2025-01-20T13:18:29.629Z" },
 ]
 
 [[package]]

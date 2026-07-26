@@ -245,7 +245,7 @@ class ModelTest(unittest.TestCase):
         self.assertIsInstance(double, LegendCell)
         assert isinstance(single, LegendCell)
         assert isinstance(double, LegendCell)
-        self.assertEqual(("Česká řeka",), single.texts)
+        self.assertEqual(("Nejzajímavější v Československu",), single.texts)
         self.assertEqual(("Savec", "Pohoří"), double.texts)
 
     def test_rejects_legend_with_arrow(self) -> None:

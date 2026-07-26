@@ -5,7 +5,7 @@ grid:
   width: 7
   height: 5
   cells:
-    - [{type: legend, texts: ["Česká řeka"]}, {type: letter, value: L}, {type: letter, value: A}, {type: letter, value: B}, {type: letter, value: E}, {type: letter, value: X}, {type: letter, value: Y}]
+    - [{type: legend, texts: ["Nejzajímavější v Československu"]}, {type: letter, value: L}, {type: letter, value: A}, {type: letter, value: B}, {type: letter, value: E}, {type: letter, value: X}, {type: letter, value: Y}]
     - [{type: letter, value: B}, {type: letter, value: C}, {type: letter, value: D}, {type: letter, value: E}, {type: letter, value: F}, {type: letter, value: G}, {type: letter, value: H}]
     - [{type: letter, value: A}, {type: letter, value: B}, {type: letter, value: C}, {type: legend, texts: ["Savec", "Pohoří"]}, {type: letter, value: D}, {type: letter, value: E}, {type: letter, value: F}]
     - [{type: letter, value: I}, {type: letter, value: J}, {type: letter, value: K}, {type: letter, value: L}, {type: letter, value: M}, {type: letter, value: N}, {type: letter, value: O}]
