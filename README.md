@@ -4,7 +4,7 @@ Křížovkář je připravovaný otevřený nástroj pro tvorbu švédských, kl
 
 ## Stav projektu
 
-Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu a Pythonový příkaz pro vykreslení prázdné nebo písmeny vyplněné mřížky do PDF; podoba editoru bude navržena v dalších změnách.
+Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu, experimentální generátor švédské mřížky z JSON slovníku a vykreslení výsledku do PDF. Podoba editoru bude navržena v dalších změnách.
 
 ## Zaměření
 
@@ -16,7 +16,7 @@ Projekt má postupně nabídnout zejména:
 - kontrolu mřížky, výrazů a křížení,
 - export pro tisk i digitální použití.
 
-Konkrétní rozsah první funkční verze bude popsán v roadmapě před zahájením implementace.
+Experimentální generátor ověřuje základní práci se slovníkem a křížením; konkrétní rozsah první funkční verze bude popsán v roadmapě.
 
 ## Datový model
 
@@ -27,6 +27,7 @@ Křížovkář rozlišuje dva samostatné druhy YAML dokumentů:
 
 ```text
 specification → generátor (budoucí) → grid → render → PDF
+slovník → experimentální generátor → grid → render → PDF
 ```
 
 Nejmenší platná cílová mřížka zatím určuje pouze rozměr:
@@ -103,6 +104,31 @@ Pomocná buňka obsahuje jeden nebo více výrazů:
 V PDF renderer doplní tučný nadpis „Pomůcka:“ a položky vypíše za ním oddělené čárkou a mezerou. Celý text automaticky zalomí a zmenší tak, aby se vešel do buňky. Výsledek ukazuje [mřížka s pomůckou](examples/grid-help.yaml).
 
 Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-letters.yaml) obsahuje 15 × 10 běžných buněk. Minimální soubory jsou v příkladech [mřížky](examples/grid-minimal.yaml) a [zadání](examples/specification-minimal.yaml).
+
+## Pokusné generování
+
+Generátor přijímá slovník jako JSON objekt. Klíčem je heslo složené z velkých písmen `A`–`Z` a hodnotou neprázdný seznam možných legend v preferovaném pořadí:
+
+```json
+{
+  "LABE": ["Česká řeka"],
+  "LES": ["Porost stromů", "Hvozd"]
+}
+```
+
+Pokusnou mřížku lze vytvořit a následně vykreslit:
+
+```shell
+uv run krizovkar generate slovnik.json \
+  --width 15 \
+  --height 10 \
+  --seed 10 \
+  --output build/generated-grid.yaml
+uv run krizovkar render build/generated-grid.yaml \
+  --output build/generated-grid.pdf
+```
+
+Stejný slovník, rozměr a seed vytvoří stejnou mřížku. První experimentální verze používá hesla dlouhá alespoň tři znaky, skládá pouze propojená hesla doprava a dolů, neobsazené buňky uzavírá a v PDF zobrazuje řešení. Zatím nevytváří tajenku ani pomůcku a nehodnotí jazykovou kvalitu hesel. Zdrojový slovník není součástí projektu; uživatel musí mít právo jeho obsah použít.
 
 ## Vytvoření PDF
 

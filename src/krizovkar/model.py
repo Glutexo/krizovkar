@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from functools import cache
 from importlib.resources import files
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, Literal
 
 from jsonschema import Draft202012Validator
@@ -16,7 +17,7 @@ from ruamel.yaml.error import YAMLError
 
 
 class ModelError(ValueError):
-    """Vstupní soubor není platným dokumentem Křížovkáře."""
+    """Datový dokument Křížovkáře nelze načíst, ověřit nebo zapsat."""
 
 
 WordDirection = Literal["horizontal", "vertical"]
@@ -336,3 +337,80 @@ def _validate_specification_placements(
             "neplatný datový model: $.help.position: "
             "pomůcka musí ležet v buňce neobsazené písmenem"
         )
+
+
+def _grid_cell_data(cell: GridCell) -> dict[str, Any]:
+    if isinstance(cell, LetterCell):
+        return {"type": "letter", "value": cell.value}
+    if isinstance(cell, SecretCell):
+        return {"type": "secret", "value": cell.value}
+    if isinstance(cell, LegendCell):
+        data: dict[str, Any] = {"type": "legend", "texts": list(cell.texts)}
+        if cell.arrows:
+            data["arrows"] = list(cell.arrows)
+        return data
+    if isinstance(cell, EmptyCell):
+        return {"type": "empty"}
+    if isinstance(cell, HelpCell):
+        return {"type": "help", "words": list(cell.words)}
+    raise ModelError(f"nepodporovaný typ buňky pro zápis: {type(cell).__name__}")
+
+
+def _crossword_grid_data(crossword: CrosswordGrid) -> dict[str, Any]:
+    grid: dict[str, Any] = {
+        "width": crossword.grid.width,
+        "height": crossword.grid.height,
+    }
+    if crossword.grid.cells is not None:
+        grid["cells"] = [
+            [_grid_cell_data(cell) for cell in row]
+            for row in crossword.grid.cells
+        ]
+    return {
+        "format": crossword.format_name,
+        "kind": crossword.kind,
+        "version": crossword.version,
+        "grid": grid,
+    }
+
+
+def write_crossword_grid(
+    crossword: CrosswordGrid,
+    output: str | Path,
+    *,
+    overwrite: bool = False,
+) -> Path:
+    """Zapíše cílovou mřížku atomicky jako YAML."""
+
+    output_path = Path(output)
+    if output_path.exists() and not overwrite:
+        raise ModelError(f"výstupní soubor již existuje: {output_path}")
+
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="\n",
+            prefix=f".{output_path.name}.",
+            suffix=".yaml",
+            dir=output_path.parent,
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            yaml = YAML()
+            yaml.width = 100
+            yaml.indent(mapping=2, sequence=2, offset=0)
+            yaml.dump(_crossword_grid_data(crossword), temporary)
+
+        temporary_path.replace(output_path)
+    except OSError as error:
+        detail = error.strerror or str(error)
+        raise ModelError(
+            f"cílovou mřížku nelze zapsat ({output_path}): {detail}"
+        ) from error
+    finally:
+        if "temporary_path" in locals():
+            temporary_path.unlink(missing_ok=True)
+
+    return output_path

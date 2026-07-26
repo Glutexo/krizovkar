@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -22,6 +23,7 @@ from krizovkar.model import (
     WordPlacement,
     load_crossword_grid,
     load_crossword_specification,
+    write_crossword_grid,
 )
 from krizovkar.renderer import RenderError, resolve_page_size
 
@@ -248,6 +250,19 @@ class ModelTest(unittest.TestCase):
         ]
         self.assertEqual(10, len(empty_cells))
 
+    def test_writes_grid_that_can_be_loaded_again(self) -> None:
+        crossword = load_crossword_grid(GRID_LEGEND_EXAMPLE)
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "round-trip.yaml"
+
+            written = write_crossword_grid(crossword, output)
+            loaded = load_crossword_grid(written)
+
+            self.assertEqual(crossword, loaded)
+            with self.assertRaisesRegex(ModelError, "již existuje"):
+                write_crossword_grid(crossword, output)
+            write_crossword_grid(crossword, output, overwrite=True)
+
     def test_loads_help_cell(self) -> None:
         crossword = load_crossword_grid(GRID_HELP_EXAMPLE)
 
@@ -438,6 +453,77 @@ class ModelTest(unittest.TestCase):
 
 
 class CommandTest(unittest.TestCase):
+    def test_generate_creates_grid_and_refuses_accidental_overwrite(self) -> None:
+        answers = (
+            "KAREL",
+            "REKA",
+            "LAVKA",
+            "KAVA",
+            "RASA",
+            "SOVA",
+            "VLAK",
+            "KOLO",
+            "OKO",
+            "LES",
+            "PES",
+            "ESO",
+            "MRAK",
+            "RAK",
+            "LAK",
+            "MAK",
+            "MASO",
+            "SELE",
+            "LAMA",
+            "MELA",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            dictionary = Path(directory) / "dictionary.json"
+            output = Path(directory) / "generated.yaml"
+            dictionary.write_text(
+                json.dumps(
+                    {
+                        answer: [f"Legenda {answer}"]
+                        for answer in answers
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            command = [
+                "generate",
+                str(dictionary),
+                "--output",
+                str(output),
+                "--width",
+                "9",
+                "--height",
+                "9",
+                "--seed",
+                "42",
+            ]
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                result = main(command)
+
+            self.assertEqual(0, result)
+            self.assertIn("Mřížka vytvořena:", stdout.getvalue())
+            crossword = load_crossword_grid(output)
+            self.assertEqual(9, crossword.grid.width)
+            self.assertEqual(9, crossword.grid.height)
+
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                second_result = main(command)
+
+            self.assertEqual(2, second_result)
+            self.assertIn("již existuje", stderr.getvalue())
+
+            with redirect_stdout(io.StringIO()):
+                forced_result = main([*command, "--force"])
+
+            self.assertEqual(0, forced_result)
+
     def test_page_format_names_are_case_insensitive(self) -> None:
         self.assertEqual(A5, resolve_page_size("a5"))
 

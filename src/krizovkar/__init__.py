@@ -26,6 +26,7 @@ from krizovkar.model import (
     WordPlacement,
     load_crossword_grid,
     load_crossword_specification,
+    write_crossword_grid,
 )
 from krizovkar.renderer import RenderError, render_pdf
 
@@ -55,4 +56,5 @@ __all__ = [
     "load_crossword_grid",
     "load_crossword_specification",
     "render_pdf",
+    "write_crossword_grid",
 ]

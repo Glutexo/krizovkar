@@ -7,7 +7,20 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from krizovkar.model import ModelError, load_crossword_grid
+from krizovkar.dictionary import DictionaryError, load_dictionary
+from krizovkar.generator import (
+    DEFAULT_GRID_HEIGHT,
+    DEFAULT_GRID_WIDTH,
+    DEFAULT_SEED,
+    GenerationError,
+    generate_swedish_grid,
+)
+from krizovkar.model import (
+    LegendCell,
+    ModelError,
+    load_crossword_grid,
+    write_crossword_grid,
+)
 from krizovkar.renderer import (
     DEFAULT_PAGE_FORMAT,
     SUPPORTED_PAGE_FORMATS,
@@ -22,6 +35,51 @@ def _parser() -> argparse.ArgumentParser:
         description="Tvorba švédských, klasických a dalších křížovek.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
+
+    generate = commands.add_parser(
+        "generate",
+        help="pokusně vytvoří švédskou mřížku z JSON slovníku",
+        description=(
+            "Vybere a propojí hesla z JSON slovníku a zapíše cílovou mřížku "
+            "ve formátu YAML."
+        ),
+    )
+    generate.add_argument("source", type=Path, metavar="SLOVNÍK.json")
+    generate.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        required=True,
+        metavar="MŘÍŽKA.yaml",
+        help="cílový YAML soubor",
+    )
+    generate.add_argument(
+        "--width",
+        type=int,
+        default=DEFAULT_GRID_WIDTH,
+        metavar="POČET",
+        help=f"počet sloupců; výchozí je {DEFAULT_GRID_WIDTH}",
+    )
+    generate.add_argument(
+        "--height",
+        type=int,
+        default=DEFAULT_GRID_HEIGHT,
+        metavar="POČET",
+        help=f"počet řádků; výchozí je {DEFAULT_GRID_HEIGHT}",
+    )
+    generate.add_argument(
+        "--seed",
+        type=int,
+        default=DEFAULT_SEED,
+        metavar="ČÍSLO",
+        help=f"seed náhodných voleb; výchozí je {DEFAULT_SEED}",
+    )
+    generate.add_argument(
+        "--force",
+        action="store_true",
+        help="povolí přepsání existujícího YAML souboru",
+    )
+    generate.set_defaults(handler=_generate)
 
     render = commands.add_parser(
         "render",
@@ -54,6 +112,39 @@ def _parser() -> argparse.ArgumentParser:
     )
     render.set_defaults(handler=_render)
     return parser
+
+
+def _generate(arguments: argparse.Namespace) -> int:
+    try:
+        dictionary = load_dictionary(arguments.source)
+        crossword = generate_swedish_grid(
+            dictionary,
+            width=arguments.width,
+            height=arguments.height,
+            seed=arguments.seed,
+        )
+        write_crossword_grid(
+            crossword,
+            arguments.output,
+            overwrite=arguments.force,
+        )
+    except (DictionaryError, GenerationError, ModelError) as error:
+        print(f"chyba: {error}", file=sys.stderr)
+        return 2
+
+    assert crossword.grid.cells is not None
+    word_count = sum(
+        len(cell.texts)
+        for row in crossword.grid.cells
+        for cell in row
+        if isinstance(cell, LegendCell)
+    )
+    print(
+        f"Mřížka vytvořena: {arguments.output} "
+        f"({arguments.width} × {arguments.height}, {word_count} hesel, "
+        f"seed {arguments.seed})"
+    )
+    return 0
 
 
 def _render(arguments: argparse.Namespace) -> int:
