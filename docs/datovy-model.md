@@ -76,6 +76,8 @@ Legenda neobsahuje `value`, ale seznam `texts` s jedním nebo dvěma neprázdný
 
 Směr odpovědi a vazba legendy na konkrétní slovo se v cílové buňce neopakují; uchovává je vyšší zadání `specification`. Experimentální generátor vytváří pro každou legendu jediný text a rozloží okolní buňky tak, aby z ní vedl právě jeden možný směr hesla doprava nebo dolů.
 
+Generovanou mřížku dělí souvislé legendové řádky a sloupce na plně vyplněné písmenné obdélníky. Jejich průsečíky jsou nevyplňované buňky; jiné nevyplňované buňky generátor nevytváří. Každý písmenný řádek obdélníku je platné vodorovné heslo a každý jeho sloupec platné svislé heslo. Horní a levý okraj tvoří legendy s výjimkou průsečíků s další legendovou osou.
+
 ## Nevyplňovaná buňka
 
 Buňka bez písmene a bez legendy používá typ `empty`:

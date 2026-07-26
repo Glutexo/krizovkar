@@ -128,7 +128,9 @@ uv run krizovkar render build/generated-grid.yaml \
   --output build/generated-grid.pdf
 ```
 
-Stejný slovník, rozměr a seed vytvoří stejnou mřížku. První experimentální verze používá hesla dlouhá alespoň tři písmena, skládá pouze propojená hesla doprava a dolů, neobsazené buňky uzavírá a v PDF zobrazuje řešení. Každá generovaná legenda má jediný text a právě jeden možný směr navazujícího hesla; směr je proto patrný z rozložení bez šipky. Zatím nevytváří tajenku ani pomůcku a nehodnotí jazykovou kvalitu hesel. Zdrojový slovník není součástí projektu; uživatel musí mít právo jeho obsah použít.
+Stejný slovník, rozměr a seed vytvoří stejnou mřížku. Generátor rozdělí plochu legendovými řádky a sloupci na písmenné obdélníky a všechny je vyplní platnými křížícími se hesly. Každá písmenná buňka proto patří jednomu vodorovnému i jednomu svislému výrazu; prázdné zůstávají pouze průsečíky legendových řádků a sloupců.
+
+Legendy pokrývají horní a levou stranu každého písmenného bloku. Na horním okraji chybí legenda jen ve sloupci s dalšími vnitřními legendami a na levém okraji jen v řádku s dalšími vnitřními legendami. Každá legenda má jediný text a právě jeden možný směr navazujícího hesla, takže nepotřebuje šipku. První experimentální verze zatím nevytváří tajenku ani pomůcku a nehodnotí jazykovou kvalitu hesel. Zdrojový slovník není součástí projektu; uživatel musí mít právo jeho obsah použít.
 
 ## Vytvoření PDF
 

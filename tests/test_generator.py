@@ -1,49 +1,32 @@
-"""Testy prvního generátoru švédské křížovky."""
+"""Testy hustého generátoru švédské křížovky."""
 
 from __future__ import annotations
 
 import unittest
+from itertools import product
 
 from krizovkar.dictionary import CrosswordDictionary, DictionaryEntry
 from krizovkar.generator import GenerationError, generate_swedish_grid
+from krizovkar.layout import create_dense_swedish_layout
 from krizovkar.model import EmptyCell, LegendCell, LetterCell
 
 
-def _dictionary(*answers: str) -> CrosswordDictionary:
-    return CrosswordDictionary(
-        entries=tuple(
-            DictionaryEntry(answer=answer, clues=(f"Legenda {answer}",))
-            for answer in answers
-        )
-    )
+def _complete_dictionary(*lengths: int) -> CrosswordDictionary:
+    entries = []
+    for length in lengths:
+        for letters in product("ABCD", repeat=length):
+            answer = "".join(letters)
+            entries.append(
+                DictionaryEntry(answer=answer, clues=(f"Legenda {answer}",))
+            )
+    return CrosswordDictionary(entries=tuple(entries))
 
 
-TEST_DICTIONARY = _dictionary(
-    "KAREL",
-    "REKA",
-    "LAVKA",
-    "KAVA",
-    "RASA",
-    "SOVA",
-    "VLAK",
-    "KOLO",
-    "OKO",
-    "LES",
-    "PES",
-    "ESO",
-    "MRAK",
-    "RAK",
-    "LAK",
-    "MAK",
-    "MASO",
-    "SELE",
-    "LAMA",
-    "MELA",
-)
+TEST_DICTIONARY = _complete_dictionary(3, 4)
 
 
 class GeneratorTest(unittest.TestCase):
-    def test_generates_deterministic_connected_grid(self) -> None:
+    def test_generates_deterministic_dense_grid(self) -> None:
         first = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=42)
         second = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=42)
 
@@ -55,10 +38,10 @@ class GeneratorTest(unittest.TestCase):
         self.assertTrue(all(len(row) == 9 for row in first.grid.cells))
 
         cells = tuple(cell for row in first.grid.cells for cell in row)
-        legends = tuple(cell for cell in cells if isinstance(cell, LegendCell))
-        self.assertGreaterEqual(sum(len(cell.texts) for cell in legends), 3)
-        self.assertTrue(any(isinstance(cell, LetterCell) for cell in cells))
-        self.assertTrue(any(isinstance(cell, EmptyCell) for cell in cells))
+        self.assertEqual(49, sum(isinstance(cell, LetterCell) for cell in cells))
+        self.assertEqual(28, sum(isinstance(cell, LegendCell) for cell in cells))
+        self.assertEqual(4, sum(isinstance(cell, EmptyCell) for cell in cells))
+
         for row_index, row in enumerate(first.grid.cells):
             for column_index, cell in enumerate(row):
                 if not isinstance(cell, LegendCell):
@@ -80,6 +63,41 @@ class GeneratorTest(unittest.TestCase):
                 )
                 self.assertNotEqual(right_is_letter, down_is_letter)
 
+    def test_every_letter_run_is_a_dictionary_entry(self) -> None:
+        crossword = generate_swedish_grid(
+            TEST_DICTIONARY,
+            width=9,
+            height=9,
+            seed=42,
+        )
+        layout = create_dense_swedish_layout(9, 9)
+        assert crossword.grid.cells is not None
+        answers = {entry.answer for entry in TEST_DICTIONARY.entries}
+        used_answers = []
+
+        for row_segment in layout.row_segments:
+            for column_segment in layout.column_segments:
+                for row in range(row_segment.start, row_segment.stop):
+                    answer = "".join(
+                        crossword.grid.cells[row][column].value
+                        for column in range(
+                            column_segment.start,
+                            column_segment.stop,
+                        )
+                    )
+                    self.assertIn(answer, answers)
+                    used_answers.append(answer)
+
+                for column in range(column_segment.start, column_segment.stop):
+                    answer = "".join(
+                        crossword.grid.cells[row][column].value
+                        for row in range(row_segment.start, row_segment.stop)
+                    )
+                    self.assertIn(answer, answers)
+                    used_answers.append(answer)
+
+        self.assertEqual(len(used_answers), len(set(used_answers)))
+
     def test_seed_can_change_generated_grid(self) -> None:
         first = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=1)
         second = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=2)
@@ -87,20 +105,14 @@ class GeneratorTest(unittest.TestCase):
         self.assertNotEqual(first, second)
 
     def test_rejects_too_small_grid(self) -> None:
-        with self.assertRaisesRegex(GenerationError, "alespoň 3"):
-            generate_swedish_grid(TEST_DICTIONARY, width=2, height=9)
+        with self.assertRaisesRegex(GenerationError, "nelze rozdělit"):
+            generate_swedish_grid(TEST_DICTIONARY, width=3, height=9)
 
-    def test_rejects_dictionary_without_fitting_entries(self) -> None:
-        dictionary = _dictionary("PRILISDLOUHE")
+    def test_rejects_dictionary_without_required_length(self) -> None:
+        dictionary = _complete_dictionary(3)
 
-        with self.assertRaisesRegex(GenerationError, "použitelná hesla"):
+        with self.assertRaisesRegex(GenerationError, "délky: 4"):
             generate_swedish_grid(dictionary, width=5, height=5)
-
-    def test_rejects_dictionary_without_enough_crossings(self) -> None:
-        dictionary = _dictionary("ABC", "DEF", "GHI")
-
-        with self.assertRaisesRegex(GenerationError, "propojená hesla"):
-            generate_swedish_grid(dictionary, width=7, height=7)
 
 
 if __name__ == "__main__":

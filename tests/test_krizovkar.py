@@ -7,6 +7,7 @@ import json
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from itertools import product
 from pathlib import Path
 
 from reportlab.lib.pagesizes import A5
@@ -481,27 +482,8 @@ class ModelTest(unittest.TestCase):
 
 class CommandTest(unittest.TestCase):
     def test_generate_creates_grid_and_refuses_accidental_overwrite(self) -> None:
-        answers = (
-            "KAREL",
-            "REKA",
-            "LAVKA",
-            "KAVA",
-            "RASA",
-            "SOVA",
-            "VLAK",
-            "KOLO",
-            "OKO",
-            "LES",
-            "PES",
-            "ESO",
-            "MRAK",
-            "RAK",
-            "LAK",
-            "MAK",
-            "MASO",
-            "SELE",
-            "LAMA",
-            "MELA",
+        answers = tuple(
+            "".join(letters) for letters in product("ABCD", repeat=4)
         )
         with tempfile.TemporaryDirectory() as directory:
             dictionary = Path(directory) / "dictionary.json"
@@ -522,9 +504,9 @@ class CommandTest(unittest.TestCase):
                 "--output",
                 str(output),
                 "--width",
-                "9",
+                "5",
                 "--height",
-                "9",
+                "5",
                 "--seed",
                 "42",
             ]
@@ -536,8 +518,8 @@ class CommandTest(unittest.TestCase):
             self.assertEqual(0, result)
             self.assertIn("Mřížka vytvořena:", stdout.getvalue())
             crossword = load_crossword_grid(output)
-            self.assertEqual(9, crossword.grid.width)
-            self.assertEqual(9, crossword.grid.height)
+            self.assertEqual(5, crossword.grid.width)
+            self.assertEqual(5, crossword.grid.height)
             self.assertNotIn("arrows:", output.read_text(encoding="utf-8"))
 
             stderr = io.StringIO()
