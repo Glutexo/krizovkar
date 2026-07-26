@@ -85,7 +85,7 @@ Legenda používá seznam s jedním nebo dvěma texty:
 {type: legend, texts: ["Savec", "Pohoří"]}
 ```
 
-Při dvou textech je první nahoře, druhý dole a odděluje je vodorovná čára. Text se automaticky zalomí a zmenší tak, aby se do buňky vešel. Obě varianty ukazuje [mřížka s legendami](examples/grid-legend.yaml).
+Při dvou textech je první nahoře, druhý dole a odděluje je vodorovná čára. Text se automaticky zalomí a zmenší tak, aby se do buňky vešel. Jednopísmenné souhláskové předložky `k`, `s`, `v` a `z` se při vykreslení spojí s následujícím výrazem nezalomitelnou mezerou. Obě varianty ukazuje [mřížka s legendami](examples/grid-legend.yaml).
 
 Explicitně nevyplňovaná buňka nemá písmeno ani legendu:
 

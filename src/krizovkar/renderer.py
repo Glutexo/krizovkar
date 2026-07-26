@@ -19,6 +19,7 @@ from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import Paragraph
 
 from krizovkar.model import CrosswordGrid, EmptyCell, HelpCell, LegendCell, SecretCell
+from krizovkar.typography import protect_czech_prepositions
 
 PAGE_MARGIN = 15 * mm
 MAX_CELL_SIZE = 12 * mm
@@ -95,7 +96,7 @@ def _draw_fitted_text(
     maximum = min(TEXT_CELL_MAX_FONT_SIZE, height * 0.45)
     minimum = min(TEXT_CELL_MIN_FONT_SIZE, maximum)
     font_size = maximum
-    content = escape(text)
+    content = escape(protect_czech_prepositions(text))
     if prefix is not None:
         content = f"<b>{escape(prefix)}</b> {content}"
 
