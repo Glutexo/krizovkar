@@ -1,0 +1,78 @@
+"""Testy načítání slovníku pro generátor."""
+
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+
+from krizovkar.dictionary import DictionaryError, load_dictionary
+
+
+class DictionaryTest(unittest.TestCase):
+    def _source(self, directory: str, content: str) -> Path:
+        source = Path(directory) / "dictionary.json"
+        source.write_text(content, encoding="utf-8")
+        return source
+
+    def test_loads_entries_in_deterministic_order(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._source(
+                directory,
+                '{"LES": ["Porost stromů", "Hvozd"], "ARA": ["Papoušek"]}',
+            )
+
+            dictionary = load_dictionary(source)
+
+        self.assertEqual(2, len(dictionary))
+        self.assertEqual(("ARA", "LES"), tuple(e.answer for e in dictionary.entries))
+        self.assertEqual(("Porost stromů", "Hvozd"), dictionary.entries[1].clues)
+
+    def test_rejects_invalid_json(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._source(directory, "{")
+
+            with self.assertRaisesRegex(DictionaryError, "není platný JSON"):
+                load_dictionary(source)
+
+    def test_rejects_duplicate_answer(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = self._source(
+                directory,
+                '{"LES": ["Porost"], "LES": ["Hvozd"]}',
+            )
+
+            with self.assertRaisesRegex(DictionaryError, "duplicitní klíč"):
+                load_dictionary(source)
+
+    def test_rejects_invalid_dictionary_shape(self) -> None:
+        invalid_contents = {
+            "pole místo objektu": "[]",
+            "prázdný objekt": "{}",
+            "neplatné heslo": '{"ŘEKA": ["Vodní tok"]}',
+            "legenda místo seznamu": '{"REKA": "Vodní tok"}',
+            "prázdný seznam": '{"REKA": []}',
+            "prázdná legenda": '{"REKA": ["   "]}',
+            "ne-textová legenda": '{"REKA": [1]}',
+            "duplicitní legenda": '{"REKA": ["Tok", "Tok"]}',
+        }
+        for description, content in invalid_contents.items():
+            with (
+                self.subTest(description=description),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                source = self._source(directory, content)
+
+                with self.assertRaises(DictionaryError):
+                    load_dictionary(source)
+
+    def test_reports_missing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "missing.json"
+
+            with self.assertRaisesRegex(DictionaryError, "nelze načíst"):
+                load_dictionary(source)
+
+
+if __name__ == "__main__":
+    unittest.main()
