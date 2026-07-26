@@ -12,11 +12,14 @@ from reportlab.lib.pagesizes import A5
 
 from krizovkar.cli import main
 from krizovkar.model import (
+    Coordinate,
     EmptyCell,
+    GridDimensions,
     HelpCell,
     LegendCell,
     ModelError,
     SecretCell,
+    WordPlacement,
     load_crossword_grid,
     load_crossword_specification,
 )
@@ -30,6 +33,9 @@ GRID_LEGEND_EXAMPLE = PROJECT_ROOT / "examples" / "grid-legend.yaml"
 GRID_RANDOM_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-random-letters.yaml"
 GRID_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret.yaml"
 SPECIFICATION_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "specification-minimal.yaml"
+SPECIFICATION_PLACED_WORDS_EXAMPLE = (
+    PROJECT_ROOT / "examples" / "specification-placed-words.yaml"
+)
 
 
 class ModelTest(unittest.TestCase):
@@ -59,6 +65,134 @@ class ModelTest(unittest.TestCase):
         self.assertEqual("krizovkar", specification.format_name)
         self.assertEqual("specification", specification.kind)
         self.assertEqual(1, specification.version)
+        self.assertIsNone(specification.grid)
+        self.assertEqual((), specification.words)
+        self.assertIsNone(specification.help_position)
+
+    def test_loads_specification_with_placed_words(self) -> None:
+        specification = load_crossword_specification(SPECIFICATION_PLACED_WORDS_EXAMPLE)
+
+        self.assertEqual(GridDimensions(width=7, height=6), specification.grid)
+        self.assertEqual(3, len(specification.words))
+        first = specification.words[0]
+        self.assertIsInstance(first, WordPlacement)
+        self.assertEqual("LABE", first.answer)
+        self.assertEqual(Coordinate(row=2, column=2), first.start)
+        self.assertEqual("horizontal", first.direction)
+        self.assertEqual("Česká řeka", first.legend)
+        self.assertFalse(first.in_help)
+        self.assertEqual(
+            ("LES", "EMU"),
+            tuple(word.answer for word in specification.words if word.in_help),
+        )
+        self.assertIsNone(specification.help_position)
+
+    def test_loads_explicit_help_position(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "explicit-help.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 3, height: 3}\n"
+                "words:\n"
+                "  - answer: ABC\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Abeceda\n"
+                "    in_help: true\n"
+                "help:\n"
+                "  position: {row: 3, column: 3}\n",
+                encoding="utf-8",
+            )
+
+            specification = load_crossword_specification(source)
+
+            self.assertEqual(Coordinate(row=3, column=3), specification.help_position)
+
+    def test_rejects_word_outside_specification_grid(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "word-outside-grid.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 3, height: 3}\n"
+                "words:\n"
+                "  - answer: ABC\n"
+                "    start: {row: 2, column: 2}\n"
+                "    direction: horizontal\n"
+                "    legend: Abeceda\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ModelError, r"\$\.words\[0\].*přesahuje"):
+                load_crossword_specification(source)
+
+    def test_rejects_conflicting_word_intersection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "conflicting-intersection.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 3, height: 3}\n"
+                "words:\n"
+                "  - answer: ABC\n"
+                "    start: {row: 2, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Abeceda\n"
+                "  - answer: AX\n"
+                "    start: {row: 2, column: 2}\n"
+                "    direction: vertical\n"
+                "    legend: Zkratka\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ModelError, r"\$\.words\[1\].*v rozporu"):
+                load_crossword_specification(source)
+
+    def test_rejects_help_position_occupied_by_word(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "occupied-help.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 3, height: 3}\n"
+                "words:\n"
+                "  - answer: ABC\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Abeceda\n"
+                "    in_help: true\n"
+                "help:\n"
+                "  position: {row: 1, column: 2}\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ModelError, r"\$\.help\.position"):
+                load_crossword_specification(source)
+
+    def test_rejects_automatic_help_without_empty_cell(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "full-grid.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 1, height: 1}\n"
+                "words:\n"
+                "  - answer: A\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Písmeno\n"
+                "    in_help: true\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ModelError, "nemá prázdnou buňku"):
+                load_crossword_specification(source)
 
     def test_loads_secret_cells(self) -> None:
         crossword = load_crossword_grid(GRID_SECRET_EXAMPLE)

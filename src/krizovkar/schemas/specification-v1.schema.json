@@ -22,6 +22,123 @@
     "version": {
       "description": "Hlavní verze datového modelu zadání.",
       "const": 1
+    },
+    "grid": {
+      "description": "Rozměr cílové mřížky.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height"
+      ],
+      "properties": {
+        "width": {
+          "description": "Počet sloupců mřížky.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "description": "Počet řádků mřížky.",
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "words": {
+      "description": "Slova umístěná v mřížce.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/placedWord"
+      }
+    },
+    "help": {
+      "description": "Volitelné přepsání automatické polohy pomůcky.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "position"
+      ],
+      "properties": {
+        "position": {
+          "$ref": "#/$defs/coordinate"
+        }
+      }
+    }
+  },
+  "dependentRequired": {
+    "grid": [
+      "words"
+    ],
+    "words": [
+      "grid"
+    ],
+    "help": [
+      "grid",
+      "words"
+    ]
+  },
+  "$defs": {
+    "coordinate": {
+      "description": "Souřadnice počítaná od 1 z levého horního rohu.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "row",
+        "column"
+      ],
+      "properties": {
+        "row": {
+          "description": "Řádek počítaný odshora.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "description": "Sloupec počítaný zleva.",
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "placedWord": {
+      "description": "Slovo s polohou, směrem a legendou.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "answer",
+        "start",
+        "direction",
+        "legend"
+      ],
+      "properties": {
+        "answer": {
+          "description": "Přesná posloupnost písmen v mřížce.",
+          "type": "string",
+          "pattern": "^[A-Z]+$"
+        },
+        "start": {
+          "description": "Souřadnice prvního písmene.",
+          "$ref": "#/$defs/coordinate"
+        },
+        "direction": {
+          "description": "Směr slova od prvního písmene.",
+          "enum": [
+            "horizontal",
+            "vertical"
+          ]
+        },
+        "legend": {
+          "description": "Neprázdný text legendy slova.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "in_help": {
+          "description": "Zda se odpověď vypíše v pomocné buňce.",
+          "type": "boolean",
+          "default": false
+        }
+      }
     }
   }
 }

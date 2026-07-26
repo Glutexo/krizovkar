@@ -1,0 +1,21 @@
+format: krizovkar
+kind: specification
+version: 1
+grid:
+  width: 7
+  height: 6
+words:
+  - answer: LABE
+    start: {row: 2, column: 2}
+    direction: horizontal
+    legend: Česká řeka
+  - answer: LES
+    start: {row: 2, column: 2}
+    direction: vertical
+    legend: Porost stromů
+    in_help: true
+  - answer: EMU
+    start: {row: 2, column: 5}
+    direction: vertical
+    legend: Australský nelétavý pták
+    in_help: true

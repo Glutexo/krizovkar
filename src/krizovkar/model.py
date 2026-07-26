@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import cache
 from importlib.resources import files
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
@@ -17,6 +17,9 @@ from ruamel.yaml.error import YAMLError
 
 class ModelError(ValueError):
     """Vstupní soubor není platným dokumentem Křížovkáře."""
+
+
+WordDirection = Literal["horizontal", "vertical"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,12 +78,42 @@ class CrosswordGrid:
 
 
 @dataclass(frozen=True, slots=True)
+class GridDimensions:
+    """Rozměr mřížky v buňkách."""
+
+    width: int
+    height: int
+
+
+@dataclass(frozen=True, slots=True)
+class Coordinate:
+    """Souřadnice buňky počítaná od 1 z levého horního rohu."""
+
+    row: int
+    column: int
+
+
+@dataclass(frozen=True, slots=True)
+class WordPlacement:
+    """Slovo umístěné v mřížce spolu se svou legendou."""
+
+    answer: str
+    start: Coordinate
+    direction: WordDirection
+    legend: str
+    in_help: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class CrosswordSpecification:
     """Vstupní zadání, ze kterého má vzniknout cílová mřížka."""
 
     format_name: str
     kind: str
     version: int
+    grid: GridDimensions | None = None
+    words: tuple[WordPlacement, ...] = ()
+    help_position: Coordinate | None = None
 
 
 @cache
@@ -195,8 +228,102 @@ def load_crossword_specification(
 
     source_path = Path(source)
     data = _validated_data(source_path, "specification-v1.schema.json")
+    raw_grid = data.get("grid")
+    if raw_grid is None:
+        return CrosswordSpecification(
+            format_name=data["format"],
+            kind=data["kind"],
+            version=data["version"],
+        )
+
+    grid = GridDimensions(width=raw_grid["width"], height=raw_grid["height"])
+    words = tuple(
+        WordPlacement(
+            answer=word["answer"],
+            start=Coordinate(
+                row=word["start"]["row"],
+                column=word["start"]["column"],
+            ),
+            direction=word["direction"],
+            legend=word["legend"],
+            in_help=word.get("in_help", False),
+        )
+        for word in data["words"]
+    )
+    raw_help = data.get("help")
+    help_position = (
+        Coordinate(
+            row=raw_help["position"]["row"],
+            column=raw_help["position"]["column"],
+        )
+        if raw_help is not None
+        else None
+    )
+    _validate_specification_placements(grid, words, help_position)
     return CrosswordSpecification(
         format_name=data["format"],
         kind=data["kind"],
         version=data["version"],
+        grid=grid,
+        words=words,
+        help_position=help_position,
     )
+
+
+def _validate_specification_placements(
+    grid: GridDimensions,
+    words: tuple[WordPlacement, ...],
+    help_position: Coordinate | None,
+) -> None:
+    occupied: dict[tuple[int, int], tuple[str, int]] = {}
+
+    for word_index, word in enumerate(words):
+        row_step = 1 if word.direction == "vertical" else 0
+        column_step = 1 if word.direction == "horizontal" else 0
+        for offset, letter in enumerate(word.answer):
+            row = word.start.row + offset * row_step
+            column = word.start.column + offset * column_step
+            if row > grid.height or column > grid.width:
+                raise ModelError(
+                    "neplatný datový model: "
+                    f"$.words[{word_index}]: slovo {word.answer!r} "
+                    f"přesahuje mřížku {grid.width} × {grid.height}"
+                )
+
+            coordinate = (row, column)
+            previous = occupied.get(coordinate)
+            if previous is not None and previous[0] != letter:
+                previous_letter, previous_index = previous
+                raise ModelError(
+                    "neplatný datový model: "
+                    f"$.words[{word_index}]: písmeno {letter!r} na souřadnici "
+                    f"row={row}, column={column} je v rozporu s písmenem "
+                    f"{previous_letter!r} ze $.words[{previous_index}]"
+                )
+            occupied.setdefault(coordinate, (letter, word_index))
+
+    help_words = tuple(word for word in words if word.in_help)
+    if help_position is None:
+        if help_words and len(occupied) == grid.width * grid.height:
+            raise ModelError(
+                "neplatný datový model: $.words: "
+                "pomůcku nelze umístit, protože mřížka nemá prázdnou buňku"
+            )
+        return
+
+    if not help_words:
+        raise ModelError(
+            "neplatný datový model: $.help: "
+            "poloha pomůcky je uvedená, ale žádné slovo nemá in_help: true"
+        )
+    if help_position.row > grid.height or help_position.column > grid.width:
+        raise ModelError(
+            "neplatný datový model: $.help.position: "
+            f"souřadnice row={help_position.row}, column={help_position.column} "
+            f"leží mimo mřížku {grid.width} × {grid.height}"
+        )
+    if (help_position.row, help_position.column) in occupied:
+        raise ModelError(
+            "neplatný datový model: $.help.position: "
+            "pomůcka musí ležet v buňce neobsazené písmenem"
+        )

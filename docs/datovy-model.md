@@ -74,7 +74,7 @@ Legenda neobsahuje `value`, ale seznam `texts` s jedním nebo dvěma neprázdný
 - Dvě poloviny odděluje vodorovná čára.
 - Renderer text automaticky zalamuje a zmenšuje; české znaky vkládá do PDF pomocí fontu Noto Sans.
 
-Směr odpovědi, šipky a vazba legendy na konkrétní slovo zatím nejsou součástí cílové buňky. Tyto informace budou definované spolu se zadáním `specification`.
+Směr odpovědi a vazba legendy na konkrétní slovo se v cílové buňce neopakují; uchovává je vyšší zadání `specification`. Konkrétní šipky v mřížce vzniknou až při generování.
 
 ## Nevyplňovaná buňka
 
@@ -98,21 +98,63 @@ Nemá položku `value` ani `texts`. Renderer před seznam vloží tučný nadpis
 
 ## Zadání, verze 1
 
-Zadání je zdrojový dokument, ze kterého budoucí generátor vytvoří cílovou mřížku:
+Zadání je zdrojový dokument, který popisuje rozměr mřížky a umístěná slova. Budoucí generátor z něj vytvoří cílový dokument `grid`:
 
 ```yaml
 format: krizovkar
 kind: specification
 version: 1
+grid:
+  width: 7
+  height: 6
+words:
+  - answer: LABE
+    start: {row: 2, column: 2}
+    direction: horizontal
+    legend: Česká řeka
+  - answer: LES
+    start: {row: 2, column: 2}
+    direction: vertical
+    legend: Porost stromů
+    in_help: true
 ```
 
-Tato první iterace definuje pouze samostatnou obálku dokumentu. Struktura slov, nápověd, tajenek a pravidel skládání bude doplněna následně, aby nebyla omylem svázána s interní podobou výsledné mřížky.
+Položky `grid` a `words` jsou navzájem provázané: jsou buď uvedené obě, nebo ani jedna. Díky tomu zůstává platná i minimální obálka rozpracovaného zadání. Je-li `words` uvedené, obsahuje alespoň jedno slovo.
+
+### Umístěné slovo
+
+Každá položka `words` obsahuje:
+
+- `answer`: neprázdnou posloupnost velkých písmen `A`–`Z`, tedy přesný obsah budoucích písmenných buněk,
+- `start`: souřadnici prvního písmene,
+- `direction`: hodnotu `horizontal` pro postup doprava nebo `vertical` pro postup dolů,
+- `legend`: neprázdný text legendy,
+- volitelné `in_help`: zda se odpověď vypíše v pomůcce; výchozí hodnota je `false`.
+
+Souřadnice používají `row` a `column`, počítají se od 1 a jejich počátek leží v levém horním rohu. Řádky rostou směrem dolů a sloupce doprava. Slova se mohou křížit pouze tehdy, mají-li na společné souřadnici stejné písmeno.
+
+### Umístění pomůcky
+
+Obsah pomocné buňky tvoří odpovědi s `in_help: true` v pořadí, v jaké jsou uvedené ve `words`. Není-li poloha pomůcky zadaná, budoucí generátor ji po rozložení slov, legend a ostatních buněk vloží do první volné buňky. Buňky prochází po řádcích zleva doprava a shora dolů.
+
+Vlastní polohu lze určit takto:
+
+```yaml
+help:
+  position: {row: 1, column: 7}
+```
+
+Blok `help` je platný jen tehdy, když má alespoň jedno slovo `in_help: true`. Výslovná souřadnice musí ležet uvnitř mřížky a nesmí být obsazená písmenem. Úplnou kontrolu proti buňkám vzniklým při generování provede generátor.
+
+Loader již ověřuje rozměry, rozsah slov, shodu písmen na kříženích a základní platnost výslovné polohy pomůcky. Samotný převod `specification` na `grid` zatím není součástí příkazu `render`.
 
 ## Validace
 
-Strojová pravidla jsou v samostatných schématech pro [cílovou mřížku](../src/krizovkar/schemas/grid-v1.schema.json) a [zadání](../src/krizovkar/schemas/specification-v1.schema.json). Schéma mřížky odmítá chybějící, neznámé a chybně napsané položky i nulové, záporné nebo neceločíselné rozměry.
+Strojová pravidla jsou v samostatných schématech pro [cílovou mřížku](../src/krizovkar/schemas/grid-v1.schema.json) a [zadání](../src/krizovkar/schemas/specification-v1.schema.json). Schémata odmítají chybějící, neznámé a chybně napsané položky i nulové, záporné nebo neceločíselné rozměry. Pythonové loadery navíc kontrolují vztahy, které závisejí na více částech dokumentu.
 
 Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-minimal.yaml) a [zadání](../examples/specification-minimal.yaml).
+
+Vyšší zadání ukazuje [příklad s umístěnými slovy a automatickou pomůckou](../examples/specification-placed-words.yaml).
 
 Vyplněná cílová mřížka je v [příkladu s náhodnými písmeny](../examples/grid-random-letters.yaml).
 

@@ -40,15 +40,30 @@ grid:
   height: 10
 ```
 
-Samostatné zadání má vlastní obálku:
+Samostatné zadání popisuje rozměr a umístěná slova:
 
 ```yaml
 format: krizovkar
 kind: specification
 version: 1
+grid:
+  width: 7
+  height: 6
+words:
+  - answer: LABE
+    start: {row: 2, column: 2}
+    direction: horizontal
+    legend: Česká řeka
+  - answer: LES
+    start: {row: 2, column: 2}
+    direction: vertical
+    legend: Porost stromů
+    in_help: true
 ```
 
-Jeho položky pro slova a tajenky zatím nejsou definované. Význam obou dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md). Strojová pravidla jsou oddělená v [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json) a [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json).
+Souřadnice se počítají od 1 z levého horního rohu a `start` označuje první písmeno. Směr je `horizontal` nebo `vertical`; vynechané `in_help` znamená `false`. Pokud je alespoň jedno slovo v pomůcce, generátor pro ni použije první volnou buňku, není-li zadané vlastní `help.position`. Ucelenou podobu ukazuje [zadání s umístěnými slovy](examples/specification-placed-words.yaml).
+
+Význam obou dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md). Strojová pravidla jsou oddělená v [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json) a [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json).
 
 Mřížka může obsahovat řádky explicitně typovaných buněk:
 
