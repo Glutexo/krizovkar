@@ -117,7 +117,7 @@ grid:
 
 Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. České `CH` zabírá jednu buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku. Tajenková buňka má v PDF světle šedé pozadí a může mít jednu rohovou `arrow` ve směru `up`, `right`, `down` nebo `left`. Jde o jinou značku než seznam `arrows` v legendové buňce. Cílová mřížka už nerozlišuje, zda tajenku určil seznam polí, nebo souvislé heslo; u druhé varianty navíc obsahuje legendovou buňku s textem „Tajenka“. Zápis ukazuje [mřížka s českými písmeny](examples/grid-czech-letters.yaml); [ukázková cesta se šipkami](examples/grid-secret-arrows.yaml) mění směr dvakrát.
 
-Klasická křížovka může písmenné buňce přidat počáteční `number` a silné mezislovní `bars` na její pravé či dolní hraně. Očíslované vnější legendy uchovává kořenový seznam `clues`; číslo bez odpovídající legendy může označit například tajenku bez nápovědy. Ucelený zápis ukazuje [klasická křížovka s vnějšími legendami](examples/grid-classic.yaml).
+Klasická křížovka může písmenné buňce přidat počáteční `number` a silné mezislovní `bars` na její pravé či dolní hraně. Renderer vloží číslo do levého horního rohu, předěly vykreslí stejným silným tahem jako vnější rám a očíslované `clues` rozdělí pod mřížkou do sloupců „Vodorovně“ a „Svisle“. Číslo bez odpovídající legendy může označit například tajenku bez nápovědy. Ucelený zápis ukazuje [klasická křížovka s vnějšími legendami](examples/grid-classic.yaml).
 
 Legenda používá neprázdný seznam textů a může u nich výslovně uvést směrové šipky:
 
@@ -185,7 +185,7 @@ uv run krizovkar validate build/generated-grid.yaml
 
 Chyba znamená neplatný nebo vnitřně rozporný datový model a příkaz skončí návratovým kódem `2`. Varování znamená platnou mřížku, kterou lze dál zpracovat a vykreslit, ale porušuje některé pravidlo kvality; návratový kód zůstává `0`.
 
-Profil nyní varuje zejména před směrovými šipkami v legendách, nesouladem počtu textů a navazujících směrů, heslem bez bezprostředně předcházející legendy a oddělenými písmennými ostrovy. Rohové šipky tajenky toto varování nevyvolávají. Jednoduchá legenda má jeden text a směr; dvojitá má dva texty v pořadí doprava a dolů. Tato pravidla nejsou omezením obecného formátu a jiné druhy křížovek mohou v budoucnu používat jiný profil.
+Profil nyní varuje zejména před směrovými šipkami v legendách, nesouladem počtu textů a navazujících směrů, heslem bez bezprostředně předcházející legendy a oddělenými písmennými ostrovy. Rohové šipky tajenky toto varování nevyvolávají. Mřížku s čísly, mezislovními předěly nebo vnějšími `clues` uzná jako klasickou a nevyžaduje v ní legendové buňky. Jednoduchá legenda uvnitř švédské mřížky má jeden text a směr; dvojitá má dva texty v pořadí doprava a dolů. Tato pravidla nejsou omezením obecného formátu a jiné druhy křížovek mohou v budoucnu používat jiný profil.
 
 ## Vytvoření PDF
 
@@ -208,7 +208,7 @@ uv run krizovkar render examples/grid-secret-arrows.yaml \
   --output build/secret-arrows-blank.pdf
 ```
 
-Prázdná varianta skryje hodnoty běžných i tajenkových písmenných buněk. Legendy, pomůcky, nevyplňovaná pole, šedé zvýraznění tajenky a její rohové šipky zůstanou zobrazené stejně jako ve vyplněné variantě.
+Prázdná varianta skryje hodnoty běžných i tajenkových písmenných buněk. Legendy uvnitř i pod mřížkou, čísla, pomůcky, nevyplňovaná pole, šedé zvýraznění tajenky a její rohové šipky zůstanou zobrazené stejně jako ve vyplněné variantě.
 
 Bez volby `--output` vznikne PDF vedle vstupního souboru se stejným názvem. Existující soubor příkaz nepřepíše, dokud není přidána volba `--force`.
 

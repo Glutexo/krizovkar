@@ -86,8 +86,8 @@ def _parser() -> argparse.ArgumentParser:
         "validate",
         help="odliší chyby dat od varování ke kvalitě mřížky",
         description=(
-            "Ověří cílovou mřížku a posoudí ji podle pravidel dobré husté "
-            "švédské křížovky. Varování zpracování neblokují."
+            "Ověří cílovou mřížku a posoudí základní pravidla švédské či "
+            "klasické křížovky. Varování zpracování neblokují."
         ),
     )
     validate.add_argument("source", type=Path, metavar="MŘÍŽKA.yaml")

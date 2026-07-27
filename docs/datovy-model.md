@@ -70,7 +70,7 @@ Pokud v jednom řádku nebo sloupci bez nevyplňované buňky následuje další
 {type: letter, value: K, number: 3, bars: [right, bottom]}
 ```
 
-Hodnota `right` označuje silný předěl mezi touto buňkou a buňkou napravo, `bottom` předěl mezi touto buňkou a buňkou pod ní. Předěly jsou určené pouze pro vnitřní hrany mřížky; její vnější rám se do buněk nezapisuje.
+Hodnota `right` označuje silný předěl mezi touto buňkou a buňkou napravo, `bottom` předěl mezi touto buňkou a buňkou pod ní. Předěly jsou určené pouze pro vnitřní hrany mřížky; její vnější rám se do buněk nezapisuje. Renderer používá pro všechny tyto předěly i rám jedinou silnější tloušťku čáry.
 
 Volitelný kořenový seznam `clues` uchovává legendy mimo mřížku:
 
@@ -85,6 +85,8 @@ clues:
 ```
 
 Každá legenda odkazuje na existující očíslovanou písmennou buňku a dvojice `number` a `direction` se nesmí opakovat. Začíná-li takto popsané slovo uvnitř souvislého písmenného řádku nebo sloupce, musí je od předchozího slova oddělovat odpovídající silný předěl. Společné počáteční pole může mít pod jedním číslem jednu vodorovnou a jednu svislou legendu. Samotné číslo legendu nevyžaduje; tím lze označit například tajenku bez vlastní nápovědy.
+
+Renderer sází číslo do levého horního rohu buňky a vnější legendy pod mřížku do samostatných sloupců „Vodorovně“ a „Svisle“. Čísla, legendy, předěly, zvýraznění tajenky a tajenkové šipky zůstávají viditelné i při vykreslení nevyplněné varianty.
 
 ## Buňka legendy
 
@@ -253,7 +255,7 @@ Validace cílové mřížky rozlišuje dvě závažnosti:
 
 Příkaz `krizovkar validate` při chybě vrací kód `2`. Samotná varování vypíše, ale vrací kód `0`, takže neblokují vykreslení ani další zpracování. Každá položka reportu obsahuje závažnost, strojově čitelný kód, cestu k místu v dokumentu a českou zprávu.
 
-Současný kvalitativní profil je určený pro hustou švédskou mřížku bez směrových šipek v legendách. Každý nový vodorovný či svislý běh písmen musí mít bezprostředně před sebou legendovou buňku. Počet jejích textů odpovídá počtu navazujících směrů: jednoduchá legenda má jeden text, dvojitá dva texty v pořadí doprava a dolů. Tajenkové rohové šipky jsou samostatná pomůcka pro pořadí čtení a toto varování nevyvolávají. Všechny běžné a tajenkové písmenné buňky zároveň musí tvořit jedinou oblast propojenou společnými hranami; legendy, pomůcky a nevyplňované buňky jsou její hranice. Jde o neblokující formální pravidla pro dobrý výsledek, nikoli o omezení obecného datového formátu. Jiný druh křížovky proto může později použít jiný profil nad stejnými daty.
+Současný kvalitativní profil je určený především pro hustou švédskou mřížku bez směrových šipek v legendách. Každý nový vodorovný či svislý běh písmen musí mít bezprostředně před sebou legendovou buňku. Počet jejích textů odpovídá počtu navazujících směrů: jednoduchá legenda má jeden text, dvojitá dva texty v pořadí doprava a dolů. Dokument s čísly, mezislovními předěly nebo vnějšími `clues` validátor rozpozná jako klasickou křížovku a legendové buňky v něm nevyžaduje. Tajenkové rohové šipky jsou samostatná pomůcka pro pořadí čtení a toto varování nevyvolávají. Všechny běžné a tajenkové písmenné buňky zároveň musí tvořit jedinou oblast propojenou společnými hranami; legendy, pomůcky a nevyplňované buňky jsou její hranice. Jde o neblokující formální pravidla pro dobrý výsledek, nikoli o omezení obecného datového formátu. Jiný druh křížovky proto může později použít jiný profil nad stejnými daty.
 
 Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-minimal.yaml) a [zadání](../examples/specification-minimal.yaml).
 

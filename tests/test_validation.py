@@ -16,12 +16,16 @@ from krizovkar.model import (
     LegendCell,
     LetterCell,
     SecretCell,
+    load_crossword_grid,
     write_crossword_grid,
 )
 from krizovkar.validation import (
     check_dense_swedish_grid,
     validate_dense_swedish_grid_file,
 )
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+GRID_CLASSIC_EXAMPLE = PROJECT_ROOT / "examples" / "grid-classic.yaml"
 
 
 def _legend() -> LegendCell:
@@ -90,6 +94,31 @@ class QualityValidationTest(unittest.TestCase):
 
         self.assertTrue(report.is_valid)
         self.assertEqual((), report.errors)
+        self.assertEqual((), report.warnings)
+
+    def test_classic_grid_with_external_clues_has_no_swedish_warning(self) -> None:
+        crossword = load_crossword_grid(GRID_CLASSIC_EXAMPLE)
+
+        report = check_dense_swedish_grid(crossword)
+
+        self.assertTrue(report.is_valid)
+        self.assertEqual((), report.warnings)
+
+    def test_numbered_classic_grid_without_clues_has_no_swedish_warning(self) -> None:
+        crossword = CrosswordGrid(
+            format_name="krizovkar",
+            kind="grid",
+            version=1,
+            grid=Grid(
+                width=1,
+                height=1,
+                cells=((LetterCell(value="A", number=1),),),
+            ),
+        )
+
+        report = check_dense_swedish_grid(crossword)
+
+        self.assertTrue(report.is_valid)
         self.assertEqual((), report.warnings)
 
     def test_disconnected_letter_islands_are_only_a_warning(self) -> None:

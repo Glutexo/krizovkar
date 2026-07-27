@@ -1216,6 +1216,26 @@ class CommandTest(unittest.TestCase):
             self.assertEqual(0, result)
             self.assertTrue(output.read_bytes().startswith(b"%PDF-"))
 
+    def test_render_handles_classic_grid_filled_and_blank(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            for blank in (False, True):
+                with self.subTest(blank=blank):
+                    output = Path(directory) / f"classic-{blank}.pdf"
+                    command = [
+                        "render",
+                        str(GRID_CLASSIC_EXAMPLE),
+                        "--output",
+                        str(output),
+                    ]
+                    if blank:
+                        command.append("--blank")
+
+                    with redirect_stdout(io.StringIO()):
+                        result = main(command)
+
+                    self.assertEqual(0, result)
+                    self.assertTrue(output.read_bytes().startswith(b"%PDF-"))
+
     def test_render_handles_three_legend_texts_and_arrow(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "three-legends.yaml"

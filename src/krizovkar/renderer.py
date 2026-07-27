@@ -10,7 +10,7 @@ from tempfile import NamedTemporaryFile
 from xml.sax.saxutils import escape
 
 import pymupdf_fonts
-from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A0, A1, A2, A3, A4, A5, A6, LEGAL, LETTER
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
@@ -22,6 +22,8 @@ from reportlab.platypus import Paragraph
 from krizovkar.model import (
     CrosswordGrid,
     EmptyCell,
+    ExternalClue,
+    Grid,
     HelpCell,
     LegendArrow,
     LegendCell,
@@ -34,16 +36,21 @@ from krizovkar.typography import mark_czech_hyphenation, protect_czech_prepositi
 PAGE_MARGIN = 15 * mm
 MAX_CELL_SIZE = 12 * mm
 INNER_LINE_WIDTH = 0.5
-OUTER_LINE_WIDTH = 1.25
+STRONG_LINE_WIDTH = 1.25
 LETTER_FONT = "KrizovkarNotoSansBold"
 LETTER_SIZE_RATIO = 0.58
 LETTER_BASELINE_OFFSET = 0.35
 SECRET_FILL_GRAY = 0.85
 SECRET_ARROW_CORNER_CENTER_RATIO = 0.18
+SECRET_ARROW_NUMBERED_CENTER_X_RATIO = 0.78
 LEGEND_FILL_GRAY = 0.93
 HELP_FILL_GRAY = 0.93
 TEXT_CELL_FONT = "KrizovkarNotoSans"
 TEXT_CELL_BOLD_FONT = "KrizovkarNotoSansBold"
+NUMBER_FONT = TEXT_CELL_BOLD_FONT
+NUMBER_MAX_FONT_SIZE = 7.0
+NUMBER_SIZE_RATIO = 0.2
+NUMBER_INSET_RATIO = 0.07
 TEXT_CELL_MAX_FONT_SIZE = 6.0
 TEXT_CELL_MIN_FONT_SIZE = 2.0
 TEXT_CELL_FONT_STEP = 0.25
@@ -55,6 +62,11 @@ ARROW_LENGTH_RATIO = 0.18
 ARROW_HEAD_RATIO = 0.38
 EMPTY_SYMBOL_INSET_RATIO = 0.3
 EMPTY_SYMBOL_LINE_WIDTH = 0.65
+EXTERNAL_CLUE_FONT_SIZE = 8.0
+EXTERNAL_CLUE_LEADING = 9.6
+EXTERNAL_CLUE_MIN_AREA_WIDTH = 100 * mm
+EXTERNAL_CLUE_COLUMN_GAP = 6 * mm
+EXTERNAL_CLUE_GRID_GAP = 7 * mm
 DEFAULT_PAGE_FORMAT = "A4"
 SUPPORTED_PAGE_FORMATS = (
     "A0",
@@ -325,14 +337,43 @@ def _draw_secret_arrow(
     left: float,
     bottom: float,
     size: float,
+    *,
+    numbered: bool = False,
 ) -> None:
     direction_x, direction_y = _ARROW_VECTORS[direction]
     length = size * ARROW_LENGTH_RATIO
-    center_x = left + size * SECRET_ARROW_CORNER_CENTER_RATIO
+    center_x_ratio = (
+        SECRET_ARROW_NUMBERED_CENTER_X_RATIO
+        if numbered
+        else SECRET_ARROW_CORNER_CENTER_RATIO
+    )
+    center_x = left + size * center_x_ratio
     center_y = bottom + size * (1 - SECRET_ARROW_CORNER_CENTER_RATIO)
     tip_x = center_x + direction_x * length / 2
     tip_y = center_y + direction_y * length / 2
     _draw_arrow(pdf, direction, tip_x, tip_y, length)
+
+
+def _draw_cell_number(
+    pdf: Canvas,
+    number: int,
+    left: float,
+    bottom: float,
+    size: float,
+) -> None:
+    _register_text_cell_fonts()
+    font_size = min(NUMBER_MAX_FONT_SIZE, size * NUMBER_SIZE_RATIO)
+    inset = size * NUMBER_INSET_RATIO
+
+    pdf.saveState()
+    pdf.setFillColorRGB(0, 0, 0)
+    pdf.setFont(NUMBER_FONT, font_size)
+    pdf.drawString(
+        left + inset,
+        bottom + size - inset - font_size * 0.82,
+        str(number),
+    )
+    pdf.restoreState()
 
 
 def _draw_help_cell(
@@ -404,6 +445,120 @@ def _draw_letter_cell(
     pdf.drawCentredString(center_x, baseline, cell.value)
 
 
+def _external_clue_paragraph(
+    heading: str,
+    clues: tuple[ExternalClue, ...],
+) -> Paragraph:
+    _register_text_cell_fonts()
+    lines = []
+    for clue in sorted(clues, key=lambda item: item.number):
+        text = mark_czech_hyphenation(
+            protect_czech_prepositions(clue.text)
+        )
+        lines.append(f"<b>{clue.number}.</b> {escape(text)}")
+    content = f"<b>{escape(heading)}</b><br/>" + "<br/>".join(lines)
+    style = ParagraphStyle(
+        name="external-clues",
+        fontName=TEXT_CELL_FONT,
+        fontSize=EXTERNAL_CLUE_FONT_SIZE,
+        leading=EXTERNAL_CLUE_LEADING,
+        alignment=TA_LEFT,
+        hyphenationLang="",
+        splitLongWords=0,
+        spaceBefore=0,
+        spaceAfter=0,
+    )
+    return Paragraph(content, style)
+
+
+def _prepare_external_clues(
+    crossword: CrosswordGrid,
+    page_width: float,
+    page_height: float,
+    provisional_grid_width: float,
+) -> tuple[tuple[tuple[Paragraph, float, float], ...], float, float]:
+    groups = []
+    for direction, heading in (
+        ("horizontal", "Vodorovně"),
+        ("vertical", "Svisle"),
+    ):
+        clues = tuple(
+            clue for clue in crossword.clues if clue.direction == direction
+        )
+        if clues:
+            groups.append((heading, clues))
+    if not groups:
+        return (), 0.0, 0.0
+
+    available_width = page_width - 2 * PAGE_MARGIN
+    area_width = min(
+        available_width,
+        max(provisional_grid_width, EXTERNAL_CLUE_MIN_AREA_WIDTH),
+    )
+    total_column_gap = EXTERNAL_CLUE_COLUMN_GAP * (len(groups) - 1)
+    column_width = (area_width - total_column_gap) / len(groups)
+    maximum_height = page_height - 2 * PAGE_MARGIN
+    layouts: list[tuple[Paragraph, float, float]] = []
+    clue_height = 0.0
+    for group_index, (heading, clues) in enumerate(groups):
+        paragraph = _external_clue_paragraph(heading, clues)
+        _, paragraph_height = paragraph.wrap(column_width, maximum_height)
+        offset = group_index * (column_width + EXTERNAL_CLUE_COLUMN_GAP)
+        layouts.append((paragraph, offset, paragraph_height))
+        clue_height = max(clue_height, paragraph_height)
+    return tuple(layouts), area_width, clue_height
+
+
+def _draw_external_clues(
+    pdf: Canvas,
+    layouts: tuple[tuple[Paragraph, float, float], ...],
+    left: float,
+    bottom: float,
+    height: float,
+) -> None:
+    for paragraph, offset, paragraph_height in layouts:
+        paragraph.drawOn(
+            pdf,
+            left + offset,
+            bottom + height - paragraph_height,
+        )
+
+
+def _draw_strong_grid_lines(
+    pdf: Canvas,
+    grid: Grid,
+    left: float,
+    bottom: float,
+    cell_size: float,
+) -> None:
+    grid_width = grid.width * cell_size
+    grid_height = grid.height * cell_size
+
+    pdf.saveState()
+    pdf.setStrokeColorRGB(0, 0, 0)
+    pdf.setLineWidth(STRONG_LINE_WIDTH)
+    pdf.setLineCap(0)
+    if grid.cells is not None:
+        for row_index, row in enumerate(grid.cells):
+            cell_bottom = bottom + grid_height - (row_index + 1) * cell_size
+            for column_index, cell in enumerate(row):
+                if not isinstance(cell, (LetterCell, SecretCell)):
+                    continue
+                cell_left = left + column_index * cell_size
+                if "right" in cell.bars:
+                    x = cell_left + cell_size
+                    pdf.line(x, cell_bottom, x, cell_bottom + cell_size)
+                if "bottom" in cell.bars:
+                    pdf.line(
+                        cell_left,
+                        cell_bottom,
+                        cell_left + cell_size,
+                        cell_bottom,
+                    )
+    pdf.rect(left, bottom, grid_width, grid_height, stroke=1, fill=0)
+    pdf.restoreState()
+
+
 def resolve_page_size(page_format: str) -> tuple[float, float]:
     """Vrátí rozměr stránky pro podporovaný název formátu."""
 
@@ -428,15 +583,31 @@ def _write_pdf(
     page_width, page_height = page_size
     width = crossword.grid.width
     height = crossword.grid.height
+    available_width = page_width - 2 * PAGE_MARGIN
+    available_height = page_height - 2 * PAGE_MARGIN
+    provisional_cell_size = min(MAX_CELL_SIZE, available_width / width)
+    clue_layouts, clue_area_width, clue_height = _prepare_external_clues(
+        crossword,
+        page_width,
+        page_height,
+        width * provisional_cell_size,
+    )
+    clue_gap = EXTERNAL_CLUE_GRID_GAP if clue_layouts else 0.0
+    available_grid_height = available_height - clue_height - clue_gap
+    if available_grid_height <= 0:
+        raise RenderError("vnější legendy se nevejdou na zvolenou stránku")
     cell_size = min(
         MAX_CELL_SIZE,
-        (page_width - 2 * PAGE_MARGIN) / width,
-        (page_height - 2 * PAGE_MARGIN) / height,
+        available_width / width,
+        available_grid_height / height,
     )
     grid_width = width * cell_size
     grid_height = height * cell_size
     left = (page_width - grid_width) / 2
-    bottom = (page_height - grid_height) / 2
+    content_height = grid_height + clue_gap + clue_height
+    content_bottom = (page_height - content_height) / 2
+    bottom = content_bottom + clue_height + clue_gap
+    clue_left = (page_width - clue_area_width) / 2
 
     pdf = Canvas(str(target), pagesize=page_size, pageCompression=1)
     pdf.setTitle(f"Křížovkář – mřížka {width} × {height}")
@@ -451,12 +622,12 @@ def _write_pdf(
     pdf.setStrokeColorRGB(0, 0, 0)
 
     if crossword.grid.cells is not None:
-        pdf.setFillGray(SECRET_FILL_GRAY)
         for row_index, row in enumerate(crossword.grid.cells):
             cell_bottom = bottom + grid_height - (row_index + 1) * cell_size
             for column_index, cell in enumerate(row):
+                cell_left = left + column_index * cell_size
                 if isinstance(cell, SecretCell):
-                    cell_left = left + column_index * cell_size
+                    pdf.setFillGray(SECRET_FILL_GRAY)
                     pdf.rect(
                         cell_left,
                         cell_bottom,
@@ -472,9 +643,9 @@ def _write_pdf(
                             cell_left,
                             cell_bottom,
                             cell_size,
+                            numbered=cell.number is not None,
                         )
                 elif isinstance(cell, LegendCell):
-                    cell_left = left + column_index * cell_size
                     _draw_legend_cell(
                         pdf,
                         cell,
@@ -483,7 +654,6 @@ def _write_pdf(
                         cell_size,
                     )
                 elif isinstance(cell, EmptyCell):
-                    cell_left = left + column_index * cell_size
                     _draw_empty_cell(
                         pdf,
                         cell_left,
@@ -491,10 +661,20 @@ def _write_pdf(
                         cell_size,
                     )
                 elif isinstance(cell, HelpCell):
-                    cell_left = left + column_index * cell_size
                     _draw_help_cell(
                         pdf,
                         cell,
+                        cell_left,
+                        cell_bottom,
+                        cell_size,
+                    )
+                if (
+                    isinstance(cell, (LetterCell, SecretCell))
+                    and cell.number is not None
+                ):
+                    _draw_cell_number(
+                        pdf,
+                        cell.number,
                         cell_left,
                         cell_bottom,
                         cell_size,
@@ -527,8 +707,21 @@ def _write_pdf(
         y = bottom + row * cell_size
         pdf.line(left, y, left + grid_width, y)
 
-    pdf.setLineWidth(OUTER_LINE_WIDTH)
-    pdf.rect(left, bottom, grid_width, grid_height, stroke=1, fill=0)
+    _draw_strong_grid_lines(
+        pdf,
+        crossword.grid,
+        left,
+        bottom,
+        cell_size,
+    )
+    if clue_layouts:
+        _draw_external_clues(
+            pdf,
+            clue_layouts,
+            clue_left,
+            content_bottom,
+            clue_height,
+        )
     pdf.showPage()
     pdf.save()
 

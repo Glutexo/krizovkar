@@ -116,6 +116,17 @@ def _letter_component_count(crossword: CrosswordGrid) -> int:
     return component_count
 
 
+def _has_classic_annotations(crossword: CrosswordGrid) -> bool:
+    cells = crossword.grid.cells
+    assert cells is not None
+    return bool(crossword.clues) or any(
+        isinstance(cell, (LetterCell, SecretCell))
+        and (cell.number is not None or cell.bars)
+        for row in cells
+        for cell in row
+    )
+
+
 def _word_start_warnings(crossword: CrosswordGrid) -> list[ValidationIssue]:
     cells = crossword.grid.cells
     assert cells is not None
@@ -237,6 +248,8 @@ def check_dense_swedish_grid(crossword: CrosswordGrid) -> ValidationReport:
                 )
 
     if not legend_count:
+        if _has_classic_annotations(crossword):
+            return ValidationReport(tuple(issues))
         issues.append(
             _warning(
                 "layout.no-legends",

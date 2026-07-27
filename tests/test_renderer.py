@@ -16,19 +16,27 @@ from krizovkar.model import (
     LegendCell,
     LetterCell,
     SecretCell,
+    load_crossword_grid,
 )
 from krizovkar.renderer import (
     MAX_CELL_SIZE,
     TEXT_CELL_FONT_STEP,
     TEXT_CELL_MAX_FONT_SIZE,
     TEXT_CELL_PADDING,
+    STRONG_LINE_WIDTH,
+    _draw_cell_number,
+    _draw_external_clues,
     _draw_fitted_text,
     _draw_legend_cell,
     _draw_letter_cell,
     _draw_secret_arrow,
+    _draw_strong_grid_lines,
     render_pdf,
 )
 from krizovkar.typography import SOFT_HYPHEN
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+GRID_CLASSIC_EXAMPLE = PROJECT_ROOT / "examples" / "grid-classic.yaml"
 
 
 class FittedTextTest(unittest.TestCase):
@@ -125,6 +133,48 @@ class RenderModeTest(unittest.TestCase):
         draw_letter.assert_not_called()
         draw_legend.assert_called_once()
         draw_secret_arrow.assert_called_once()
+
+
+class ClassicRenderTest(unittest.TestCase):
+    def test_word_bars_and_outer_frame_share_strong_line_width(self) -> None:
+        crossword = load_crossword_grid(GRID_CLASSIC_EXAMPLE)
+        pdf = Mock()
+
+        _draw_strong_grid_lines(pdf, crossword.grid, 0, 0, 10)
+
+        pdf.setLineWidth.assert_called_once_with(STRONG_LINE_WIDTH)
+        self.assertEqual(12, pdf.line.call_count)
+        pdf.rect.assert_called_once_with(0, 0, 60, 60, stroke=1, fill=0)
+
+    def test_blank_classic_pdf_keeps_numbers_clues_and_secret_arrow(self) -> None:
+        crossword = load_crossword_grid(GRID_CLASSIC_EXAMPLE)
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "classic-blank.pdf"
+            with (
+                patch(
+                    "krizovkar.renderer._draw_letter_cell",
+                    wraps=_draw_letter_cell,
+                ) as draw_letter,
+                patch(
+                    "krizovkar.renderer._draw_cell_number",
+                    wraps=_draw_cell_number,
+                ) as draw_number,
+                patch(
+                    "krizovkar.renderer._draw_external_clues",
+                    wraps=_draw_external_clues,
+                ) as draw_clues,
+                patch(
+                    "krizovkar.renderer._draw_secret_arrow",
+                    wraps=_draw_secret_arrow,
+                ) as draw_secret_arrow,
+            ):
+                render_pdf(crossword, output, filled=False)
+
+        draw_letter.assert_not_called()
+        self.assertEqual(20, draw_number.call_count)
+        draw_clues.assert_called_once()
+        draw_secret_arrow.assert_called_once()
+        self.assertTrue(draw_secret_arrow.call_args.kwargs["numbered"])
 
 
 if __name__ == "__main__":
