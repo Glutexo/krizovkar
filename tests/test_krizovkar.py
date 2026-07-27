@@ -15,6 +15,7 @@ from reportlab.lib.pagesizes import A5
 from krizovkar.cli import main
 from krizovkar.model import (
     Coordinate,
+    DEFAULT_SECRET_PART_LEGEND,
     DEFAULT_SECRET_LEGEND,
     EmptyCell,
     GridDimensions,
@@ -23,6 +24,7 @@ from krizovkar.model import (
     ModelError,
     SecretCell,
     SecretCells,
+    SecretParts,
     SecretWord,
     WordPlacement,
     load_crossword_grid,
@@ -42,6 +44,9 @@ GRID_RANDOM_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-random-letters.y
 GRID_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret.yaml"
 GRID_SECRET_ARROWS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret-arrows.yaml"
 SPECIFICATION_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "specification-minimal.yaml"
+SPECIFICATION_MULTIPART_SECRETS_EXAMPLE = (
+    PROJECT_ROOT / "examples" / "specification-multipart-secrets.yaml"
+)
 SPECIFICATION_PLACED_WORDS_EXAMPLE = (
     PROJECT_ROOT / "examples" / "specification-placed-words.yaml"
 )
@@ -167,6 +172,85 @@ class ModelTest(unittest.TestCase):
             assert isinstance(secret, SecretWord)
             self.assertEqual("GLUTEXO", secret.answer)
             self.assertEqual(DEFAULT_SECRET_LEGEND, secret.legend)
+
+    def test_loads_multipart_cell_and_word_secrets(self) -> None:
+        specification = load_crossword_specification(
+            SPECIFICATION_MULTIPART_SECRETS_EXAMPLE
+        )
+
+        self.assertEqual(2, len(specification.secrets))
+        cell_secret, word_secret = specification.secrets
+        self.assertIsInstance(cell_secret, SecretParts)
+        assert isinstance(cell_secret, SecretParts)
+        self.assertEqual(2, len(cell_secret.parts))
+        first_block, second_block = cell_secret.parts
+        self.assertIsInstance(first_block, SecretCells)
+        self.assertIsInstance(second_block, SecretCells)
+        assert isinstance(first_block, SecretCells)
+        assert isinstance(second_block, SecretCells)
+        self.assertEqual(
+            ((Coordinate(row=2, column=2), "right"),),
+            secret_path_arrows(first_block),
+        )
+        self.assertEqual(
+            ((Coordinate(row=2, column=5), "down"),),
+            secret_path_arrows(second_block),
+        )
+
+        self.assertIsInstance(word_secret, SecretParts)
+        assert isinstance(word_secret, SecretParts)
+        first_part, second_part, third_part = word_secret.parts
+        self.assertTrue(
+            all(
+                isinstance(part, SecretWord)
+                for part in (first_part, second_part, third_part)
+            )
+        )
+        assert isinstance(first_part, SecretWord)
+        assert isinstance(second_part, SecretWord)
+        assert isinstance(third_part, SecretWord)
+        self.assertEqual(
+            DEFAULT_SECRET_PART_LEGEND.format(number=1),
+            first_part.legend,
+        )
+        self.assertEqual(
+            DEFAULT_SECRET_PART_LEGEND.format(number=2),
+            second_part.legend,
+        )
+        self.assertEqual("3. díl tajenky", third_part.legend)
+
+    def test_rejects_gap_in_unarrowed_multipart_secret_block(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "multipart-secret-gap.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 3, height: 2}\n"
+                "words:\n"
+                "  - answer: ABC\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Abeceda\n"
+                "secrets:\n"
+                "  - type: parts\n"
+                "    parts:\n"
+                "      - type: cells\n"
+                "        cells:\n"
+                "          - {row: 1, column: 1}\n"
+                "          - {row: 1, column: 3}\n"
+                "      - type: word\n"
+                "        answer: DE\n"
+                "        start: {row: 2, column: 1}\n"
+                "        direction: horizontal\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ModelError,
+                r"\$\.secrets\[0\]\.parts\[0\]\.cells\[1\].*společnou hranou",
+            ):
+                load_crossword_specification(source)
 
     def test_rejects_secret_cell_outside_grid(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

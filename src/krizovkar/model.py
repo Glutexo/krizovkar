@@ -27,6 +27,7 @@ WordDirection = Literal["horizontal", "vertical"]
 LegendArrow = Literal["right", "down"]
 SecretArrow = Literal["up", "right", "down", "left"]
 DEFAULT_SECRET_LEGEND = "Tajenka"
+DEFAULT_SECRET_PART_LEGEND = "Tajenka: {number}. část"
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,7 +171,17 @@ class SecretWord:
     legend: str = DEFAULT_SECRET_LEGEND
 
 
-SecretDefinition = SecretCells | SecretWord
+SecretPart = SecretCells | SecretWord
+
+
+@dataclass(frozen=True, slots=True)
+class SecretParts:
+    """Jedna tajenka složená z několika souvislých bloků."""
+
+    parts: tuple[SecretPart, ...]
+
+
+SecretDefinition = SecretPart | SecretParts
 
 
 @dataclass(frozen=True, slots=True)
@@ -326,25 +337,8 @@ def load_crossword_specification(
         )
         for word in data.get("words", ())
     )
-    secrets: tuple[SecretDefinition, ...] = tuple(
-        SecretCells(
-            cells=tuple(
-                Coordinate(row=cell["row"], column=cell["column"])
-                for cell in secret["cells"]
-            ),
-            arrows=secret.get("arrows", False),
-        )
-        if secret["type"] == "cells"
-        else SecretWord(
-            answer=secret["answer"],
-            start=Coordinate(
-                row=secret["start"]["row"],
-                column=secret["start"]["column"],
-            ),
-            direction=secret["direction"],
-            legend=secret.get("legend", DEFAULT_SECRET_LEGEND),
-        )
-        for secret in data.get("secrets", ())
+    secrets = tuple(
+        _secret_definition(secret) for secret in data.get("secrets", ())
     )
     raw_help = data.get("help")
     help_position = (
@@ -367,6 +361,40 @@ def load_crossword_specification(
     )
 
 
+def _secret_part(data: dict[str, Any], default_legend: str) -> SecretPart:
+    if data["type"] == "cells":
+        return SecretCells(
+            cells=tuple(
+                Coordinate(row=cell["row"], column=cell["column"])
+                for cell in data["cells"]
+            ),
+            arrows=data.get("arrows", False),
+        )
+    return SecretWord(
+        answer=data["answer"],
+        start=Coordinate(
+            row=data["start"]["row"],
+            column=data["start"]["column"],
+        ),
+        direction=data["direction"],
+        legend=data.get("legend", default_legend),
+    )
+
+
+def _secret_definition(data: dict[str, Any]) -> SecretDefinition:
+    if data["type"] != "parts":
+        return _secret_part(data, DEFAULT_SECRET_LEGEND)
+    return SecretParts(
+        parts=tuple(
+            _secret_part(
+                part,
+                DEFAULT_SECRET_PART_LEGEND.format(number=part_index + 1),
+            )
+            for part_index, part in enumerate(data["parts"])
+        )
+    )
+
+
 def _validate_specification_placements(
     grid: GridDimensions,
     words: tuple[WordPlacement, ...],
@@ -374,14 +402,28 @@ def _validate_specification_placements(
     help_position: Coordinate | None,
 ) -> None:
     occupied: dict[tuple[int, int], tuple[str, str]] = {}
+    secret_parts: list[tuple[SecretPart, str, bool]] = []
+    for secret_index, secret in enumerate(secrets):
+        if isinstance(secret, SecretParts):
+            secret_parts.extend(
+                (
+                    part,
+                    f"$.secrets[{secret_index}].parts[{part_index}]",
+                    True,
+                )
+                for part_index, part in enumerate(secret.parts)
+            )
+        else:
+            secret_parts.append((secret, f"$.secrets[{secret_index}]", False))
+
     placements = [
         (word.answer, word.start, word.direction, f"$.words[{word_index}]")
         for word_index, word in enumerate(words)
     ]
     placements.extend(
-        (secret.answer, secret.start, secret.direction, f"$.secrets[{secret_index}]")
-        for secret_index, secret in enumerate(secrets)
-        if isinstance(secret, SecretWord)
+        (part.answer, part.start, part.direction, path)
+        for part, path, _ in secret_parts
+        if isinstance(part, SecretWord)
     )
 
     for answer, start, direction, path in placements:
@@ -409,11 +451,11 @@ def _validate_specification_placements(
                 )
             occupied.setdefault(coordinate, (letter, path))
 
-    for secret_index, secret in enumerate(secrets):
-        if not isinstance(secret, SecretCells):
+    for part, secret_path, grouped in secret_parts:
+        if not isinstance(part, SecretCells):
             continue
-        for cell_index, cell in enumerate(secret.cells):
-            path = f"$.secrets[{secret_index}].cells[{cell_index}]"
+        for cell_index, cell in enumerate(part.cells):
+            path = f"{secret_path}.cells[{cell_index}]"
             if cell.row > grid.height or cell.column > grid.width:
                 raise ModelError(
                     "neplatný datový model: "
@@ -426,21 +468,21 @@ def _validate_specification_placements(
                     f"{path}: tajenka musí odkazovat na buňku obsazenou písmenem"
                 )
 
-        if not secret.arrows:
+        if not part.arrows and not grouped:
             continue
-        if len(secret.cells) < 2:
+        if part.arrows and len(part.cells) < 2:
             raise ModelError(
                 "neplatný datový model: "
-                f"$.secrets[{secret_index}].arrows: tajenka se šipkami "
+                f"{secret_path}.arrows: tajenka se šipkami "
                 "musí obsahovat alespoň dvě buňky"
             )
         for cell_index, (current, following) in enumerate(
-            pairwise(secret.cells)
+            pairwise(part.cells)
         ):
             try:
                 _secret_step_direction(current, following)
             except ValueError as error:
-                path = f"$.secrets[{secret_index}].cells[{cell_index + 1}]"
+                path = f"{secret_path}.cells[{cell_index + 1}]"
                 raise ModelError(
                     "neplatný datový model: "
                     f"{path}: {error}"

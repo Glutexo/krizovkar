@@ -137,7 +137,7 @@ Souřadnice používají `row` a `column`, počítají se od 1 a jejich počáte
 
 ### Tajenky
 
-Volitelný seznam `secrets` uchovává jednu nebo více tajenek. Povinné `type` rozlišuje dva způsoby jejich určení.
+Volitelný seznam `secrets` uchovává jednu nebo více tajenek. Povinné `type` rozlišuje tajenku určenou poli, souvislým slovem nebo několika bloky.
 
 Tajenka `type: cells` obsahuje neprázdný seznam `cells`:
 
@@ -172,7 +172,34 @@ Položky `answer`, `start` a `direction` mají stejný význam jako u běžného
 
 Vynechaná `legend` se při načtení doplní přesným textem `Tajenka`. Při převodu do cílové mřížky tak slovo dostane legendovou buňku označenou „Tajenka“ a písmena v buňkách `type: secret`. Výslovná neprázdná `legend` zůstává podporovaná kvůli zpětné kompatibilitě.
 
-Obě varianty mohou být v jednom zadání. Cílový dokument `grid` je při vykreslení zobrazuje stejným zvýrazněním; jejich původní definici zachovává pouze `specification`.
+#### Vícedílná tajenka
+
+Tajenka `type: parts` obsahuje alespoň dva souvislé bloky v poli `parts`. Pořadí bloků určuje pořadí, ve kterém se jejich obsah spojí do výsledné tajenky:
+
+```yaml
+secrets:
+  - type: parts
+    parts:
+      - type: word
+        answer: DÁREK
+        start: {row: 5, column: 1}
+        direction: horizontal
+      - type: word
+        answer: RADOST
+        start: {row: 6, column: 1}
+        direction: horizontal
+      - type: word
+        answer: ÚSMĚV
+        start: {row: 7, column: 1}
+        direction: horizontal
+        legend: 3. díl tajenky
+```
+
+Každý blok je `type: cells` nebo `type: word`. Blok z buněk musí být souvislý i bez šipek; jeho `arrows: true` označí vlastní začátek a změny směru, nezávisle na ostatních blocích. Jednopísmenný blok je souvislý, ale nemůže mít šipku, protože nemá následující pole.
+
+Slovní blok bez `legend` dostane podle své pozice automatický popisek `Tajenka: 1. část`, `Tajenka: 2. část` a tak dále. Výslovná neprázdná legenda může použít jinou rovnocennou formulaci, například `2. díl tajenky` nebo `Tajenka: 4. díl`. Číslo se odvozuje od pozice mezi všemi bloky, takže smíšená tajenka může mít například první blok bez legendy a druhý blok označený `Tajenka: 2. část`.
+
+Všechny varianty mohou být v jednom zadání. Cílový dokument `grid` je při vykreslení zobrazuje stejným zvýrazněním; jejich původní definici zachovává pouze `specification`.
 
 ### Umístění pomůcky
 
@@ -207,6 +234,8 @@ Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-
 Vyšší zadání ukazuje [příklad s umístěnými slovy a automatickou pomůckou](../examples/specification-placed-words.yaml).
 
 Oba způsoby určení tajenky ukazuje [příklad s vybranými poli a tajenkovým slovem](../examples/specification-secrets.yaml).
+
+Více bloků bez legend i s legendami ukazuje [příklad vícedílných tajenek](../examples/specification-multipart-secrets.yaml).
 
 Vyplněná cílová mřížka je v [příkladu s náhodnými písmeny](../examples/grid-random-letters.yaml).
 

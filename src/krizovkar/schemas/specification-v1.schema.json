@@ -53,7 +53,7 @@
       }
     },
     "secrets": {
-      "description": "Tajenky určené buňkami nebo souvislým slovem.",
+      "description": "Tajenky určené buňkami, slovem nebo více bloky.",
       "type": "array",
       "minItems": 1,
       "items": {
@@ -165,7 +165,7 @@
       }
     },
     "secret": {
-      "description": "Tajenka jako uspořádané buňky nebo umístěné slovo.",
+      "description": "Tajenka jako buňky, umístěné slovo nebo více bloků.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -176,7 +176,8 @@
           "description": "Způsob určení tajenky.",
           "enum": [
             "cells",
-            "word"
+            "word",
+            "parts"
           ]
         },
         "cells": {
@@ -215,6 +216,14 @@
           "minLength": 1,
           "pattern": "\\S",
           "default": "Tajenka"
+        },
+        "parts": {
+          "description": "Souvislé bloky jedné tajenky v pořadí čtení.",
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/secretPart"
+          }
         }
       },
       "allOf": [
@@ -251,6 +260,11 @@
                   "required": [
                     "legend"
                   ]
+                },
+                {
+                  "required": [
+                    "parts"
+                  ]
                 }
               ]
             }
@@ -281,8 +295,130 @@
                   "required": [
                     "arrows"
                   ]
+                },
+                {
+                  "required": [
+                    "parts"
+                  ]
                 }
               ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "parts"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "parts"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "cells"
+                  ]
+                },
+                {
+                  "required": [
+                    "arrows"
+                  ]
+                },
+                {
+                  "required": [
+                    "answer"
+                  ]
+                },
+                {
+                  "required": [
+                    "start"
+                  ]
+                },
+                {
+                  "required": [
+                    "direction"
+                  ]
+                },
+                {
+                  "required": [
+                    "legend"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "secretPart": {
+      "description": "Jeden souvislý blok složené tajenky.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "cells"
+          ],
+          "properties": {
+            "type": {
+              "const": "cells"
+            },
+            "cells": {
+              "description": "Buňky bloku v pořadí čtení.",
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/coordinate"
+              }
+            },
+            "arrows": {
+              "description": "Zda se vyznačí začátek a změny směru bloku.",
+              "type": "boolean",
+              "default": false
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "answer",
+            "start",
+            "direction"
+          ],
+          "properties": {
+            "type": {
+              "const": "word"
+            },
+            "answer": {
+              "description": "Přesná posloupnost písmen bloku.",
+              "type": "string",
+              "pattern": "^[A-ZÁÄČĎÉĚÍŇÓÔÖŘŠŤÚŮÜÝŽ]+$"
+            },
+            "start": {
+              "description": "Souřadnice prvního písmene bloku.",
+              "$ref": "#/$defs/coordinate"
+            },
+            "direction": {
+              "description": "Směr bloku od prvního písmene.",
+              "enum": [
+                "horizontal",
+                "vertical"
+              ]
+            },
+            "legend": {
+              "description": "Volitelné přepsání automatického označení části.",
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
             }
           }
         }

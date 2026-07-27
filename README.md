@@ -85,6 +85,24 @@ secrets:
 
 U `type: cells` určuje pořadí souřadnic také pořadí čtení a každé vybrané pole musí obsahovat písmeno. Tato podoba nemá vlastní legendu. Volitelné `arrows: true` vyžaduje cestu přes sousední pole a přidá malou odchozí šipku na její začátek a na každé místo změny směru. Znak má stejné proporce a tah jako šipky u legend. Bez této volby mohou pole zůstat libovolně rozmístěná. `type: word` se umisťuje a kříží stejně jako běžné heslo, ale jeho písmena budou zvýrazněná jako tajenka. Odpověď zadává autor přímo a nemusí být ve slovníku; vynechaná `legend` dostane automaticky text `Tajenka`. Obě podoby ukazuje [zadání s tajenkami](examples/specification-secrets.yaml).
 
+Jedna tajenka může mít také několik souvislých bloků v určeném pořadí:
+
+```yaml
+secrets:
+  - type: parts
+    parts:
+      - type: word
+        answer: DÁREK
+        start: {row: 5, column: 1}
+        direction: horizontal
+      - type: word
+        answer: RADOST
+        start: {row: 6, column: 1}
+        direction: horizontal
+```
+
+Slovní bloky bez výslovné `legend` dostanou postupně popisky `Tajenka: 1. část`, `Tajenka: 2. část` a tak dále. Vlastní text může použít také formulaci `2. díl tajenky`. Bloky `type: cells` vlastní legendu nemají, ale každý může samostatně zapnout rohové šipky. Obě vícedílné podoby ukazuje [zadání s vícedílnými tajenkami](examples/specification-multipart-secrets.yaml).
+
 Význam obou dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md). Strojová pravidla jsou oddělená v [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json) a [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json).
 
 Mřížka může obsahovat řádky explicitně typovaných buněk:
