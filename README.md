@@ -130,6 +130,8 @@ uv run krizovkar render build/generated-grid.yaml \
 
 Stejný slovník, rozměr a seed vytvoří stejnou mřížku. Generátor rozdělí plochu legendovými řádky a sloupci na písmenné obdélníky a všechny je vyplní platnými křížícími se hesly. Každá písmenná buňka proto patří jednomu vodorovnému i jednomu svislému výrazu; prázdné zůstávají pouze průsečíky legendových řádků a sloupců.
 
+Současný experiment vyplňuje každý takový obdélník samostatně. Pokud jich vznikne více, kvalitativní validace upozorní, že výsledná slova tvoří oddělené ostrovy; propojení bloků bude úkolem další verze generátoru.
+
 Legendy pokrývají horní a levou stranu každého písmenného bloku. Na horním okraji chybí legenda jen ve sloupci s dalšími vnitřními legendami a na levém okraji jen v řádku s dalšími vnitřními legendami. Každá legenda má jediný text a právě jeden možný směr navazujícího hesla, takže nepotřebuje šipku. První experimentální verze zatím nevytváří tajenku ani pomůcku a nehodnotí jazykovou kvalitu hesel. Zdrojový slovník není součástí projektu; uživatel musí mít právo jeho obsah použít.
 
 ## Validace
@@ -142,7 +144,7 @@ uv run krizovkar validate build/generated-grid.yaml
 
 Chyba znamená neplatný nebo vnitřně rozporný datový model a příkaz skončí návratovým kódem `2`. Varování znamená platnou mřížku, kterou lze dál zpracovat a vykreslit, ale porušuje některé pravidlo kvality; návratový kód zůstává `0`.
 
-Profil nyní varuje zejména před šipkami, více texty v jedné legendě, chybějícím či nejednoznačným směrem hesla, mezerou mimo průsečík legendových hran a neúplným pokrytím těchto hran legendami. Tato pravidla nejsou omezením obecného formátu a jiné druhy křížovek mohou v budoucnu používat jiný profil.
+Profil nyní varuje zejména před šipkami, více texty v jedné legendě, chybějícím či nejednoznačným směrem hesla, oddělenými písmennými ostrovy, mezerou mimo průsečík legendových hran a neúplným pokrytím těchto hran legendami. Tato pravidla nejsou omezením obecného formátu a jiné druhy křížovek mohou v budoucnu používat jiný profil.
 
 ## Vytvoření PDF
 

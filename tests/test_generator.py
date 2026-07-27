@@ -42,7 +42,13 @@ class GeneratorTest(unittest.TestCase):
         self.assertEqual(49, sum(isinstance(cell, LetterCell) for cell in cells))
         self.assertEqual(28, sum(isinstance(cell, LegendCell) for cell in cells))
         self.assertEqual(4, sum(isinstance(cell, EmptyCell) for cell in cells))
-        self.assertEqual((), check_dense_swedish_grid(first).issues)
+        self.assertEqual(
+            ("layout.disconnected-letters",),
+            tuple(
+                issue.code
+                for issue in check_dense_swedish_grid(first).warnings
+            ),
+        )
 
         for row_index, row in enumerate(first.grid.cells):
             for column_index, cell in enumerate(row):

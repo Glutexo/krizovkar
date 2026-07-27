@@ -161,7 +161,7 @@ Validace cílové mřížky rozlišuje dvě závažnosti:
 
 Příkaz `krizovkar validate` při chybě vrací kód `2`. Samotná varování vypíše, ale vrací kód `0`, takže neblokují vykreslení ani další zpracování. Každá položka reportu obsahuje závažnost, strojově čitelný kód, cestu k místu v dokumentu a českou zprávu.
 
-Současný kvalitativní profil je určený pro hustou švédskou mřížku bez šipek. Očekává jeden text a jediný bezprostředně navazující směr u každé legendy, souvislé legendové řádky a sloupce včetně horní a levé hrany a nevyplňované buňky pouze v jejich průsečících. Jde o neblokující formální pravidla pro dobrý výsledek, nikoli o omezení obecného datového formátu. Jiný druh křížovky proto může později použít jiný profil nad stejnými daty.
+Současný kvalitativní profil je určený pro hustou švédskou mřížku bez šipek. Očekává jeden text a jediný bezprostředně navazující směr u každé legendy, souvislé legendové řádky a sloupce včetně horní a levé hrany a nevyplňované buňky pouze v jejich průsečících. Všechny běžné a tajenkové písmenné buňky zároveň musí tvořit jedinou oblast propojenou společnými hranami; legendy, pomůcky a nevyplňované buňky jsou její hranice. Jde o neblokující formální pravidla pro dobrý výsledek, nikoli o omezení obecného datového formátu. Jiný druh křížovky proto může později použít jiný profil nad stejnými daty.
 
 Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-minimal.yaml) a [zadání](../examples/specification-minimal.yaml).
 

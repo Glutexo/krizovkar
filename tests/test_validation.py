@@ -31,6 +31,23 @@ def _good_dense_grid() -> CrosswordGrid:
     empty = EmptyCell()
     letter = LetterCell(value="A")
     cells = (
+        (empty, _legend(), _legend(), _legend()),
+        (_legend(), letter, letter, letter),
+        (_legend(), letter, letter, letter),
+        (_legend(), letter, letter, letter),
+    )
+    return CrosswordGrid(
+        format_name="krizovkar",
+        kind="grid",
+        version=1,
+        grid=Grid(width=4, height=4, cells=cells),
+    )
+
+
+def _disconnected_dense_grid() -> CrosswordGrid:
+    empty = EmptyCell()
+    letter = LetterCell(value="A")
+    cells = (
         (empty, _legend(), _legend(), empty, _legend()),
         (_legend(), letter, letter, _legend(), letter),
         (_legend(), letter, letter, _legend(), letter),
@@ -73,6 +90,16 @@ class QualityValidationTest(unittest.TestCase):
         self.assertTrue(report.is_valid)
         self.assertEqual((), report.errors)
         self.assertEqual((), report.warnings)
+
+    def test_disconnected_letter_islands_are_only_a_warning(self) -> None:
+        report = check_dense_swedish_grid(_disconnected_dense_grid())
+
+        self.assertTrue(report.is_valid)
+        self.assertEqual(
+            ("layout.disconnected-letters",),
+            tuple(issue.code for issue in report.warnings),
+        )
+        self.assertIn("4 oddělených ostrovů", report.warnings[0].message)
 
     def test_format_valid_legend_choices_are_only_warnings(self) -> None:
         crossword = _replace_cell(

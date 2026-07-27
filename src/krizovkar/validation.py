@@ -88,6 +88,35 @@ def _answer_directions(
     return tuple(directions)
 
 
+def _letter_component_count(crossword: CrosswordGrid) -> int:
+    cells = crossword.grid.cells
+    assert cells is not None
+    remaining = {
+        (row, column)
+        for row, cell_row in enumerate(cells)
+        for column, cell in enumerate(cell_row)
+        if isinstance(cell, (LetterCell, SecretCell))
+    }
+    component_count = 0
+
+    while remaining:
+        component_count += 1
+        stack = [remaining.pop()]
+        while stack:
+            row, column = stack.pop()
+            for neighbor in (
+                (row - 1, column),
+                (row + 1, column),
+                (row, column - 1),
+                (row, column + 1),
+            ):
+                if neighbor in remaining:
+                    remaining.remove(neighbor)
+                    stack.append(neighbor)
+
+    return component_count
+
+
 def check_dense_swedish_grid(crossword: CrosswordGrid) -> ValidationReport:
     """Posoudí kvalitu husté švédské mřížky bez jejího odmítnutí."""
 
@@ -104,6 +133,17 @@ def check_dense_swedish_grid(crossword: CrosswordGrid) -> ValidationReport:
         )
 
     issues: list[ValidationIssue] = []
+    component_count = _letter_component_count(crossword)
+    if component_count > 1:
+        issues.append(
+            _warning(
+                "layout.disconnected-letters",
+                "$.grid.cells",
+                f"písmenné buňky tvoří {component_count} oddělených ostrovů; "
+                "všechna slova mají být navzájem propojená",
+            )
+        )
+
     directions_by_legend: dict[tuple[int, int], tuple[AnswerDirection, ...]] = {}
 
     for row, cell_row in enumerate(cells):
