@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from functools import cache
 from importlib.resources import files
+from itertools import pairwise
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, Literal
@@ -24,6 +25,7 @@ class ModelError(ValueError):
 
 WordDirection = Literal["horizontal", "vertical"]
 LegendArrow = Literal["right", "down"]
+SecretArrow = Literal["up", "right", "down", "left"]
 DEFAULT_SECRET_LEGEND = "Tajenka"
 
 
@@ -39,6 +41,7 @@ class SecretCell:
     """Zvýrazněná buňka, jejíž písmeno patří do tajenky."""
 
     value: str
+    arrow: SecretArrow | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,14 +115,54 @@ class WordPlacement:
 
 @dataclass(frozen=True, slots=True)
 class SecretCells:
-    """Tajenka určená uspořádanou posloupností buněk."""
+    """Tajenka určená posloupností buněk a volitelnou cestou."""
 
     cells: tuple[Coordinate, ...]
+    arrows: bool = False
+
+
+def _secret_step_direction(
+    current: Coordinate,
+    following: Coordinate,
+) -> SecretArrow:
+    step = (following.row - current.row, following.column - current.column)
+    directions: dict[tuple[int, int], SecretArrow] = {
+        (-1, 0): "up",
+        (0, 1): "right",
+        (1, 0): "down",
+        (0, -1): "left",
+    }
+    try:
+        return directions[step]
+    except KeyError as error:
+        raise ValueError(
+            "následující buňky musí sousedit společnou hranou"
+        ) from error
+
+
+def secret_path_arrows(
+    secret: SecretCells,
+) -> tuple[tuple[Coordinate, SecretArrow], ...]:
+    """Určí odchozí šipku na začátku a při každé změně směru."""
+
+    if not secret.arrows:
+        return ()
+    if len(secret.cells) < 2:
+        raise ValueError("tajenka se šipkami musí obsahovat alespoň dvě buňky")
+
+    arrows: list[tuple[Coordinate, SecretArrow]] = []
+    previous_direction: SecretArrow | None = None
+    for current, following in pairwise(secret.cells):
+        direction = _secret_step_direction(current, following)
+        if previous_direction is None or direction != previous_direction:
+            arrows.append((current, direction))
+        previous_direction = direction
+    return tuple(arrows)
 
 
 @dataclass(frozen=True, slots=True)
 class SecretWord:
-    """Souvislá tajenka s vlastní legendou a směrem."""
+    """Souvislá tajenka s popiskem a směrem."""
 
     answer: str
     start: Coordinate
@@ -195,7 +238,10 @@ def _grid_cell(cell: dict[str, Any]) -> GridCell:
     if cell["type"] == "letter":
         return LetterCell(value=cell["value"])
     if cell["type"] == "secret":
-        return SecretCell(value=cell["value"])
+        return SecretCell(
+            value=cell["value"],
+            arrow=cell.get("arrow"),
+        )
     if cell["type"] == "legend":
         return LegendCell(
             texts=tuple(cell["texts"]),
@@ -285,7 +331,8 @@ def load_crossword_specification(
             cells=tuple(
                 Coordinate(row=cell["row"], column=cell["column"])
                 for cell in secret["cells"]
-            )
+            ),
+            arrows=secret.get("arrows", False),
         )
         if secret["type"] == "cells"
         else SecretWord(
@@ -379,6 +426,26 @@ def _validate_specification_placements(
                     f"{path}: tajenka musí odkazovat na buňku obsazenou písmenem"
                 )
 
+        if not secret.arrows:
+            continue
+        if len(secret.cells) < 2:
+            raise ModelError(
+                "neplatný datový model: "
+                f"$.secrets[{secret_index}].arrows: tajenka se šipkami "
+                "musí obsahovat alespoň dvě buňky"
+            )
+        for cell_index, (current, following) in enumerate(
+            pairwise(secret.cells)
+        ):
+            try:
+                _secret_step_direction(current, following)
+            except ValueError as error:
+                path = f"$.secrets[{secret_index}].cells[{cell_index + 1}]"
+                raise ModelError(
+                    "neplatný datový model: "
+                    f"{path}: {error}"
+                ) from error
+
     help_words = tuple(word for word in words if word.in_help)
     if help_position is None:
         if help_words and len(occupied) == grid.width * grid.height:
@@ -410,7 +477,10 @@ def _grid_cell_data(cell: GridCell) -> dict[str, Any]:
     if isinstance(cell, LetterCell):
         return {"type": "letter", "value": cell.value}
     if isinstance(cell, SecretCell):
-        return {"type": "secret", "value": cell.value}
+        data = {"type": "secret", "value": cell.value}
+        if cell.arrow is not None:
+            data["arrow"] = cell.arrow
+        return data
     if isinstance(cell, LegendCell):
         data: dict[str, Any] = {"type": "legend", "texts": list(cell.texts)}
         if cell.arrows:

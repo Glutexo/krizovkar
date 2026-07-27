@@ -19,7 +19,14 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import Paragraph
 
-from krizovkar.model import CrosswordGrid, EmptyCell, HelpCell, LegendCell, SecretCell
+from krizovkar.model import (
+    CrosswordGrid,
+    EmptyCell,
+    HelpCell,
+    LegendCell,
+    SecretArrow,
+    SecretCell,
+)
 from krizovkar.typography import mark_czech_hyphenation, protect_czech_prepositions
 
 PAGE_MARGIN = 15 * mm
@@ -30,6 +37,9 @@ LETTER_FONT = "KrizovkarNotoSansBold"
 LETTER_SIZE_RATIO = 0.58
 LETTER_BASELINE_OFFSET = 0.35
 SECRET_FILL_GRAY = 0.85
+SECRET_ARROW_LINE_WIDTH = 0.8
+SECRET_ARROW_LENGTH_RATIO = 0.2
+SECRET_ARROW_CORNER_CENTER_RATIO = 0.18
 LEGEND_FILL_GRAY = 0.93
 HELP_FILL_GRAY = 0.93
 TEXT_CELL_FONT = "KrizovkarNotoSans"
@@ -280,6 +290,54 @@ def _draw_legend_arrow(
     pdf.restoreState()
 
 
+def _draw_secret_arrow(
+    pdf: Canvas,
+    direction: SecretArrow,
+    left: float,
+    bottom: float,
+    size: float,
+) -> None:
+    vectors = {
+        "up": (0.0, 1.0),
+        "right": (1.0, 0.0),
+        "down": (0.0, -1.0),
+        "left": (-1.0, 0.0),
+    }
+    direction_x, direction_y = vectors[direction]
+    perpendicular_x, perpendicular_y = -direction_y, direction_x
+    length = size * SECRET_ARROW_LENGTH_RATIO
+    head = length * 0.38
+    center_x = left + size * SECRET_ARROW_CORNER_CENTER_RATIO
+    center_y = bottom + size * (1 - SECRET_ARROW_CORNER_CENTER_RATIO)
+    tail_x = center_x - direction_x * length / 2
+    tail_y = center_y - direction_y * length / 2
+    tip_x = center_x + direction_x * length / 2
+    tip_y = center_y + direction_y * length / 2
+    head_center_x = tip_x - direction_x * head
+    head_center_y = tip_y - direction_y * head
+    head_side = head * 0.62
+
+    pdf.saveState()
+    pdf.setStrokeColorRGB(0, 0, 0)
+    pdf.setLineWidth(SECRET_ARROW_LINE_WIDTH)
+    pdf.setLineCap(1)
+    pdf.setLineJoin(1)
+    pdf.line(tail_x, tail_y, tip_x, tip_y)
+    pdf.line(
+        tip_x,
+        tip_y,
+        head_center_x + perpendicular_x * head_side,
+        head_center_y + perpendicular_y * head_side,
+    )
+    pdf.line(
+        tip_x,
+        tip_y,
+        head_center_x - perpendicular_x * head_side,
+        head_center_y - perpendicular_y * head_side,
+    )
+    pdf.restoreState()
+
+
 def _draw_help_cell(
     pdf: Canvas,
     cell: HelpCell,
@@ -385,6 +443,14 @@ def _write_pdf(
                         stroke=0,
                         fill=1,
                     )
+                    if cell.arrow is not None:
+                        _draw_secret_arrow(
+                            pdf,
+                            cell.arrow,
+                            cell_left,
+                            cell_bottom,
+                            cell_size,
+                        )
                 elif isinstance(cell, LegendCell):
                     cell_left = left + column_index * cell_size
                     _draw_legend_cell(

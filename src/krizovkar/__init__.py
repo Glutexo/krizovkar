@@ -22,6 +22,7 @@ from krizovkar.model import (
     LegendCell,
     LetterCell,
     ModelError,
+    SecretArrow,
     SecretCell,
     SecretCells,
     SecretDefinition,
@@ -30,6 +31,7 @@ from krizovkar.model import (
     WordPlacement,
     load_crossword_grid,
     load_crossword_specification,
+    secret_path_arrows,
     write_crossword_grid,
 )
 from krizovkar.renderer import RenderError, render_pdf
@@ -59,6 +61,7 @@ __all__ = [
     "LetterCell",
     "ModelError",
     "RenderError",
+    "SecretArrow",
     "SecretCell",
     "SecretCells",
     "SecretDefinition",
@@ -73,6 +76,7 @@ __all__ = [
     "load_crossword_grid",
     "load_crossword_specification",
     "render_pdf",
+    "secret_path_arrows",
     "validate_dense_swedish_grid_file",
     "write_crossword_grid",
 ]

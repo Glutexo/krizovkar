@@ -45,7 +45,7 @@ grid:
   width: 3
   height: 2
   cells:
-    - [{type: letter, value: Č}, {type: letter, value: CH}, {type: secret, value: Á}]
+    - [{type: secret, value: Č, arrow: right}, {type: letter, value: CH}, {type: letter, value: Á}]
     - [{type: letter, value: O}, {type: letter, value: Ř}, {type: secret, value: J}]
 ```
 
@@ -56,7 +56,7 @@ Podporované typy jsou:
 - `type: letter` pro běžnou písmennou buňku,
 - `type: secret` pro zvýrazněnou buňku, jejíž písmeno patří do tajenky.
 
-U obou typů musí být `value` právě jedno podporované velké písmeno. Písmena si zachovávají diakritiku; české `CH` se zapisuje jako jedna hodnota a zabírá jednu buňku. Renderer odlišuje tajenkovou buňku světle šedým pozadím.
+U obou typů musí být `value` právě jedno podporované velké písmeno. Písmena si zachovávají diakritiku; české `CH` se zapisuje jako jedna hodnota a zabírá jednu buňku. Renderer odlišuje tajenkovou buňku světle šedým pozadím. Jen `type: secret` může navíc obsahovat odchozí `arrow` ve směru `up`, `right`, `down` nebo `left`; vykreslí se jako malá šipka v levém horním rohu a nepřekrývá písmeno.
 
 Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Cílová mřížka pouze označuje buňky tajenky. Jejich pořadí a seskupení uchovává zdrojové zadání `specification`.
 
@@ -144,13 +144,19 @@ Tajenka `type: cells` obsahuje neprázdný seznam `cells`:
 ```yaml
 secrets:
   - type: cells
+    arrows: true
     cells:
       - {row: 2, column: 2}
+      - {row: 2, column: 3}
+      - {row: 2, column: 4}
       - {row: 2, column: 5}
-      - {row: 4, column: 2}
+      - {row: 3, column: 5}
+      - {row: 4, column: 5}
 ```
 
-Souřadnice jsou uvedené přímo v pořadí, v jaké se tajenka čte. Nesmějí se v jednom seznamu opakovat, musí ležet uvnitř mřížky a odkazovat na písmena některého umístěného běžného nebo tajenkového slova. Pole nemusejí tvořit přímku ani spolu sousedit.
+Souřadnice jsou uvedené přímo v pořadí, v jaké se tajenka čte. Nesmějí se v jednom seznamu opakovat, musí ležet uvnitř mřížky a odkazovat na písmena některého umístěného běžného nebo tajenkového slova. Tato podoba tajenky nemá vlastní legendu.
+
+Výchozí `arrows: false` dovoluje libovolné rozmístění polí bez ohledu na jejich sousedství. Při `arrows: true` musí tajenka obsahovat alespoň dvě pole a každá dvě po sobě jdoucí pole musí sdílet hranu. Převod do cílové mřížky vloží `arrow` do prvního pole a potom do každého pole, z něhož cesta pokračuje jiným směrem než předchozí krok. Šipka vždy ukazuje k následujícímu poli; koncové pole ji nemá.
 
 Tajenka `type: word` je souvislé vodorovné nebo svislé slovo:
 
@@ -194,7 +200,7 @@ Validace cílové mřížky rozlišuje dvě závažnosti:
 
 Příkaz `krizovkar validate` při chybě vrací kód `2`. Samotná varování vypíše, ale vrací kód `0`, takže neblokují vykreslení ani další zpracování. Každá položka reportu obsahuje závažnost, strojově čitelný kód, cestu k místu v dokumentu a českou zprávu.
 
-Současný kvalitativní profil je určený pro hustou švédskou mřížku bez šipek. Každý nový vodorovný či svislý běh písmen musí mít bezprostředně před sebou legendovou buňku. Počet jejích textů odpovídá počtu navazujících směrů: jednoduchá legenda má jeden text, dvojitá dva texty v pořadí doprava a dolů. Všechny běžné a tajenkové písmenné buňky zároveň musí tvořit jedinou oblast propojenou společnými hranami; legendy, pomůcky a nevyplňované buňky jsou její hranice. Jde o neblokující formální pravidla pro dobrý výsledek, nikoli o omezení obecného datového formátu. Jiný druh křížovky proto může později použít jiný profil nad stejnými daty.
+Současný kvalitativní profil je určený pro hustou švédskou mřížku bez směrových šipek v legendách. Každý nový vodorovný či svislý běh písmen musí mít bezprostředně před sebou legendovou buňku. Počet jejích textů odpovídá počtu navazujících směrů: jednoduchá legenda má jeden text, dvojitá dva texty v pořadí doprava a dolů. Tajenkové rohové šipky jsou samostatná pomůcka pro pořadí čtení a toto varování nevyvolávají. Všechny běžné a tajenkové písmenné buňky zároveň musí tvořit jedinou oblast propojenou společnými hranami; legendy, pomůcky a nevyplňované buňky jsou její hranice. Jde o neblokující formální pravidla pro dobrý výsledek, nikoli o omezení obecného datového formátu. Jiný druh křížovky proto může později použít jiný profil nad stejnými daty.
 
 Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-minimal.yaml) a [zadání](../examples/specification-minimal.yaml).
 
@@ -205,6 +211,8 @@ Oba způsoby určení tajenky ukazuje [příklad s vybranými poli a tajenkovým
 Vyplněná cílová mřížka je v [příkladu s náhodnými písmeny](../examples/grid-random-letters.yaml).
 
 Smíšené typy buněk ukazuje [příklad s tajenkou](../examples/grid-secret.yaml).
+
+Začátek a dva body obratu ukazuje [příklad tajenkové cesty se šipkami](../examples/grid-secret-arrows.yaml).
 
 Česká písmena s diakritikou a jednopísmenné `CH` ukazuje [mřížka s českými písmeny](../examples/grid-czech-letters.yaml).
 

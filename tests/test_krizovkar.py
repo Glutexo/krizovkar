@@ -27,6 +27,7 @@ from krizovkar.model import (
     WordPlacement,
     load_crossword_grid,
     load_crossword_specification,
+    secret_path_arrows,
     write_crossword_grid,
 )
 from krizovkar.renderer import RenderError, resolve_page_size
@@ -39,6 +40,7 @@ GRID_HELP_EXAMPLE = PROJECT_ROOT / "examples" / "grid-help.yaml"
 GRID_LEGEND_EXAMPLE = PROJECT_ROOT / "examples" / "grid-legend.yaml"
 GRID_RANDOM_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-random-letters.yaml"
 GRID_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret.yaml"
+GRID_SECRET_ARROWS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret-arrows.yaml"
 SPECIFICATION_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "specification-minimal.yaml"
 SPECIFICATION_PLACED_WORDS_EXAMPLE = (
     PROJECT_ROOT / "examples" / "specification-placed-words.yaml"
@@ -117,10 +119,21 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(
             (
                 Coordinate(row=2, column=2),
+                Coordinate(row=2, column=3),
+                Coordinate(row=2, column=4),
                 Coordinate(row=2, column=5),
-                Coordinate(row=4, column=2),
+                Coordinate(row=3, column=5),
+                Coordinate(row=4, column=5),
             ),
             selected.cells,
+        )
+        self.assertTrue(selected.arrows)
+        self.assertEqual(
+            (
+                (Coordinate(row=2, column=2), "right"),
+                (Coordinate(row=2, column=5), "down"),
+            ),
+            secret_path_arrows(selected),
         )
         self.assertIsInstance(word, SecretWord)
         assert isinstance(word, SecretWord)
@@ -199,6 +212,87 @@ class ModelTest(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(ModelError, "obsazenou písmenem"):
+                load_crossword_specification(source)
+
+    def test_rejects_gap_in_arrowed_secret_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "secret-path-gap.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 3, height: 1}\n"
+                "words:\n"
+                "  - answer: ABC\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Abeceda\n"
+                "secrets:\n"
+                "  - type: cells\n"
+                "    arrows: true\n"
+                "    cells:\n"
+                "      - {row: 1, column: 1}\n"
+                "      - {row: 1, column: 3}\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ModelError, r"\$\.secrets\[0\]\.cells\[1\].*společnou hranou"
+            ):
+                load_crossword_specification(source)
+
+    def test_allows_gap_in_unarrowed_secret_cells(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "unarrowed-secret-gap.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 3, height: 1}\n"
+                "words:\n"
+                "  - answer: ABC\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Abeceda\n"
+                "secrets:\n"
+                "  - type: cells\n"
+                "    cells:\n"
+                "      - {row: 1, column: 1}\n"
+                "      - {row: 1, column: 3}\n",
+                encoding="utf-8",
+            )
+
+            specification = load_crossword_specification(source)
+            selected = specification.secrets[0]
+
+            self.assertIsInstance(selected, SecretCells)
+            assert isinstance(selected, SecretCells)
+            self.assertFalse(selected.arrows)
+            self.assertEqual((), secret_path_arrows(selected))
+
+    def test_rejects_single_cell_arrowed_secret(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "single-cell-secret.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 1, height: 1}\n"
+                "words:\n"
+                "  - answer: A\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Písmeno\n"
+                "secrets:\n"
+                "  - type: cells\n"
+                "    arrows: true\n"
+                "    cells: [{row: 1, column: 1}]\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ModelError, r"\$\.secrets\[0\]\.arrows.*alespoň dvě"
+            ):
                 load_crossword_specification(source)
 
     def test_rejects_conflicting_secret_word_intersection(self) -> None:
@@ -385,6 +479,38 @@ class ModelTest(unittest.TestCase):
         secret_cells = crossword.grid.cells[3][2:9]
         self.assertTrue(all(isinstance(cell, SecretCell) for cell in secret_cells))
         self.assertEqual("TAJENKA", "".join(cell.value for cell in secret_cells))
+
+    def test_loads_and_writes_secret_cell_arrows(self) -> None:
+        crossword = load_crossword_grid(GRID_SECRET_ARROWS_EXAMPLE)
+
+        assert crossword.grid.cells is not None
+        self.assertEqual("right", crossword.grid.cells[1][1].arrow)
+        self.assertEqual("down", crossword.grid.cells[1][3].arrow)
+        self.assertEqual("left", crossword.grid.cells[3][3].arrow)
+        self.assertIsNone(crossword.grid.cells[3][2].arrow)
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "secret-arrows.yaml"
+            write_crossword_grid(crossword, output)
+            self.assertEqual(crossword, load_crossword_grid(output))
+
+    def test_rejects_secret_arrow_on_regular_letter(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "letter-arrow.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: grid\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 1\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: letter, value: A, arrow: right}]\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ModelError, r"\$\.grid\.cells\[0\]\[0\]"):
+                load_crossword_grid(source)
 
     def test_loads_single_and_double_legend(self) -> None:
         crossword = load_crossword_grid(GRID_LEGEND_EXAMPLE)
@@ -789,6 +915,23 @@ class CommandTest(unittest.TestCase):
                     [
                         "render",
                         str(GRID_HELP_EXAMPLE),
+                        "--output",
+                        str(output),
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            self.assertTrue(output.read_bytes().startswith(b"%PDF-"))
+
+    def test_render_handles_secret_cell_arrows(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "secret-arrows.pdf"
+
+            with redirect_stdout(io.StringIO()):
+                result = main(
+                    [
+                        "render",
+                        str(GRID_SECRET_ARROWS_EXAMPLE),
                         "--output",
                         str(output),
                     ]

@@ -69,17 +69,21 @@ Zadání rozlišuje tajenku složenou z vybraných polí a tajenku, která je so
 ```yaml
 secrets:
   - type: cells
+    arrows: true
     cells:
       - {row: 2, column: 2}
+      - {row: 2, column: 3}
+      - {row: 2, column: 4}
       - {row: 2, column: 5}
-      - {row: 4, column: 2}
+      - {row: 3, column: 5}
+      - {row: 4, column: 5}
   - type: word
     answer: KŘÍŽOVKÁŘ
     start: {row: 5, column: 2}
     direction: horizontal
 ```
 
-U `type: cells` určuje pořadí souřadnic také pořadí čtení a každé vybrané pole musí obsahovat písmeno. `type: word` se umisťuje a kříží stejně jako běžné heslo, ale jeho písmena budou zvýrazněná jako tajenka. Odpověď zadává autor přímo a nemusí být ve slovníku; vynechaná `legend` dostane automaticky text `Tajenka`. Obě podoby ukazuje [zadání s tajenkami](examples/specification-secrets.yaml).
+U `type: cells` určuje pořadí souřadnic také pořadí čtení a každé vybrané pole musí obsahovat písmeno. Tato podoba nemá vlastní legendu. Volitelné `arrows: true` vyžaduje cestu přes sousední pole a přidá malou odchozí šipku na její začátek a na každé místo změny směru. Bez této volby mohou pole zůstat libovolně rozmístěná. `type: word` se umisťuje a kříží stejně jako běžné heslo, ale jeho písmena budou zvýrazněná jako tajenka. Odpověď zadává autor přímo a nemusí být ve slovníku; vynechaná `legend` dostane automaticky text `Tajenka`. Obě podoby ukazuje [zadání s tajenkami](examples/specification-secrets.yaml).
 
 Význam obou dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md). Strojová pravidla jsou oddělená v [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json) a [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json).
 
@@ -90,10 +94,10 @@ grid:
   width: 3
   height: 1
   cells:
-    - [{type: letter, value: Č}, {type: letter, value: CH}, {type: secret, value: Á}]
+    - [{type: secret, value: Č, arrow: right}, {type: letter, value: CH}, {type: letter, value: Á}]
 ```
 
-Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. České `CH` zabírá jednu buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku. Tajenková buňka má v PDF světle šedé pozadí. Cílová mřížka už nerozlišuje, zda tajenku určil seznam polí, nebo souvislé heslo; u druhé varianty navíc obsahuje legendovou buňku s textem „Tajenka“. Zápis ukazuje [mřížka s českými písmeny](examples/grid-czech-letters.yaml); v [ukázkové mřížce s tajenkou](examples/grid-secret.yaml) zvýrazněné buňky skládají slovo „TAJENKA“.
+Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. České `CH` zabírá jednu buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku. Tajenková buňka má v PDF světle šedé pozadí a může mít jednu rohovou `arrow` ve směru `up`, `right`, `down` nebo `left`. Jde o jinou značku než seznam `arrows` v legendové buňce. Cílová mřížka už nerozlišuje, zda tajenku určil seznam polí, nebo souvislé heslo; u druhé varianty navíc obsahuje legendovou buňku s textem „Tajenka“. Zápis ukazuje [mřížka s českými písmeny](examples/grid-czech-letters.yaml); [ukázková cesta se šipkami](examples/grid-secret-arrows.yaml) mění směr dvakrát.
 
 Legenda používá neprázdný seznam textů a může u nich výslovně uvést směrové šipky:
 
@@ -161,7 +165,7 @@ uv run krizovkar validate build/generated-grid.yaml
 
 Chyba znamená neplatný nebo vnitřně rozporný datový model a příkaz skončí návratovým kódem `2`. Varování znamená platnou mřížku, kterou lze dál zpracovat a vykreslit, ale porušuje některé pravidlo kvality; návratový kód zůstává `0`.
 
-Profil nyní varuje zejména před šipkami, nesouladem počtu textů a navazujících směrů, heslem bez bezprostředně předcházející legendy a oddělenými písmennými ostrovy. Jednoduchá legenda má jeden text a směr; dvojitá má dva texty v pořadí doprava a dolů. Tato pravidla nejsou omezením obecného formátu a jiné druhy křížovek mohou v budoucnu používat jiný profil.
+Profil nyní varuje zejména před směrovými šipkami v legendách, nesouladem počtu textů a navazujících směrů, heslem bez bezprostředně předcházející legendy a oddělenými písmennými ostrovy. Rohové šipky tajenky toto varování nevyvolávají. Jednoduchá legenda má jeden text a směr; dvojitá má dva texty v pořadí doprava a dolů. Tato pravidla nejsou omezením obecného formátu a jiné druhy křížovek mohou v budoucnu používat jiný profil.
 
 ## Vytvoření PDF
 

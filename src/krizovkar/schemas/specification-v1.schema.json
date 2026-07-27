@@ -53,7 +53,7 @@
       }
     },
     "secrets": {
-      "description": "Tajenky určené buňkami nebo souvislým slovem s legendou.",
+      "description": "Tajenky určené buňkami nebo souvislým slovem.",
       "type": "array",
       "minItems": 1,
       "items": {
@@ -188,6 +188,11 @@
             "$ref": "#/$defs/coordinate"
           }
         },
+        "arrows": {
+          "description": "Zda se vyznačí začátek a změny směru cesty.",
+          "type": "boolean",
+          "default": false
+        },
         "answer": {
           "description": "Přesná posloupnost písmen souvislé tajenky.",
           "type": "string",
@@ -266,8 +271,17 @@
               "direction"
             ],
             "not": {
-              "required": [
-                "cells"
+              "anyOf": [
+                {
+                  "required": [
+                    "cells"
+                  ]
+                },
+                {
+                  "required": [
+                    "arrows"
+                  ]
+                }
               ]
             }
           }

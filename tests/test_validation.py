@@ -15,6 +15,7 @@ from krizovkar.model import (
     Grid,
     LegendCell,
     LetterCell,
+    SecretCell,
     write_crossword_grid,
 )
 from krizovkar.validation import (
@@ -66,7 +67,7 @@ def _replace_cell(
     crossword: CrosswordGrid,
     row: int,
     column: int,
-    replacement: EmptyCell | LegendCell | LetterCell,
+    replacement: EmptyCell | LegendCell | LetterCell | SecretCell,
 ) -> CrosswordGrid:
     assert crossword.grid.cells is not None
     rows = [list(cell_row) for cell_row in crossword.grid.cells]
@@ -131,6 +132,19 @@ class QualityValidationTest(unittest.TestCase):
             2,
             2,
             LegendCell(texts=("Doprava", "Dolů")),
+        )
+
+        report = check_dense_swedish_grid(crossword)
+
+        self.assertTrue(report.is_valid)
+        self.assertEqual((), report.warnings)
+
+    def test_secret_cell_arrow_is_without_warning(self) -> None:
+        crossword = _replace_cell(
+            _good_dense_grid(),
+            2,
+            2,
+            SecretCell(value="A", arrow="right"),
         )
 
         report = check_dense_swedish_grid(crossword)

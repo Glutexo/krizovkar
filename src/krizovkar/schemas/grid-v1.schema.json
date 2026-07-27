@@ -80,6 +80,15 @@
           "type": "string",
           "pattern": "^(?:CH|[A-ZÁÄČĎÉĚÍŇÓÔÖŘŠŤÚŮÜÝŽ])$"
         },
+        "arrow": {
+          "description": "Volitelná odchozí šipka v rohu tajenkové buňky.",
+          "enum": [
+            "up",
+            "right",
+            "down",
+            "left"
+          ]
+        },
         "texts": {
           "type": "array",
           "minItems": 1,
@@ -111,6 +120,25 @@
         }
       },
       "allOf": [
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "letter"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "arrow"
+              ]
+            }
+          }
+        },
         {
           "if": {
             "required": [
@@ -176,6 +204,11 @@
                   "required": [
                     "words"
                   ]
+                },
+                {
+                  "required": [
+                    "arrow"
+                  ]
                 }
               ]
             }
@@ -214,6 +247,11 @@
                   "required": [
                     "arrows"
                   ]
+                },
+                {
+                  "required": [
+                    "arrow"
+                  ]
                 }
               ]
             }
@@ -249,6 +287,11 @@
                 {
                   "required": [
                     "arrows"
+                  ]
+                },
+                {
+                  "required": [
+                    "arrow"
                   ]
                 }
               ]
