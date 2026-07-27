@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from functools import cache
 from io import BytesIO
 from pathlib import Path
@@ -37,6 +38,7 @@ TEXT_CELL_MAX_FONT_SIZE = 6.0
 TEXT_CELL_MIN_FONT_SIZE = 2.0
 TEXT_CELL_FONT_STEP = 0.25
 TEXT_CELL_PADDING = 1.5
+_UNBREAKABLE_TEXT = re.compile(r"[^ \t\r\n]+")
 LEGEND_SEPARATOR_LINE_WIDTH = 0.4
 LEGEND_ARROW_LINE_WIDTH = 0.75
 LEGEND_ARROW_LENGTH_RATIO = 0.18
@@ -84,6 +86,29 @@ def _register_text_cell_fonts() -> None:
     )
 
 
+def _mark_overlong_czech_text(
+    text: str,
+    width: float,
+    font_size: float,
+) -> str:
+    """Vyznačí dělení jen v částech, které se nevejdou na řádek."""
+
+    def mark_if_overlong(match: re.Match[str]) -> str:
+        unbreakable_text = match.group()
+        if (
+            pdfmetrics.stringWidth(
+                unbreakable_text,
+                TEXT_CELL_FONT,
+                font_size,
+            )
+            <= width
+        ):
+            return unbreakable_text
+        return mark_czech_hyphenation(unbreakable_text)
+
+    return _UNBREAKABLE_TEXT.sub(mark_if_overlong, text)
+
+
 def _draw_fitted_text(
     pdf: Canvas,
     text: str,
@@ -98,20 +123,21 @@ def _draw_fitted_text(
     maximum = min(TEXT_CELL_MAX_FONT_SIZE, height * 0.45)
     minimum = min(TEXT_CELL_MIN_FONT_SIZE, maximum)
     font_size = maximum
-    content = escape(
-        mark_czech_hyphenation(protect_czech_prepositions(text))
-    )
-    if prefix is not None:
-        content = f"<b>{escape(prefix)}</b> {content}"
+    protected_text = protect_czech_prepositions(text)
 
     while font_size >= minimum:
+        content = escape(
+            _mark_overlong_czech_text(protected_text, width, font_size)
+        )
+        if prefix is not None:
+            content = f"<b>{escape(prefix)}</b> {content}"
         style = ParagraphStyle(
             name="text-cell",
             fontName=TEXT_CELL_FONT,
             fontSize=font_size,
             leading=font_size * 1.05,
             alignment=TA_CENTER,
-            hyphenationLang="cs_CZ",
+            hyphenationLang="",
             splitLongWords=0,
             spaceBefore=0,
             spaceAfter=0,
