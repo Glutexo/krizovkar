@@ -25,6 +25,7 @@ from krizovkar.model import (
     HelpCell,
     LegendArrow,
     LegendCell,
+    LetterCell,
     SecretArrow,
     SecretCell,
 )
@@ -381,6 +382,28 @@ def _draw_empty_cell(
     pdf.restoreState()
 
 
+def _draw_letter_cell(
+    pdf: Canvas,
+    cell: LetterCell | SecretCell,
+    center_x: float,
+    center_y: float,
+    cell_size: float,
+    font_size: float,
+) -> None:
+    text_width = pdfmetrics.stringWidth(
+        cell.value,
+        LETTER_FONT,
+        font_size,
+    )
+    fitted_size = min(
+        font_size,
+        font_size * cell_size * 0.8 / text_width,
+    )
+    baseline = center_y - fitted_size * LETTER_BASELINE_OFFSET
+    pdf.setFont(LETTER_FONT, fitted_size)
+    pdf.drawCentredString(center_x, baseline, cell.value)
+
+
 def resolve_page_size(page_format: str) -> tuple[float, float]:
     """Vrátí rozměr stránky pro podporovaný název formátu."""
 
@@ -399,6 +422,8 @@ def _write_pdf(
     crossword: CrosswordGrid,
     target: Path,
     page_size: tuple[float, float],
+    *,
+    filled: bool,
 ) -> None:
     page_width, page_height = page_size
     width = crossword.grid.width
@@ -416,11 +441,12 @@ def _write_pdf(
     pdf = Canvas(str(target), pagesize=page_size, pageCompression=1)
     pdf.setTitle(f"Křížovkář – mřížka {width} × {height}")
     pdf.setCreator("Křížovkář")
-    subject = (
-        "Křížovková mřížka s písmeny"
-        if crossword.grid.cells is not None
-        else "Prázdná křížovková mřížka"
-    )
+    if crossword.grid.cells is None:
+        subject = "Prázdná křížovková mřížka"
+    elif filled:
+        subject = "Vyplněná křížovková mřížka"
+    else:
+        subject = "Nevyplněná křížovková mřížka"
     pdf.setSubject(subject)
     pdf.setStrokeColorRGB(0, 0, 0)
 
@@ -474,27 +500,24 @@ def _write_pdf(
                         cell_size,
                     )
 
+    if crossword.grid.cells is not None and filled:
         font_size = cell_size * LETTER_SIZE_RATIO
         _register_text_cell_fonts()
         pdf.setFillColorRGB(0, 0, 0)
         for row_index, row in enumerate(crossword.grid.cells):
             center_y = bottom + grid_height - (row_index + 0.5) * cell_size
             for column_index, cell in enumerate(row):
-                if isinstance(cell, (LegendCell, EmptyCell, HelpCell)):
+                if not isinstance(cell, (LetterCell, SecretCell)):
                     continue
                 center_x = left + (column_index + 0.5) * cell_size
-                text_width = pdfmetrics.stringWidth(
-                    cell.value,
-                    LETTER_FONT,
+                _draw_letter_cell(
+                    pdf,
+                    cell,
+                    center_x,
+                    center_y,
+                    cell_size,
                     font_size,
                 )
-                fitted_size = min(
-                    font_size,
-                    font_size * cell_size * 0.8 / text_width,
-                )
-                baseline = center_y - fitted_size * LETTER_BASELINE_OFFSET
-                pdf.setFont(LETTER_FONT, fitted_size)
-                pdf.drawCentredString(center_x, baseline, cell.value)
 
     pdf.setLineWidth(INNER_LINE_WIDTH)
     for column in range(1, width):
@@ -516,8 +539,9 @@ def render_pdf(
     *,
     overwrite: bool = False,
     page_format: str = DEFAULT_PAGE_FORMAT,
+    filled: bool = True,
 ) -> Path:
-    """Vykreslí křížovku atomicky do jednostránkového PDF."""
+    """Vykreslí vyplněnou či nevyplněnou křížovku atomicky do PDF."""
 
     output_path = Path(output)
     page_size = resolve_page_size(page_format)
@@ -534,7 +558,12 @@ def render_pdf(
         ) as temporary:
             temporary_path = Path(temporary.name)
 
-        _write_pdf(crossword, temporary_path, page_size)
+        _write_pdf(
+            crossword,
+            temporary_path,
+            page_size,
+            filled=filled,
+        )
         temporary_path.replace(output_path)
     except OSError as error:
         detail = error.strerror or str(error)

@@ -1,18 +1,32 @@
-"""Testy sazby textu v PDF rendereru."""
+"""Testy sazby a obsahových režimů PDF rendereru."""
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from reportlab.lib.styles import ParagraphStyle
 
+from krizovkar.model import (
+    CrosswordGrid,
+    EmptyCell,
+    Grid,
+    LegendCell,
+    LetterCell,
+    SecretCell,
+)
 from krizovkar.renderer import (
     MAX_CELL_SIZE,
     TEXT_CELL_FONT_STEP,
     TEXT_CELL_MAX_FONT_SIZE,
     TEXT_CELL_PADDING,
     _draw_fitted_text,
+    _draw_legend_cell,
+    _draw_letter_cell,
+    _draw_secret_arrow,
+    render_pdf,
 )
 from krizovkar.typography import SOFT_HYPHEN
 
@@ -58,6 +72,59 @@ class FittedTextTest(unittest.TestCase):
             TEXT_CELL_MAX_FONT_SIZE - TEXT_CELL_FONT_STEP,
             style.fontSize,
         )
+
+
+class RenderModeTest(unittest.TestCase):
+    crossword = CrosswordGrid(
+        format_name="krizovkar",
+        kind="grid",
+        version=1,
+        grid=Grid(
+            width=2,
+            height=2,
+            cells=(
+                (
+                    LegendCell(texts=("Tajenka",)),
+                    SecretCell(value="A", arrow="right"),
+                ),
+                (LetterCell(value="B"), EmptyCell()),
+            ),
+        ),
+    )
+
+    def test_filled_pdf_draws_letters_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "filled.pdf"
+            with patch(
+                "krizovkar.renderer._draw_letter_cell",
+                wraps=_draw_letter_cell,
+            ) as draw_letter:
+                render_pdf(self.crossword, output)
+
+        self.assertEqual(2, draw_letter.call_count)
+
+    def test_blank_pdf_keeps_legend_and_secret_arrow(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "blank.pdf"
+            with (
+                patch(
+                    "krizovkar.renderer._draw_letter_cell",
+                    wraps=_draw_letter_cell,
+                ) as draw_letter,
+                patch(
+                    "krizovkar.renderer._draw_legend_cell",
+                    wraps=_draw_legend_cell,
+                ) as draw_legend,
+                patch(
+                    "krizovkar.renderer._draw_secret_arrow",
+                    wraps=_draw_secret_arrow,
+                ) as draw_secret_arrow,
+            ):
+                render_pdf(self.crossword, output, filled=False)
+
+        draw_letter.assert_not_called()
+        draw_legend.assert_called_once()
+        draw_secret_arrow.assert_called_once()
 
 
 if __name__ == "__main__":

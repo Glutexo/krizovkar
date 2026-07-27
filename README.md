@@ -198,6 +198,16 @@ uv run krizovkar render examples/grid-random-letters.yaml \
 
 Volba `--page-format` přijímá `A0` až `A6`, `Letter` a `Legal`; nerozlišuje velikost písmen a její výchozí hodnota je `A4`. Výsledkem je vektorové PDF na zvoleném formátu s mřížkou a případnými písmeny podle datového modelu.
 
+Výchozí PDF je vyplněné. Pro tisk prázdné křížovky přidej `--blank`:
+
+```shell
+uv run krizovkar render examples/grid-secret-arrows.yaml \
+  --blank \
+  --output build/secret-arrows-blank.pdf
+```
+
+Prázdná varianta skryje hodnoty běžných i tajenkových písmenných buněk. Legendy, pomůcky, nevyplňovaná pole, šedé zvýraznění tajenky a její rohové šipky zůstanou zobrazené stejně jako ve vyplněné variantě.
+
 Bez volby `--output` vznikne PDF vedle vstupního souboru se stejným názvem. Existující soubor příkaz nepřepíše, dokud není přidána volba `--force`.
 
 Nápovědu vypíše:

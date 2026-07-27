@@ -122,6 +122,14 @@ def _parser() -> argparse.ArgumentParser:
             f"{', '.join(SUPPORTED_PAGE_FORMATS)}; výchozí je {DEFAULT_PAGE_FORMAT}"
         ),
     )
+    render.add_argument(
+        "--blank",
+        action="store_true",
+        help=(
+            "skryje písmena; legendy, pomůcky, zvýraznění a šipky tajenky "
+            "zůstanou"
+        ),
+    )
     render.set_defaults(handler=_render)
     return parser
 
@@ -169,6 +177,7 @@ def _render(arguments: argparse.Namespace) -> int:
             output,
             overwrite=arguments.force,
             page_format=arguments.page_format,
+            filled=not arguments.blank,
         )
     except (ModelError, RenderError) as error:
         print(f"chyba: {error}", file=sys.stderr)

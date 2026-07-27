@@ -1024,6 +1024,24 @@ class CommandTest(unittest.TestCase):
             self.assertEqual(0, result)
             self.assertTrue(output.read_bytes().startswith(b"%PDF-"))
 
+    def test_render_handles_secret_cell_arrows_in_blank_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "blank-secret-arrows.pdf"
+
+            with redirect_stdout(io.StringIO()):
+                result = main(
+                    [
+                        "render",
+                        str(GRID_SECRET_ARROWS_EXAMPLE),
+                        "--output",
+                        str(output),
+                        "--blank",
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            self.assertTrue(output.read_bytes().startswith(b"%PDF-"))
+
     def test_render_handles_three_legend_texts_and_arrow(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "three-legends.yaml"
