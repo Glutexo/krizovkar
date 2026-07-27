@@ -15,6 +15,7 @@ from reportlab.lib.pagesizes import A5
 from krizovkar.cli import main
 from krizovkar.model import (
     Coordinate,
+    DEFAULT_SECRET_LEGEND,
     EmptyCell,
     GridDimensions,
     HelpCell,
@@ -123,25 +124,24 @@ class ModelTest(unittest.TestCase):
         )
         self.assertIsInstance(word, SecretWord)
         assert isinstance(word, SecretWord)
-        self.assertEqual("AMONIT", word.answer)
+        self.assertEqual("KŘÍŽOVKÁŘ", word.answer)
         self.assertEqual(Coordinate(row=5, column=2), word.start)
         self.assertEqual("horizontal", word.direction)
-        self.assertEqual("Zkamenělý hlavonožec", word.legend)
+        self.assertEqual(DEFAULT_SECRET_LEGEND, word.legend)
 
-    def test_loads_specification_with_only_word_secret(self) -> None:
+    def test_loads_arbitrary_secret_word_without_dictionary_or_legend(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "word-secret-only.yaml"
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
                 "version: 1\n"
-                "grid: {width: 6, height: 1}\n"
+                "grid: {width: 7, height: 1}\n"
                 "secrets:\n"
                 "  - type: word\n"
-                "    answer: AMONIT\n"
+                "    answer: GLUTEXO\n"
                 "    start: {row: 1, column: 1}\n"
-                "    direction: horizontal\n"
-                "    legend: Zkamenělý hlavonožec\n",
+                "    direction: horizontal\n",
                 encoding="utf-8",
             )
 
@@ -149,6 +149,11 @@ class ModelTest(unittest.TestCase):
 
             self.assertEqual((), specification.words)
             self.assertEqual(1, len(specification.secrets))
+            secret = specification.secrets[0]
+            self.assertIsInstance(secret, SecretWord)
+            assert isinstance(secret, SecretWord)
+            self.assertEqual("GLUTEXO", secret.answer)
+            self.assertEqual(DEFAULT_SECRET_LEGEND, secret.legend)
 
     def test_rejects_secret_cell_outside_grid(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -221,7 +226,7 @@ class ModelTest(unittest.TestCase):
             with self.assertRaisesRegex(ModelError, r"\$\.secrets\[0\].*v rozporu"):
                 load_crossword_specification(source)
 
-    def test_rejects_secret_word_without_legend(self) -> None:
+    def test_rejects_empty_explicit_secret_word_legend(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "secret-word-without-legend.yaml"
             source.write_text(
@@ -238,11 +243,12 @@ class ModelTest(unittest.TestCase):
                 "  - type: word\n"
                 "    answer: AB\n"
                 "    start: {row: 1, column: 1}\n"
-                "    direction: horizontal\n",
+                "    direction: horizontal\n"
+                "    legend: '   '\n",
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(ModelError, r"\$\.secrets\[0\]"):
+            with self.assertRaisesRegex(ModelError, r"\$\.secrets\[0\]\.legend"):
                 load_crossword_specification(source)
 
     def test_loads_explicit_help_position(self) -> None:

@@ -205,10 +205,11 @@
           ]
         },
         "legend": {
-          "description": "Neprázdný text vlastní legendy souvislé tajenky.",
+          "description": "Volitelný text legendy; při vynechání se použije Tajenka.",
           "type": "string",
           "minLength": 1,
-          "pattern": "\\S"
+          "pattern": "\\S",
+          "default": "Tajenka"
         }
       },
       "allOf": [
@@ -262,8 +263,7 @@
             "required": [
               "answer",
               "start",
-              "direction",
-              "legend"
+              "direction"
             ],
             "not": {
               "required": [

@@ -24,6 +24,7 @@ class ModelError(ValueError):
 
 WordDirection = Literal["horizontal", "vertical"]
 LegendArrow = Literal["right", "down"]
+DEFAULT_SECRET_LEGEND = "Tajenka"
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,7 +124,7 @@ class SecretWord:
     answer: str
     start: Coordinate
     direction: WordDirection
-    legend: str
+    legend: str = DEFAULT_SECRET_LEGEND
 
 
 SecretDefinition = SecretCells | SecretWord
@@ -294,7 +295,7 @@ def load_crossword_specification(
                 column=secret["start"]["column"],
             ),
             direction=secret["direction"],
-            legend=secret["legend"],
+            legend=secret.get("legend", DEFAULT_SECRET_LEGEND),
         )
         for secret in data.get("secrets", ())
     )

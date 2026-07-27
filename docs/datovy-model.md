@@ -58,7 +58,7 @@ Podporované typy jsou:
 
 U obou typů musí být `value` právě jedno podporované velké písmeno. Písmena si zachovávají diakritiku; české `CH` se zapisuje jako jedna hodnota a zabírá jednu buňku. Renderer odlišuje tajenkovou buňku světle šedým pozadím.
 
-Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Cílová mřížka pouze označuje buňky tajenky. Jejich pořadí, seskupení a případnou vlastní legendu uchovává zdrojové zadání `specification`.
+Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Cílová mřížka pouze označuje buňky tajenky. Jejich pořadí a seskupení uchovává zdrojové zadání `specification`.
 
 ## Buňka legendy
 
@@ -152,18 +152,19 @@ secrets:
 
 Souřadnice jsou uvedené přímo v pořadí, v jaké se tajenka čte. Nesmějí se v jednom seznamu opakovat, musí ležet uvnitř mřížky a odkazovat na písmena některého umístěného běžného nebo tajenkového slova. Pole nemusejí tvořit přímku ani spolu sousedit.
 
-Tajenka `type: word` je souvislé vodorovné nebo svislé slovo s vlastní legendou:
+Tajenka `type: word` je souvislé vodorovné nebo svislé slovo:
 
 ```yaml
 secrets:
   - type: word
-    answer: AMONIT
+    answer: KŘÍŽOVKÁŘ
     start: {row: 5, column: 2}
     direction: horizontal
-    legend: Zkamenělý hlavonožec
 ```
 
-Položky `answer`, `start`, `direction` a `legend` mají stejný význam jako u běžného umístěného slova. Tajenkové slovo se už neopakuje ve `words`; samo obsazuje písmenná pole, může se křížit s ostatními slovy a při převodu do cílové mřížky dostane legendovou buňku a buňky `type: secret`.
+Položky `answer`, `start` a `direction` mají stejný význam jako u běžného umístěného slova. Odpověď zadává autor přímo a nekontroluje se proti slovníku; musí pouze používat podporovaná velká písmena a české `CH` opět zabírá jediné pole. Tajenkové slovo se neopakuje ve `words`; samo obsazuje písmenná pole a může se křížit s ostatními slovy.
+
+Vynechaná `legend` se při načtení doplní přesným textem `Tajenka`. Při převodu do cílové mřížky tak slovo dostane legendovou buňku označenou „Tajenka“ a písmena v buňkách `type: secret`. Výslovná neprázdná `legend` zůstává podporovaná kvůli zpětné kompatibilitě.
 
 Obě varianty mohou být v jednom zadání. Cílový dokument `grid` je při vykreslení zobrazuje stejným zvýrazněním; jejich původní definici zachovává pouze `specification`.
 
