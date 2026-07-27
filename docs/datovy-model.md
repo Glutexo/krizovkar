@@ -56,7 +56,7 @@ Podporované typy jsou:
 - `type: letter` pro běžnou písmennou buňku,
 - `type: secret` pro zvýrazněnou buňku, jejíž písmeno patří do tajenky.
 
-U obou typů musí být `value` právě jedno podporované velké písmeno. Písmena si zachovávají diakritiku; české `CH` se zapisuje jako jedna hodnota a zabírá jednu buňku. Renderer odlišuje tajenkovou buňku světle šedým pozadím. Jen `type: secret` může navíc obsahovat odchozí `arrow` ve směru `up`, `right`, `down` nebo `left`; vykreslí se jako malá šipka v levém horním rohu a nepřekrývá písmeno.
+U obou typů musí být `value` právě jedno podporované velké písmeno. Písmena si zachovávají diakritiku; české `CH` se zapisuje jako jedna hodnota a zabírá jednu buňku. Renderer odlišuje tajenkovou buňku světle šedým pozadím. Jen `type: secret` může navíc obsahovat odchozí `arrow` ve směru `up`, `right`, `down` nebo `left`; vykreslí se jako malá šipka v levém horním rohu, nepřekrývá písmeno a používá stejný tah, délku i hrot jako šipka legendy.
 
 Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Cílová mřížka pouze označuje buňky tajenky. Jejich pořadí a seskupení uchovává zdrojové zadání `specification`.
 

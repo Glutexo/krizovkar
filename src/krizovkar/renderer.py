@@ -23,6 +23,7 @@ from krizovkar.model import (
     CrosswordGrid,
     EmptyCell,
     HelpCell,
+    LegendArrow,
     LegendCell,
     SecretArrow,
     SecretCell,
@@ -37,8 +38,6 @@ LETTER_FONT = "KrizovkarNotoSansBold"
 LETTER_SIZE_RATIO = 0.58
 LETTER_BASELINE_OFFSET = 0.35
 SECRET_FILL_GRAY = 0.85
-SECRET_ARROW_LINE_WIDTH = 0.8
-SECRET_ARROW_LENGTH_RATIO = 0.2
 SECRET_ARROW_CORNER_CENTER_RATIO = 0.18
 LEGEND_FILL_GRAY = 0.93
 HELP_FILL_GRAY = 0.93
@@ -50,8 +49,9 @@ TEXT_CELL_FONT_STEP = 0.25
 TEXT_CELL_PADDING = 1.5
 _UNBREAKABLE_TEXT = re.compile(r"[^ \t\r\n]+")
 LEGEND_SEPARATOR_LINE_WIDTH = 0.4
-LEGEND_ARROW_LINE_WIDTH = 0.75
-LEGEND_ARROW_LENGTH_RATIO = 0.18
+ARROW_LINE_WIDTH = 0.75
+ARROW_LENGTH_RATIO = 0.18
+ARROW_HEAD_RATIO = 0.38
 EMPTY_SYMBOL_INSET_RATIO = 0.3
 EMPTY_SYMBOL_LINE_WIDTH = 0.65
 DEFAULT_PAGE_FORMAT = "A4"
@@ -76,6 +76,12 @@ _PAGE_SIZES = {
     "A6": A6,
     "LETTER": LETTER,
     "LEGAL": LEGAL,
+}
+_ARROW_VECTORS: dict[SecretArrow, tuple[float, float]] = {
+    "up": (0.0, 1.0),
+    "right": (1.0, 0.0),
+    "down": (0.0, -1.0),
+    "left": (-1.0, 0.0),
 }
 
 
@@ -257,36 +263,58 @@ def _draw_legend_cell(
 
 def _draw_legend_arrow(
     pdf: Canvas,
-    direction: str,
+    direction: LegendArrow,
     left: float,
     bottom: float,
     size: float,
     section_bottom: float,
     section_height: float,
 ) -> None:
-    length = size * LEGEND_ARROW_LENGTH_RATIO
-    head = length * 0.38
+    length = size * ARROW_LENGTH_RATIO
     inset = max(INNER_LINE_WIDTH, size * 0.04)
-
-    pdf.saveState()
-    pdf.setStrokeColorRGB(0, 0, 0)
-    pdf.setLineWidth(LEGEND_ARROW_LINE_WIDTH)
-    pdf.setLineCap(1)
-    pdf.setLineJoin(1)
 
     if direction == "right":
         tip_x = left + size - inset
         tip_y = section_bottom + section_height * 0.22
-        pdf.line(tip_x - length, tip_y, tip_x, tip_y)
-        pdf.line(tip_x, tip_y, tip_x - head, tip_y + head)
-        pdf.line(tip_x, tip_y, tip_x - head, tip_y - head)
     else:
         tip_x = left + size * 0.78
         tip_y = bottom + inset
-        pdf.line(tip_x, tip_y + length, tip_x, tip_y)
-        pdf.line(tip_x, tip_y, tip_x - head, tip_y + head)
-        pdf.line(tip_x, tip_y, tip_x + head, tip_y + head)
+    _draw_arrow(pdf, direction, tip_x, tip_y, length)
 
+
+def _draw_arrow(
+    pdf: Canvas,
+    direction: SecretArrow,
+    tip_x: float,
+    tip_y: float,
+    length: float,
+) -> None:
+    direction_x, direction_y = _ARROW_VECTORS[direction]
+    perpendicular_x, perpendicular_y = -direction_y, direction_x
+    head = length * ARROW_HEAD_RATIO
+    tail_x = tip_x - direction_x * length
+    tail_y = tip_y - direction_y * length
+    head_center_x = tip_x - direction_x * head
+    head_center_y = tip_y - direction_y * head
+
+    pdf.saveState()
+    pdf.setStrokeColorRGB(0, 0, 0)
+    pdf.setLineWidth(ARROW_LINE_WIDTH)
+    pdf.setLineCap(1)
+    pdf.setLineJoin(1)
+    pdf.line(tail_x, tail_y, tip_x, tip_y)
+    pdf.line(
+        tip_x,
+        tip_y,
+        head_center_x + perpendicular_x * head,
+        head_center_y + perpendicular_y * head,
+    )
+    pdf.line(
+        tip_x,
+        tip_y,
+        head_center_x - perpendicular_x * head,
+        head_center_y - perpendicular_y * head,
+    )
     pdf.restoreState()
 
 
@@ -297,45 +325,13 @@ def _draw_secret_arrow(
     bottom: float,
     size: float,
 ) -> None:
-    vectors = {
-        "up": (0.0, 1.0),
-        "right": (1.0, 0.0),
-        "down": (0.0, -1.0),
-        "left": (-1.0, 0.0),
-    }
-    direction_x, direction_y = vectors[direction]
-    perpendicular_x, perpendicular_y = -direction_y, direction_x
-    length = size * SECRET_ARROW_LENGTH_RATIO
-    head = length * 0.38
+    direction_x, direction_y = _ARROW_VECTORS[direction]
+    length = size * ARROW_LENGTH_RATIO
     center_x = left + size * SECRET_ARROW_CORNER_CENTER_RATIO
     center_y = bottom + size * (1 - SECRET_ARROW_CORNER_CENTER_RATIO)
-    tail_x = center_x - direction_x * length / 2
-    tail_y = center_y - direction_y * length / 2
     tip_x = center_x + direction_x * length / 2
     tip_y = center_y + direction_y * length / 2
-    head_center_x = tip_x - direction_x * head
-    head_center_y = tip_y - direction_y * head
-    head_side = head * 0.62
-
-    pdf.saveState()
-    pdf.setStrokeColorRGB(0, 0, 0)
-    pdf.setLineWidth(SECRET_ARROW_LINE_WIDTH)
-    pdf.setLineCap(1)
-    pdf.setLineJoin(1)
-    pdf.line(tail_x, tail_y, tip_x, tip_y)
-    pdf.line(
-        tip_x,
-        tip_y,
-        head_center_x + perpendicular_x * head_side,
-        head_center_y + perpendicular_y * head_side,
-    )
-    pdf.line(
-        tip_x,
-        tip_y,
-        head_center_x - perpendicular_x * head_side,
-        head_center_y - perpendicular_y * head_side,
-    )
-    pdf.restoreState()
+    _draw_arrow(pdf, direction, tip_x, tip_y, length)
 
 
 def _draw_help_cell(
