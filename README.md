@@ -144,7 +144,7 @@ uv run krizovkar validate build/generated-grid.yaml
 
 Chyba znamená neplatný nebo vnitřně rozporný datový model a příkaz skončí návratovým kódem `2`. Varování znamená platnou mřížku, kterou lze dál zpracovat a vykreslit, ale porušuje některé pravidlo kvality; návratový kód zůstává `0`.
 
-Profil nyní varuje zejména před šipkami, více texty v jedné legendě, chybějícím či nejednoznačným směrem hesla, oddělenými písmennými ostrovy, mezerou mimo průsečík legendových hran a neúplným pokrytím těchto hran legendami. Tato pravidla nejsou omezením obecného formátu a jiné druhy křížovek mohou v budoucnu používat jiný profil.
+Profil nyní varuje zejména před šipkami, nesouladem počtu textů a navazujících směrů, heslem bez bezprostředně předcházející legendy a oddělenými písmennými ostrovy. Jednoduchá legenda má jeden text a směr; dvojitá má dva texty v pořadí doprava a dolů. Tato pravidla nejsou omezením obecného formátu a jiné druhy křížovek mohou v budoucnu používat jiný profil.
 
 ## Vytvoření PDF
 

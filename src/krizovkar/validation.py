@@ -8,7 +8,6 @@ from typing import Literal
 
 from krizovkar.model import (
     CrosswordGrid,
-    EmptyCell,
     LegendCell,
     LetterCell,
     ModelError,
@@ -117,6 +116,53 @@ def _letter_component_count(crossword: CrosswordGrid) -> int:
     return component_count
 
 
+def _word_start_warnings(crossword: CrosswordGrid) -> list[ValidationIssue]:
+    cells = crossword.grid.cells
+    assert cells is not None
+    issues: list[ValidationIssue] = []
+
+    for row, cell_row in enumerate(cells):
+        for column, cell in enumerate(cell_row):
+            if not isinstance(cell, (LetterCell, SecretCell)):
+                continue
+
+            left_is_letter = column > 0 and isinstance(
+                cells[row][column - 1],
+                (LetterCell, SecretCell),
+            )
+            if not left_is_letter and (
+                column == 0
+                or not isinstance(cells[row][column - 1], LegendCell)
+            ):
+                clue_column = max(0, column - 1)
+                issues.append(
+                    _warning(
+                        "layout.missing-legend",
+                        _cell_path(row, clue_column),
+                        "vodorovné heslo nemá bezprostředně vlevo legendu",
+                    )
+                )
+
+            above_is_letter = row > 0 and isinstance(
+                cells[row - 1][column],
+                (LetterCell, SecretCell),
+            )
+            if not above_is_letter and (
+                row == 0
+                or not isinstance(cells[row - 1][column], LegendCell)
+            ):
+                clue_row = max(0, row - 1)
+                issues.append(
+                    _warning(
+                        "layout.missing-legend",
+                        _cell_path(clue_row, column),
+                        "svislé heslo nemá bezprostředně nad sebou legendu",
+                    )
+                )
+
+    return issues
+
+
 def check_dense_swedish_grid(crossword: CrosswordGrid) -> ValidationReport:
     """Posoudí kvalitu husté švédské mřížky bez jejího odmítnutí."""
 
@@ -144,7 +190,7 @@ def check_dense_swedish_grid(crossword: CrosswordGrid) -> ValidationReport:
             )
         )
 
-    directions_by_legend: dict[tuple[int, int], tuple[AnswerDirection, ...]] = {}
+    legend_count = 0
 
     for row, cell_row in enumerate(cells):
         for column, cell in enumerate(cell_row):
@@ -153,14 +199,15 @@ def check_dense_swedish_grid(crossword: CrosswordGrid) -> ValidationReport:
 
             path = _cell_path(row, column)
             directions = _answer_directions(crossword, row, column)
-            directions_by_legend[(row, column)] = directions
+            legend_count += 1
 
-            if len(cell.texts) != 1:
+            if directions and len(cell.texts) != len(directions):
                 issues.append(
                     _warning(
                         "legend.text-count",
                         f"{path}.texts",
-                        "dobrá bezšipková legenda má právě jeden text",
+                        "počet textů legendy neodpovídá počtu "
+                        "navazujících směrů",
                     )
                 )
             if cell.arrows:
@@ -188,17 +235,8 @@ def check_dense_swedish_grid(crossword: CrosswordGrid) -> ValidationReport:
                         "z legendy bezprostředně nevychází heslo doprava ani dolů",
                     )
                 )
-            elif len(directions) > 1:
-                issues.append(
-                    _warning(
-                        "legend.ambiguous-direction",
-                        path,
-                        "z legendy vychází heslo doprava i dolů, "
-                        "takže směr není jednoznačný",
-                    )
-                )
 
-    if not directions_by_legend:
+    if not legend_count:
         issues.append(
             _warning(
                 "layout.no-legends",
@@ -208,69 +246,7 @@ def check_dense_swedish_grid(crossword: CrosswordGrid) -> ValidationReport:
         )
         return ValidationReport(tuple(issues))
 
-    legend_rows = {
-        row
-        for (row, _), directions in directions_by_legend.items()
-        if directions == ("down",)
-    }
-    legend_columns = {
-        column
-        for (_, column), directions in directions_by_legend.items()
-        if directions == ("right",)
-    }
-
-    if 0 not in legend_rows:
-        issues.append(
-            _warning(
-                "layout.top-edge",
-                "$.grid.cells[0]",
-                "horní strana není úplnou legendovou hranou",
-            )
-        )
-    if 0 not in legend_columns:
-        issues.append(
-            _warning(
-                "layout.left-edge",
-                "$.grid.cells",
-                "levá strana není úplnou legendovou hranou",
-            )
-        )
-
-    if legend_rows and legend_columns:
-        for row, cell_row in enumerate(cells):
-            for column, cell in enumerate(cell_row):
-                path = _cell_path(row, column)
-                on_legend_row = row in legend_rows
-                on_legend_column = column in legend_columns
-
-                if on_legend_row and on_legend_column:
-                    if not isinstance(cell, EmptyCell):
-                        issues.append(
-                            _warning(
-                                "layout.legend-intersection",
-                                path,
-                                "průsečík legendového řádku a sloupce "
-                                "má být nevyplňovaný",
-                            )
-                        )
-                elif on_legend_row or on_legend_column:
-                    if not isinstance(cell, LegendCell):
-                        issues.append(
-                            _warning(
-                                "layout.missing-legend",
-                                path,
-                                "legendová hrana má být souvisle pokrytá legendami",
-                            )
-                        )
-                elif isinstance(cell, EmptyCell):
-                    issues.append(
-                        _warning(
-                            "layout.unnecessary-empty",
-                            path,
-                            "nevyplňovaná buňka neleží v průsečíku "
-                            "legendových hran",
-                        )
-                    )
+    issues.extend(_word_start_warnings(crossword))
 
     return ValidationReport(tuple(issues))
 

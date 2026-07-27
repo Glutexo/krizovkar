@@ -125,7 +125,20 @@ class QualityValidationTest(unittest.TestCase):
             {issue.code for issue in report.warnings},
         )
 
-    def test_unnecessary_empty_cell_is_only_a_warning(self) -> None:
+    def test_double_legend_for_right_and_down_is_without_warning(self) -> None:
+        crossword = _replace_cell(
+            _good_dense_grid(),
+            2,
+            2,
+            LegendCell(texts=("Doprava", "Dolů")),
+        )
+
+        report = check_dense_swedish_grid(crossword)
+
+        self.assertTrue(report.is_valid)
+        self.assertEqual((), report.warnings)
+
+    def test_empty_cell_before_words_is_only_a_warning(self) -> None:
         crossword = _replace_cell(
             _good_dense_grid(),
             2,
@@ -137,10 +150,12 @@ class QualityValidationTest(unittest.TestCase):
 
         self.assertTrue(report.is_valid)
         self.assertEqual(
-            ("layout.unnecessary-empty",),
+            ("layout.missing-legend", "layout.missing-legend"),
             tuple(issue.code for issue in report.warnings),
         )
-        self.assertEqual("$.grid.cells[2][2]", report.warnings[0].path)
+        self.assertTrue(
+            all(issue.path == "$.grid.cells[2][2]" for issue in report.warnings)
+        )
 
     def test_missing_legend_on_axis_is_only_a_warning(self) -> None:
         crossword = _replace_cell(
@@ -161,7 +176,7 @@ class QualityValidationTest(unittest.TestCase):
         self.assertEqual(1, len(missing))
         self.assertEqual("$.grid.cells[0][2]", missing[0].path)
 
-    def test_ambiguous_direction_is_only_a_warning(self) -> None:
+    def test_one_text_for_two_directions_is_only_a_warning(self) -> None:
         crossword = _replace_cell(
             _good_dense_grid(),
             1,
@@ -173,7 +188,7 @@ class QualityValidationTest(unittest.TestCase):
 
         self.assertTrue(report.is_valid)
         self.assertIn(
-            "legend.ambiguous-direction",
+            "legend.text-count",
             {issue.code for issue in report.warnings},
         )
 
