@@ -9,6 +9,8 @@ from reportlab.lib.styles import ParagraphStyle
 
 from krizovkar.renderer import (
     MAX_CELL_SIZE,
+    TEXT_CELL_FONT_STEP,
+    TEXT_CELL_MAX_FONT_SIZE,
     TEXT_CELL_PADDING,
     _draw_fitted_text,
 )
@@ -47,6 +49,15 @@ class FittedTextTest(unittest.TestCase):
         content, _ = self._rendered_content("NEJZAJÍMAVĚJŠÍ")
 
         self.assertIn(SOFT_HYPHEN, content)
+
+    def test_slightly_shrinks_font_to_keep_words_whole(self) -> None:
+        content, style = self._rendered_content("ODDĚLENÍ TECHNICKÉ KONTROLY")
+
+        self.assertNotIn(SOFT_HYPHEN, content)
+        self.assertEqual(
+            TEXT_CELL_MAX_FONT_SIZE - TEXT_CELL_FONT_STEP,
+            style.fontSize,
+        )
 
 
 if __name__ == "__main__":

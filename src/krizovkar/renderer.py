@@ -109,6 +109,24 @@ def _mark_overlong_czech_text(
     return _UNBREAKABLE_TEXT.sub(mark_if_overlong, text)
 
 
+def _text_fits_without_hyphenation(
+    text: str,
+    width: float,
+    font_size: float,
+) -> bool:
+    """Zjistí, zda se každá nezalomitelná část vejde na řádek."""
+
+    return all(
+        pdfmetrics.stringWidth(
+            match.group(),
+            TEXT_CELL_FONT,
+            font_size,
+        )
+        <= width
+        for match in _UNBREAKABLE_TEXT.finditer(text)
+    )
+
+
 def _draw_fitted_text(
     pdf: Canvas,
     text: str,
@@ -122,13 +140,10 @@ def _draw_fitted_text(
     _register_text_cell_fonts()
     maximum = min(TEXT_CELL_MAX_FONT_SIZE, height * 0.45)
     minimum = min(TEXT_CELL_MIN_FONT_SIZE, maximum)
-    font_size = maximum
     protected_text = protect_czech_prepositions(text)
 
-    while font_size >= minimum:
-        content = escape(
-            _mark_overlong_czech_text(protected_text, width, font_size)
-        )
+    def draw_if_fits(content_text: str, font_size: float) -> bool:
+        content = escape(content_text)
         if prefix is not None:
             content = f"<b>{escape(prefix)}</b> {content}"
         style = ParagraphStyle(
@@ -150,6 +165,29 @@ def _draw_fitted_text(
                 left,
                 bottom + (height - text_height) / 2,
             )
+            return True
+        return False
+
+    # Jeden typografický krok zmenšení je méně rušivý než dělení slov.
+    whole_word_minimum = max(minimum, maximum - TEXT_CELL_FONT_STEP)
+    font_size = maximum
+    while font_size >= whole_word_minimum:
+        if _text_fits_without_hyphenation(
+            protected_text,
+            width,
+            font_size,
+        ) and draw_if_fits(protected_text, font_size):
+            return
+        font_size -= TEXT_CELL_FONT_STEP
+
+    font_size = maximum
+    while font_size >= minimum:
+        marked_text = _mark_overlong_czech_text(
+            protected_text,
+            width,
+            font_size,
+        )
+        if draw_if_fits(marked_text, font_size):
             return
         font_size -= TEXT_CELL_FONT_STEP
 
