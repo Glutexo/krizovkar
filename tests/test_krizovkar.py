@@ -209,14 +209,9 @@ class ModelTest(unittest.TestCase):
         assert isinstance(first_part, SecretWord)
         assert isinstance(second_part, SecretWord)
         assert isinstance(third_part, SecretWord)
-        self.assertEqual(
-            DEFAULT_SECRET_PART_LEGEND.format(number=1),
-            first_part.legend,
-        )
-        self.assertEqual(
-            DEFAULT_SECRET_PART_LEGEND.format(number=2),
-            second_part.legend,
-        )
+        self.assertEqual("{number}. část tajenky", DEFAULT_SECRET_PART_LEGEND)
+        self.assertEqual("1. část tajenky", first_part.legend)
+        self.assertEqual("2. část tajenky", second_part.legend)
         self.assertEqual("3. díl tajenky", third_part.legend)
 
     def test_rejects_gap_in_unarrowed_multipart_secret_block(self) -> None:

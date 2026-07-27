@@ -101,7 +101,7 @@ secrets:
         direction: horizontal
 ```
 
-Slovní bloky bez výslovné `legend` dostanou postupně popisky `Tajenka: 1. část`, `Tajenka: 2. část` a tak dále. Vlastní text může použít také formulaci `2. díl tajenky`. Bloky `type: cells` vlastní legendu nemají, ale každý může samostatně zapnout rohové šipky. Obě vícedílné podoby ukazuje [zadání s vícedílnými tajenkami](examples/specification-multipart-secrets.yaml).
+Slovní bloky bez výslovné `legend` dostanou postupně popisky `1. část tajenky`, `2. část tajenky` a tak dále. Vlastní text může použít také formulaci `2. díl tajenky` nebo `Tajenka: 3. díl`. Bloky `type: cells` vlastní legendu nemají, ale každý může samostatně zapnout rohové šipky. Obě vícedílné podoby ukazuje [zadání s vícedílnými tajenkami](examples/specification-multipart-secrets.yaml).
 
 Význam obou dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md). Strojová pravidla jsou oddělená v [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json) a [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json).
 

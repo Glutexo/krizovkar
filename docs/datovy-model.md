@@ -197,7 +197,7 @@ secrets:
 
 Každý blok je `type: cells` nebo `type: word`. Blok z buněk musí být souvislý i bez šipek; jeho `arrows: true` označí vlastní začátek a změny směru, nezávisle na ostatních blocích. Jednopísmenný blok je souvislý, ale nemůže mít šipku, protože nemá následující pole.
 
-Slovní blok bez `legend` dostane podle své pozice automatický popisek `Tajenka: 1. část`, `Tajenka: 2. část` a tak dále. Výslovná neprázdná legenda může použít jinou rovnocennou formulaci, například `2. díl tajenky` nebo `Tajenka: 4. díl`. Číslo se odvozuje od pozice mezi všemi bloky, takže smíšená tajenka může mít například první blok bez legendy a druhý blok označený `Tajenka: 2. část`.
+Slovní blok bez `legend` dostane podle své pozice automatický popisek `1. část tajenky`, `2. část tajenky` a tak dále. Výslovná neprázdná legenda může použít jinou rovnocennou formulaci, například `2. díl tajenky` nebo `Tajenka: 4. díl`. Číslo se odvozuje od pozice mezi všemi bloky, takže smíšená tajenka může mít například první blok bez legendy a druhý blok označený `2. část tajenky`.
 
 Všechny varianty mohou být v jednom zadání. Cílový dokument `grid` je při vykreslení zobrazuje stejným zvýrazněním; jejich původní definici zachovává pouze `specification`.
 

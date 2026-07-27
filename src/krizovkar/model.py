@@ -27,7 +27,7 @@ WordDirection = Literal["horizontal", "vertical"]
 LegendArrow = Literal["right", "down"]
 SecretArrow = Literal["up", "right", "down", "left"]
 DEFAULT_SECRET_LEGEND = "Tajenka"
-DEFAULT_SECRET_PART_LEGEND = "Tajenka: {number}. část"
+DEFAULT_SECRET_PART_LEGEND = "{number}. část tajenky"
 
 
 @dataclass(frozen=True, slots=True)
