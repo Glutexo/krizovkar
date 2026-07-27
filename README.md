@@ -117,6 +117,8 @@ grid:
 
 Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. České `CH` zabírá jednu buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku. Tajenková buňka má v PDF světle šedé pozadí a může mít jednu rohovou `arrow` ve směru `up`, `right`, `down` nebo `left`. Jde o jinou značku než seznam `arrows` v legendové buňce. Cílová mřížka už nerozlišuje, zda tajenku určil seznam polí, nebo souvislé heslo; u druhé varianty navíc obsahuje legendovou buňku s textem „Tajenka“. Zápis ukazuje [mřížka s českými písmeny](examples/grid-czech-letters.yaml); [ukázková cesta se šipkami](examples/grid-secret-arrows.yaml) mění směr dvakrát.
 
+Klasická křížovka může písmenné buňce přidat počáteční `number` a silné mezislovní `bars` na její pravé či dolní hraně. Očíslované vnější legendy uchovává kořenový seznam `clues`; číslo bez odpovídající legendy může označit například tajenku bez nápovědy. Ucelený zápis ukazuje [klasická křížovka s vnějšími legendami](examples/grid-classic.yaml).
+
 Legenda používá neprázdný seznam textů a může u nich výslovně uvést směrové šipky:
 
 ```yaml

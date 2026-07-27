@@ -18,9 +18,11 @@ from krizovkar.model import (
     DEFAULT_SECRET_PART_LEGEND,
     DEFAULT_SECRET_LEGEND,
     EmptyCell,
+    ExternalClue,
     GridDimensions,
     HelpCell,
     LegendCell,
+    LetterCell,
     ModelError,
     SecretCell,
     SecretCells,
@@ -36,6 +38,7 @@ from krizovkar.renderer import RenderError, resolve_page_size
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GRID_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "grid-minimal.yaml"
+GRID_CLASSIC_EXAMPLE = PROJECT_ROOT / "examples" / "grid-classic.yaml"
 GRID_CZECH_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-czech-letters.yaml"
 GRID_EMPTY_EXAMPLE = PROJECT_ROOT / "examples" / "grid-empty.yaml"
 GRID_HELP_EXAMPLE = PROJECT_ROOT / "examples" / "grid-help.yaml"
@@ -84,6 +87,180 @@ class ModelTest(unittest.TestCase):
             ("O", "CH", "O", "Č", "E", "N", "Á"),
             tuple(cell.value for cell in crossword.grid.cells[0]),
         )
+
+    def test_loads_and_writes_classic_grid_annotations(self) -> None:
+        crossword = load_crossword_grid(GRID_CLASSIC_EXAMPLE)
+
+        assert crossword.grid.cells is not None
+        first = crossword.grid.cells[0][0]
+        divided = crossword.grid.cells[2][2]
+        secret_start = crossword.grid.cells[5][0]
+        self.assertIsInstance(first, LetterCell)
+        self.assertEqual(1, first.number)
+        self.assertEqual(("right", "bottom"), divided.bars)
+        self.assertIsInstance(secret_start, SecretCell)
+        self.assertEqual(19, secret_start.number)
+        self.assertEqual("right", secret_start.arrow)
+        self.assertEqual(23, len(crossword.clues))
+        self.assertEqual(
+            ExternalClue(
+                number=1,
+                direction="horizontal",
+                text="Prudký hod",
+            ),
+            crossword.clues[0],
+        )
+        self.assertEqual(
+            ("horizontal", "vertical"),
+            tuple(
+                clue.direction for clue in crossword.clues if clue.number == 1
+            ),
+        )
+        self.assertFalse(
+            any(
+                clue.number == 19 and clue.direction == "horizontal"
+                for clue in crossword.clues
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "classic.yaml"
+            write_crossword_grid(crossword, output)
+            self.assertEqual(crossword, load_crossword_grid(output))
+
+    def test_rejects_duplicate_grid_cell_number(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "duplicate-number.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: grid\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 2\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: letter, value: A, number: 1}, "
+                "{type: letter, value: B, number: 1}]\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ModelError,
+                r"\$\.grid\.cells\[0\]\[1\]\.number.*už používá",
+            ):
+                load_crossword_grid(source)
+
+    def test_rejects_external_clue_without_numbered_cell(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "orphan-clue.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: grid\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 1\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: letter, value: A, number: 1}]\n"
+                "clues:\n"
+                "  - {number: 2, direction: horizontal, text: Legenda}\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ModelError,
+                r"\$\.clues\[0\]\.number.*nemá odpovídající",
+            ):
+                load_crossword_grid(source)
+
+    def test_rejects_duplicate_external_clue_direction(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "duplicate-clue.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: grid\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 1\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: letter, value: A, number: 1}]\n"
+                "clues:\n"
+                "  - {number: 1, direction: vertical, text: První}\n"
+                "  - {number: 1, direction: vertical, text: Druhá}\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ModelError,
+                r"\$\.clues\[1\].*uvedená vícekrát",
+            ):
+                load_crossword_grid(source)
+
+    def test_rejects_external_clue_start_without_word_bar(self) -> None:
+        cases = (
+            (
+                "horizontal",
+                "grid:\n"
+                "  width: 2\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: letter, value: A}, "
+                "{type: letter, value: B, number: 2}]\n",
+                "pravý předěl",
+            ),
+            (
+                "vertical",
+                "grid:\n"
+                "  width: 1\n"
+                "  height: 2\n"
+                "  cells:\n"
+                "    - [{type: letter, value: A}]\n"
+                "    - [{type: letter, value: B, number: 2}]\n",
+                "dolní předěl",
+            ),
+        )
+        for direction, grid, expected in cases:
+            with (
+                self.subTest(direction=direction),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                source = Path(directory) / "missing-word-bar.yaml"
+                source.write_text(
+                    "format: krizovkar\n"
+                    "kind: grid\n"
+                    "version: 1\n"
+                    f"{grid}"
+                    "clues:\n"
+                    f"  - {{number: 2, direction: {direction}, "
+                    "text: Legenda}\n",
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(ModelError, expected):
+                    load_crossword_grid(source)
+
+    def test_rejects_word_bar_on_outer_grid_edge(self) -> None:
+        for bar in ("right", "bottom"):
+            with (
+                self.subTest(bar=bar),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                source = Path(directory) / "outer-bar.yaml"
+                source.write_text(
+                    "format: krizovkar\n"
+                    "kind: grid\n"
+                    "version: 1\n"
+                    "grid:\n"
+                    "  width: 1\n"
+                    "  height: 1\n"
+                    "  cells:\n"
+                    f"    - [{{type: letter, value: A, bars: [{bar}]}}]\n",
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(ModelError, r"\.bars:.*uvnitř"):
+                    load_crossword_grid(source)
 
     def test_loads_minimal_specification(self) -> None:
         specification = load_crossword_specification(SPECIFICATION_MINIMAL_EXAMPLE)
@@ -807,6 +984,8 @@ class ModelTest(unittest.TestCase):
             "texts: [Legenda]",
             "words: [Pomůcka]",
             "arrows: [right]",
+            "number: 1",
+            "bars: [right]",
         )
         for content in invalid_contents:
             with (

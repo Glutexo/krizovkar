@@ -9,12 +9,14 @@ from krizovkar.dictionary import (
 from krizovkar.generator import GenerationError, generate_swedish_grid
 
 from krizovkar.model import (
+    CellBar,
     Coordinate,
     CrosswordGrid,
     CrosswordSpecification,
     DEFAULT_SECRET_PART_LEGEND,
     DEFAULT_SECRET_LEGEND,
     EmptyCell,
+    ExternalClue,
     Grid,
     GridCell,
     GridDimensions,
@@ -46,6 +48,7 @@ from krizovkar.validation import (
 )
 
 __all__ = [
+    "CellBar",
     "Coordinate",
     "CrosswordDictionary",
     "CrosswordGrid",
@@ -55,6 +58,7 @@ __all__ = [
     "DictionaryEntry",
     "DictionaryError",
     "EmptyCell",
+    "ExternalClue",
     "Grid",
     "GridCell",
     "GridDimensions",

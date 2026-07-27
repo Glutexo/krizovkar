@@ -56,9 +56,44 @@
           }
         }
       }
+    },
+    "clues": {
+      "description": "Volitelné očíslované legendy uvedené vně mřížky.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/externalClue"
+      }
     }
   },
   "$defs": {
+    "externalClue": {
+      "description": "Jedna vnější legenda přiřazená číslu a směru slova.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "number",
+        "direction",
+        "text"
+      ],
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "direction": {
+          "enum": [
+            "horizontal",
+            "vertical"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      }
+    },
     "gridCell": {
       "description": "Běžná, tajenková, legendová, nevyplňovaná nebo pomocná buňka.",
       "type": "object",
@@ -79,6 +114,23 @@
         "value": {
           "type": "string",
           "pattern": "^(?:CH|[A-ZÁÄČĎÉĚÍŇÓÔÖŘŠŤÚŮÜÝŽ])$"
+        },
+        "number": {
+          "description": "Volitelné číslo začátku jednoho nebo dvou slov.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "bars": {
+          "description": "Silné mezislovní předěly na pravé nebo dolní hraně buňky.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "right",
+              "bottom"
+            ]
+          }
         },
         "arrow": {
           "description": "Volitelná odchozí šipka v rohu tajenkové buňky.",
@@ -209,6 +261,16 @@
                   "required": [
                     "arrow"
                   ]
+                },
+                {
+                  "required": [
+                    "number"
+                  ]
+                },
+                {
+                  "required": [
+                    "bars"
+                  ]
                 }
               ]
             }
@@ -252,6 +314,16 @@
                   "required": [
                     "arrow"
                   ]
+                },
+                {
+                  "required": [
+                    "number"
+                  ]
+                },
+                {
+                  "required": [
+                    "bars"
+                  ]
                 }
               ]
             }
@@ -292,6 +364,16 @@
                 {
                   "required": [
                     "arrow"
+                  ]
+                },
+                {
+                  "required": [
+                    "number"
+                  ]
+                },
+                {
+                  "required": [
+                    "bars"
                   ]
                 }
               ]

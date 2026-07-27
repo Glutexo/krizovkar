@@ -60,6 +60,32 @@ U obou typů musí být `value` právě jedno podporované velké písmeno. Pís
 
 Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Cílová mřížka pouze označuje buňky tajenky. Jejich pořadí a seskupení uchovává zdrojové zadání `specification`.
 
+### Čísla, mezislovní předěly a vnější legendy
+
+Běžná i tajenková písmenná buňka může obsahovat kladné celé `number`. Číslo označuje začátek vodorovného slova, svislého slova nebo obou současně. V jedné mřížce smí být každé číslo pouze v jedné buňce. Doporučené klasické číslování prochází počáteční pole po řádcích zleva doprava a shora dolů.
+
+Pokud v jednom řádku nebo sloupci bez nevyplňované buňky následuje další slovo, konec předchozího slova vyznačí `bars`:
+
+```yaml
+{type: letter, value: K, number: 3, bars: [right, bottom]}
+```
+
+Hodnota `right` označuje silný předěl mezi touto buňkou a buňkou napravo, `bottom` předěl mezi touto buňkou a buňkou pod ní. Předěly jsou určené pouze pro vnitřní hrany mřížky; její vnější rám se do buněk nezapisuje.
+
+Volitelný kořenový seznam `clues` uchovává legendy mimo mřížku:
+
+```yaml
+clues:
+  - number: 1
+    direction: horizontal
+    text: Prudký hod
+  - number: 1
+    direction: vertical
+    text: Prudký hod
+```
+
+Každá legenda odkazuje na existující očíslovanou písmennou buňku a dvojice `number` a `direction` se nesmí opakovat. Začíná-li takto popsané slovo uvnitř souvislého písmenného řádku nebo sloupce, musí je od předchozího slova oddělovat odpovídající silný předěl. Společné počáteční pole může mít pod jedním číslem jednu vodorovnou a jednu svislou legendu. Samotné číslo legendu nevyžaduje; tím lze označit například tajenku bez vlastní nápovědy.
+
 ## Buňka legendy
 
 Legenda neobsahuje `value`, ale neprázdný seznam `texts` s neprázdnými texty. Volitelné `arrows` může obsahovat směrové šipky:
@@ -236,6 +262,8 @@ Vyšší zadání ukazuje [příklad s umístěnými slovy a automatickou pomůc
 Oba způsoby určení tajenky ukazuje [příklad s vybranými poli a tajenkovým slovem](../examples/specification-secrets.yaml).
 
 Více bloků bez legend i s legendami ukazuje [příklad vícedílných tajenek](../examples/specification-multipart-secrets.yaml).
+
+Čísla, silné mezislovní předěly a vnější legendy ukazuje [příklad klasické křížovky](../examples/grid-classic.yaml).
 
 Vyplněná cílová mřížka je v [příkladu s náhodnými písmeny](../examples/grid-random-letters.yaml).
 

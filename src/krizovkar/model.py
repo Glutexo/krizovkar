@@ -26,6 +26,7 @@ class ModelError(ValueError):
 WordDirection = Literal["horizontal", "vertical"]
 LegendArrow = Literal["right", "down"]
 SecretArrow = Literal["up", "right", "down", "left"]
+CellBar = Literal["right", "bottom"]
 DEFAULT_SECRET_LEGEND = "Tajenka"
 DEFAULT_SECRET_PART_LEGEND = "{number}. část tajenky"
 
@@ -35,6 +36,8 @@ class LetterCell:
     """Buňka obsahující jedno písmeno."""
 
     value: str
+    number: int | None = None
+    bars: tuple[CellBar, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +46,8 @@ class SecretCell:
 
     value: str
     arrow: SecretArrow | None = None
+    number: int | None = None
+    bars: tuple[CellBar, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +83,15 @@ class Grid:
 
 
 @dataclass(frozen=True, slots=True)
+class ExternalClue:
+    """Očíslovaná legenda uvedená vně mřížky."""
+
+    number: int
+    direction: WordDirection
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
 class CrosswordGrid:
     """Cílová křížovková mřížka načtená z datového souboru."""
 
@@ -85,6 +99,7 @@ class CrosswordGrid:
     kind: str
     version: int
     grid: Grid
+    clues: tuple[ExternalClue, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,11 +262,17 @@ def _validated_data(source: Path, schema_name: str) -> dict[str, Any]:
 
 def _grid_cell(cell: dict[str, Any]) -> GridCell:
     if cell["type"] == "letter":
-        return LetterCell(value=cell["value"])
+        return LetterCell(
+            value=cell["value"],
+            number=cell.get("number"),
+            bars=tuple(cell.get("bars", ())),
+        )
     if cell["type"] == "secret":
         return SecretCell(
             value=cell["value"],
             arrow=cell.get("arrow"),
+            number=cell.get("number"),
+            bars=tuple(cell.get("bars", ())),
         )
     if cell["type"] == "legend":
         return LegendCell(
@@ -295,17 +316,109 @@ def load_crossword_grid(source: str | Path) -> CrosswordGrid:
 
     source_path = Path(source)
     data = _validated_data(source_path, "grid-v1.schema.json")
-    grid = data["grid"]
+    raw_grid = data["grid"]
+    grid = Grid(
+        width=raw_grid["width"],
+        height=raw_grid["height"],
+        cells=_grid_cells(raw_grid),
+    )
+    clues = tuple(
+        ExternalClue(
+            number=clue["number"],
+            direction=clue["direction"],
+            text=clue["text"],
+        )
+        for clue in data.get("clues", ())
+    )
+    _validate_grid_annotations(grid, clues)
     return CrosswordGrid(
         format_name=data["format"],
         kind=data["kind"],
         version=data["version"],
-        grid=Grid(
-            width=grid["width"],
-            height=grid["height"],
-            cells=_grid_cells(grid),
-        ),
+        grid=grid,
+        clues=clues,
     )
+
+
+def _validate_grid_annotations(
+    grid: Grid,
+    clues: tuple[ExternalClue, ...],
+) -> None:
+    numbered_cells: dict[int, tuple[str, int, int]] = {}
+    if grid.cells is not None:
+        for row_index, row in enumerate(grid.cells):
+            for column_index, cell in enumerate(row):
+                if not isinstance(cell, (LetterCell, SecretCell)):
+                    continue
+                path = f"$.grid.cells[{row_index}][{column_index}]"
+                if cell.number is not None:
+                    previous = numbered_cells.get(cell.number)
+                    if previous is not None:
+                        previous_path, _, _ = previous
+                        raise ModelError(
+                            "neplatný datový model: "
+                            f"{path}.number: číslo {cell.number} už používá "
+                            f"buňka {previous_path}"
+                        )
+                    numbered_cells[cell.number] = (
+                        path,
+                        row_index,
+                        column_index,
+                    )
+                if "right" in cell.bars and column_index == grid.width - 1:
+                    raise ModelError(
+                        "neplatný datový model: "
+                        f"{path}.bars: pravý předěl musí ležet uvnitř mřížky"
+                    )
+                if "bottom" in cell.bars and row_index == grid.height - 1:
+                    raise ModelError(
+                        "neplatný datový model: "
+                        f"{path}.bars: dolní předěl musí ležet uvnitř mřížky"
+                    )
+
+    clue_keys: set[tuple[int, WordDirection]] = set()
+    for clue_index, clue in enumerate(clues):
+        path = f"$.clues[{clue_index}]"
+        numbered_cell = numbered_cells.get(clue.number)
+        if numbered_cell is None:
+            raise ModelError(
+                "neplatný datový model: "
+                f"{path}.number: číslo {clue.number} nemá odpovídající "
+                "písmennou buňku"
+            )
+        _, row_index, column_index = numbered_cell
+        key = (clue.number, clue.direction)
+        if key in clue_keys:
+            raise ModelError(
+                "neplatný datový model: "
+                f"{path}: legenda číslo {clue.number} ve směru "
+                f"{clue.direction!r} je uvedená vícekrát"
+            )
+        clue_keys.add(key)
+
+        assert grid.cells is not None
+        if clue.direction == "horizontal" and column_index > 0:
+            previous_cell = grid.cells[row_index][column_index - 1]
+            if (
+                isinstance(previous_cell, (LetterCell, SecretCell))
+                and "right" not in previous_cell.bars
+            ):
+                raise ModelError(
+                    "neplatný datový model: "
+                    f"{path}: vodorovné slovo začínající uvnitř souvislého "
+                    "řádku musí mít před sebou silný pravý předěl"
+                )
+        if clue.direction == "vertical" and row_index > 0:
+            previous_cell = grid.cells[row_index - 1][column_index]
+            if (
+                isinstance(previous_cell, (LetterCell, SecretCell))
+                and "bottom" not in previous_cell.bars
+            ):
+                raise ModelError(
+                    "neplatný datový model: "
+                    f"{path}: svislé slovo začínající uvnitř souvislého "
+                    "sloupce musí mít nad sebou silný dolní předěl"
+                )
 
 
 def load_crossword_specification(
@@ -517,11 +630,20 @@ def _validate_specification_placements(
 
 def _grid_cell_data(cell: GridCell) -> dict[str, Any]:
     if isinstance(cell, LetterCell):
-        return {"type": "letter", "value": cell.value}
+        data: dict[str, Any] = {"type": "letter", "value": cell.value}
+        if cell.number is not None:
+            data["number"] = cell.number
+        if cell.bars:
+            data["bars"] = list(cell.bars)
+        return data
     if isinstance(cell, SecretCell):
         data = {"type": "secret", "value": cell.value}
         if cell.arrow is not None:
             data["arrow"] = cell.arrow
+        if cell.number is not None:
+            data["number"] = cell.number
+        if cell.bars:
+            data["bars"] = list(cell.bars)
         return data
     if isinstance(cell, LegendCell):
         data: dict[str, Any] = {"type": "legend", "texts": list(cell.texts)}
@@ -536,6 +658,7 @@ def _grid_cell_data(cell: GridCell) -> dict[str, Any]:
 
 
 def _crossword_grid_data(crossword: CrosswordGrid) -> dict[str, Any]:
+    _validate_grid_annotations(crossword.grid, crossword.clues)
     grid: dict[str, Any] = {
         "width": crossword.grid.width,
         "height": crossword.grid.height,
@@ -545,12 +668,22 @@ def _crossword_grid_data(crossword: CrosswordGrid) -> dict[str, Any]:
             [_grid_cell_data(cell) for cell in row]
             for row in crossword.grid.cells
         ]
-    return {
+    data: dict[str, Any] = {
         "format": crossword.format_name,
         "kind": crossword.kind,
         "version": crossword.version,
         "grid": grid,
     }
+    if crossword.clues:
+        data["clues"] = [
+            {
+                "number": clue.number,
+                "direction": clue.direction,
+                "text": clue.text,
+            }
+            for clue in crossword.clues
+        ]
+    return data
 
 
 def write_crossword_grid(

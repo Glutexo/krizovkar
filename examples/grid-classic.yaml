@@ -1,0 +1,67 @@
+format: krizovkar
+kind: grid
+version: 1
+grid:
+  width: 6
+  height: 6
+  cells:
+    - - {type: letter, value: M, number: 1}
+      - {type: letter, value: E, number: 2}
+      - {type: letter, value: T, number: 3, bars: [right]}
+      - {type: letter, value: L, number: 4}
+      - {type: letter, value: O, number: 5}
+      - {type: letter, value: S, number: 6}
+    - - {type: letter, value: E, number: 7}
+      - {type: letter, value: M}
+      - {type: letter, value: U, bars: [right]}
+      - {type: letter, value: O, number: 8}
+      - {type: letter, value: K}
+      - {type: letter, value: O}
+    - - {type: letter, value: T, number: 9, bars: [bottom]}
+      - {type: letter, value: U, bars: [bottom]}
+      - {type: letter, value: K, bars: [right, bottom]}
+      - {type: letter, value: S, number: 10, bars: [bottom]}
+      - {type: letter, value: O, bars: [bottom]}
+      - {type: letter, value: S, bars: [bottom]}
+    - - {type: letter, value: H, number: 11}
+      - {type: letter, value: A, number: 12}
+      - {type: letter, value: D, number: 13, bars: [right]}
+      - {type: letter, value: O, number: 14}
+      - {type: letter, value: S, number: 15}
+      - {type: letter, value: A, number: 16}
+    - - {type: letter, value: A, number: 17}
+      - {type: letter, value: R}
+      - {type: letter, value: A, bars: [right]}
+      - {type: letter, value: S, number: 18}
+      - {type: letter, value: E}
+      - {type: letter, value: N}
+    - - {type: secret, value: D, number: 19, arrow: right}
+      - {type: secret, value: A}
+      - {type: secret, value: R, bars: [right]}
+      - {type: letter, value: A, number: 20}
+      - {type: letter, value: N}
+      - {type: letter, value: O}
+clues:
+  - {number: 1, direction: horizontal, text: Prudký hod}
+  - {number: 4, direction: horizontal, text: Loterní lístek}
+  - {number: 7, direction: horizontal, text: Australský nelétavý pták}
+  - {number: 8, direction: horizontal, text: Orgán zraku}
+  - {number: 9, direction: horizontal, text: Omastek}
+  - {number: 10, direction: horizontal, text: Tísňové volání}
+  - {number: 11, direction: horizontal, text: Plaz}
+  - {number: 14, direction: horizontal, text: Přímka souměrnosti}
+  - {number: 17, direction: horizontal, text: Druh papouška}
+  - {number: 18, direction: horizontal, text: Vidina ve spánku}
+  - {number: 20, direction: horizontal, text: Souhlas}
+  - {number: 1, direction: vertical, text: Prudký hod}
+  - {number: 2, direction: vertical, text: Australský nelétavý pták}
+  - {number: 3, direction: vertical, text: Omastková surovina}
+  - {number: 4, direction: vertical, text: Loterní lístek}
+  - {number: 5, direction: vertical, text: Orgán zraku}
+  - {number: 6, direction: vertical, text: Tísňové volání}
+  - {number: 11, direction: vertical, text: Plaz}
+  - {number: 12, direction: vertical, text: Druh papouška}
+  - {number: 13, direction: vertical, text: Věnovaný předmět}
+  - {number: 14, direction: vertical, text: Přímka souměrnosti}
+  - {number: 15, direction: vertical, text: Vidina ve spánku}
+  - {number: 16, direction: vertical, text: Souhlas}
