@@ -52,6 +52,14 @@
         "$ref": "#/$defs/placedWord"
       }
     },
+    "secrets": {
+      "description": "Tajenky určené buňkami nebo souvislým slovem s legendou.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/secret"
+      }
+    },
     "help": {
       "description": "Volitelné přepsání automatické polohy pomůcky.",
       "type": "object",
@@ -67,16 +75,32 @@
     }
   },
   "dependentRequired": {
-    "grid": [
-      "words"
-    ],
     "words": [
+      "grid"
+    ],
+    "secrets": [
       "grid"
     ],
     "help": [
       "grid",
       "words"
     ]
+  },
+  "dependentSchemas": {
+    "grid": {
+      "anyOf": [
+        {
+          "required": [
+            "words"
+          ]
+        },
+        {
+          "required": [
+            "secrets"
+          ]
+        }
+      ]
+    }
   },
   "$defs": {
     "coordinate": {
@@ -139,6 +163,116 @@
           "default": false
         }
       }
+    },
+    "secret": {
+      "description": "Tajenka jako uspořádané buňky nebo umístěné slovo.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "description": "Způsob určení tajenky.",
+          "enum": [
+            "cells",
+            "word"
+          ]
+        },
+        "cells": {
+          "description": "Buňky tajenky v pořadí čtení.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/coordinate"
+          }
+        },
+        "answer": {
+          "description": "Přesná posloupnost písmen souvislé tajenky.",
+          "type": "string",
+          "pattern": "^[A-ZÁÄČĎÉĚÍŇÓÔÖŘŠŤÚŮÜÝŽ]+$"
+        },
+        "start": {
+          "description": "Souřadnice prvního písmene souvislé tajenky.",
+          "$ref": "#/$defs/coordinate"
+        },
+        "direction": {
+          "description": "Směr souvislé tajenky od prvního písmene.",
+          "enum": [
+            "horizontal",
+            "vertical"
+          ]
+        },
+        "legend": {
+          "description": "Neprázdný text vlastní legendy souvislé tajenky.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "cells"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "cells"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "answer"
+                  ]
+                },
+                {
+                  "required": [
+                    "start"
+                  ]
+                },
+                {
+                  "required": [
+                    "direction"
+                  ]
+                },
+                {
+                  "required": [
+                    "legend"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "word"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "answer",
+              "start",
+              "direction",
+              "legend"
+            ],
+            "not": {
+              "required": [
+                "cells"
+              ]
+            }
+          }
+        }
+      ]
     }
   }
 }

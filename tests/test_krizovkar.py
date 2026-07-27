@@ -21,6 +21,8 @@ from krizovkar.model import (
     LegendCell,
     ModelError,
     SecretCell,
+    SecretCells,
+    SecretWord,
     WordPlacement,
     load_crossword_grid,
     load_crossword_specification,
@@ -39,6 +41,9 @@ GRID_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret.yaml"
 SPECIFICATION_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "specification-minimal.yaml"
 SPECIFICATION_PLACED_WORDS_EXAMPLE = (
     PROJECT_ROOT / "examples" / "specification-placed-words.yaml"
+)
+SPECIFICATION_SECRETS_EXAMPLE = (
+    PROJECT_ROOT / "examples" / "specification-secrets.yaml"
 )
 
 
@@ -80,6 +85,7 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(1, specification.version)
         self.assertIsNone(specification.grid)
         self.assertEqual((), specification.words)
+        self.assertEqual((), specification.secrets)
         self.assertIsNone(specification.help_position)
 
     def test_loads_specification_with_placed_words(self) -> None:
@@ -99,6 +105,145 @@ class ModelTest(unittest.TestCase):
             tuple(word.answer for word in specification.words if word.in_help),
         )
         self.assertIsNone(specification.help_position)
+
+    def test_loads_cell_and_word_secrets(self) -> None:
+        specification = load_crossword_specification(SPECIFICATION_SECRETS_EXAMPLE)
+
+        self.assertEqual(2, len(specification.secrets))
+        selected, word = specification.secrets
+        self.assertIsInstance(selected, SecretCells)
+        assert isinstance(selected, SecretCells)
+        self.assertEqual(
+            (
+                Coordinate(row=2, column=2),
+                Coordinate(row=2, column=5),
+                Coordinate(row=4, column=2),
+            ),
+            selected.cells,
+        )
+        self.assertIsInstance(word, SecretWord)
+        assert isinstance(word, SecretWord)
+        self.assertEqual("AMONIT", word.answer)
+        self.assertEqual(Coordinate(row=5, column=2), word.start)
+        self.assertEqual("horizontal", word.direction)
+        self.assertEqual("Zkamenělý hlavonožec", word.legend)
+
+    def test_loads_specification_with_only_word_secret(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "word-secret-only.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 6, height: 1}\n"
+                "secrets:\n"
+                "  - type: word\n"
+                "    answer: AMONIT\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Zkamenělý hlavonožec\n",
+                encoding="utf-8",
+            )
+
+            specification = load_crossword_specification(source)
+
+            self.assertEqual((), specification.words)
+            self.assertEqual(1, len(specification.secrets))
+
+    def test_rejects_secret_cell_outside_grid(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "secret-cell-outside.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 3, height: 1}\n"
+                "words:\n"
+                "  - answer: ABC\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Abeceda\n"
+                "secrets:\n"
+                "  - type: cells\n"
+                "    cells: [{row: 1, column: 4}]\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ModelError, r"\$\.secrets\[0\]\.cells\[0\].*mimo mřížku"
+            ):
+                load_crossword_specification(source)
+
+    def test_rejects_secret_cell_without_letter(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "unoccupied-secret-cell.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 3, height: 2}\n"
+                "words:\n"
+                "  - answer: ABC\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Abeceda\n"
+                "secrets:\n"
+                "  - type: cells\n"
+                "    cells: [{row: 2, column: 1}]\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ModelError, "obsazenou písmenem"):
+                load_crossword_specification(source)
+
+    def test_rejects_conflicting_secret_word_intersection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "conflicting-secret-word.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 3, height: 3}\n"
+                "words:\n"
+                "  - answer: ABC\n"
+                "    start: {row: 2, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Abeceda\n"
+                "secrets:\n"
+                "  - type: word\n"
+                "    answer: AX\n"
+                "    start: {row: 1, column: 2}\n"
+                "    direction: vertical\n"
+                "    legend: Tajenka\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ModelError, r"\$\.secrets\[0\].*v rozporu"):
+                load_crossword_specification(source)
+
+    def test_rejects_secret_word_without_legend(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "secret-word-without-legend.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 3, height: 2}\n"
+                "words:\n"
+                "  - answer: ABC\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Abeceda\n"
+                "secrets:\n"
+                "  - type: word\n"
+                "    answer: AB\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ModelError, r"\$\.secrets\[0\]"):
+                load_crossword_specification(source)
 
     def test_loads_explicit_help_position(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -58,7 +58,7 @@ Podporované typy jsou:
 
 U obou typů musí být `value` právě jedno podporované velké písmeno. Písmena si zachovávají diakritiku; české `CH` se zapisuje jako jedna hodnota a zabírá jednu buňku. Renderer odlišuje tajenkovou buňku světle šedým pozadím.
 
-Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Cílová mřížka pouze označuje buňky tajenky. Její pořadí, seskupení a význam budou součástí zadání `specification`.
+Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Cílová mřížka pouze označuje buňky tajenky. Jejich pořadí, seskupení a případnou vlastní legendu uchovává zdrojové zadání `specification`.
 
 ## Buňka legendy
 
@@ -121,7 +121,7 @@ words:
     in_help: true
 ```
 
-Položky `grid` a `words` jsou navzájem provázané: jsou buď uvedené obě, nebo ani jedna. Díky tomu zůstává platná i minimální obálka rozpracovaného zadání. Je-li `words` uvedené, obsahuje alespoň jedno slovo.
+Položka `grid` se uvádí společně alespoň s jednou z položek `words` nebo `secrets`. Díky tomu zůstává platná minimální obálka rozpracovaného zadání, ale úplné zadání může obsahovat běžná slova, tajenky nebo obojí. Každý uvedený seznam obsahuje alespoň jednu položku.
 
 ### Umístěné slovo
 
@@ -134,6 +134,38 @@ Každá položka `words` obsahuje:
 - volitelné `in_help`: zda se odpověď vypíše v pomůcce; výchozí hodnota je `false`.
 
 Souřadnice používají `row` a `column`, počítají se od 1 a jejich počátek leží v levém horním rohu. Řádky rostou směrem dolů a sloupce doprava. Slova se mohou křížit pouze tehdy, mají-li na společné souřadnici stejné písmeno.
+
+### Tajenky
+
+Volitelný seznam `secrets` uchovává jednu nebo více tajenek. Povinné `type` rozlišuje dva způsoby jejich určení.
+
+Tajenka `type: cells` obsahuje neprázdný seznam `cells`:
+
+```yaml
+secrets:
+  - type: cells
+    cells:
+      - {row: 2, column: 2}
+      - {row: 2, column: 5}
+      - {row: 4, column: 2}
+```
+
+Souřadnice jsou uvedené přímo v pořadí, v jaké se tajenka čte. Nesmějí se v jednom seznamu opakovat, musí ležet uvnitř mřížky a odkazovat na písmena některého umístěného běžného nebo tajenkového slova. Pole nemusejí tvořit přímku ani spolu sousedit.
+
+Tajenka `type: word` je souvislé vodorovné nebo svislé slovo s vlastní legendou:
+
+```yaml
+secrets:
+  - type: word
+    answer: AMONIT
+    start: {row: 5, column: 2}
+    direction: horizontal
+    legend: Zkamenělý hlavonožec
+```
+
+Položky `answer`, `start`, `direction` a `legend` mají stejný význam jako u běžného umístěného slova. Tajenkové slovo se už neopakuje ve `words`; samo obsazuje písmenná pole, může se křížit s ostatními slovy a při převodu do cílové mřížky dostane legendovou buňku a buňky `type: secret`.
+
+Obě varianty mohou být v jednom zadání. Cílový dokument `grid` je při vykreslení zobrazuje stejným zvýrazněním; jejich původní definici zachovává pouze `specification`.
 
 ### Umístění pomůcky
 
@@ -148,7 +180,7 @@ help:
 
 Blok `help` je platný jen tehdy, když má alespoň jedno slovo `in_help: true`. Výslovná souřadnice musí ležet uvnitř mřížky a nesmí být obsazená písmenem. Úplnou kontrolu proti buňkám vzniklým při generování provede generátor.
 
-Loader již ověřuje rozměry, rozsah slov, shodu písmen na kříženích a základní platnost výslovné polohy pomůcky. Samotný převod `specification` na `grid` zatím není součástí příkazu `render`.
+Loader již ověřuje rozměry, rozsah běžných i tajenkových slov, shodu písmen na kříženích, obsazenost vybraných tajenkových polí a základní platnost výslovné polohy pomůcky. Samotný převod `specification` na `grid` zatím není součástí příkazu `render`.
 
 ## Validace
 
@@ -166,6 +198,8 @@ Současný kvalitativní profil je určený pro hustou švédskou mřížku bez 
 Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-minimal.yaml) a [zadání](../examples/specification-minimal.yaml).
 
 Vyšší zadání ukazuje [příklad s umístěnými slovy a automatickou pomůckou](../examples/specification-placed-words.yaml).
+
+Oba způsoby určení tajenky ukazuje [příklad s vybranými poli a tajenkovým slovem](../examples/specification-secrets.yaml).
 
 Vyplněná cílová mřížka je v [příkladu s náhodnými písmeny](../examples/grid-random-letters.yaml).
 

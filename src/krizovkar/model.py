@@ -110,6 +110,26 @@ class WordPlacement:
 
 
 @dataclass(frozen=True, slots=True)
+class SecretCells:
+    """Tajenka určená uspořádanou posloupností buněk."""
+
+    cells: tuple[Coordinate, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SecretWord:
+    """Souvislá tajenka s vlastní legendou a směrem."""
+
+    answer: str
+    start: Coordinate
+    direction: WordDirection
+    legend: str
+
+
+SecretDefinition = SecretCells | SecretWord
+
+
+@dataclass(frozen=True, slots=True)
 class CrosswordSpecification:
     """Vstupní zadání, ze kterého má vzniknout cílová mřížka."""
 
@@ -118,6 +138,7 @@ class CrosswordSpecification:
     version: int
     grid: GridDimensions | None = None
     words: tuple[WordPlacement, ...] = ()
+    secrets: tuple[SecretDefinition, ...] = ()
     help_position: Coordinate | None = None
 
 
@@ -256,7 +277,26 @@ def load_crossword_specification(
             legend=word["legend"],
             in_help=word.get("in_help", False),
         )
-        for word in data["words"]
+        for word in data.get("words", ())
+    )
+    secrets: tuple[SecretDefinition, ...] = tuple(
+        SecretCells(
+            cells=tuple(
+                Coordinate(row=cell["row"], column=cell["column"])
+                for cell in secret["cells"]
+            )
+        )
+        if secret["type"] == "cells"
+        else SecretWord(
+            answer=secret["answer"],
+            start=Coordinate(
+                row=secret["start"]["row"],
+                column=secret["start"]["column"],
+            ),
+            direction=secret["direction"],
+            legend=secret["legend"],
+        )
+        for secret in data.get("secrets", ())
     )
     raw_help = data.get("help")
     help_position = (
@@ -267,13 +307,14 @@ def load_crossword_specification(
         if raw_help is not None
         else None
     )
-    _validate_specification_placements(grid, words, help_position)
+    _validate_specification_placements(grid, words, secrets, help_position)
     return CrosswordSpecification(
         format_name=data["format"],
         kind=data["kind"],
         version=data["version"],
         grid=grid,
         words=words,
+        secrets=secrets,
         help_position=help_position,
     )
 
@@ -281,34 +322,61 @@ def load_crossword_specification(
 def _validate_specification_placements(
     grid: GridDimensions,
     words: tuple[WordPlacement, ...],
+    secrets: tuple[SecretDefinition, ...],
     help_position: Coordinate | None,
 ) -> None:
-    occupied: dict[tuple[int, int], tuple[str, int]] = {}
+    occupied: dict[tuple[int, int], tuple[str, str]] = {}
+    placements = [
+        (word.answer, word.start, word.direction, f"$.words[{word_index}]")
+        for word_index, word in enumerate(words)
+    ]
+    placements.extend(
+        (secret.answer, secret.start, secret.direction, f"$.secrets[{secret_index}]")
+        for secret_index, secret in enumerate(secrets)
+        if isinstance(secret, SecretWord)
+    )
 
-    for word_index, word in enumerate(words):
-        row_step = 1 if word.direction == "vertical" else 0
-        column_step = 1 if word.direction == "horizontal" else 0
-        for offset, letter in enumerate(split_answer_letters(word.answer)):
-            row = word.start.row + offset * row_step
-            column = word.start.column + offset * column_step
+    for answer, start, direction, path in placements:
+        row_step = 1 if direction == "vertical" else 0
+        column_step = 1 if direction == "horizontal" else 0
+        for offset, letter in enumerate(split_answer_letters(answer)):
+            row = start.row + offset * row_step
+            column = start.column + offset * column_step
             if row > grid.height or column > grid.width:
                 raise ModelError(
                     "neplatný datový model: "
-                    f"$.words[{word_index}]: slovo {word.answer!r} "
+                    f"{path}: slovo {answer!r} "
                     f"přesahuje mřížku {grid.width} × {grid.height}"
                 )
 
             coordinate = (row, column)
             previous = occupied.get(coordinate)
             if previous is not None and previous[0] != letter:
-                previous_letter, previous_index = previous
+                previous_letter, previous_path = previous
                 raise ModelError(
                     "neplatný datový model: "
-                    f"$.words[{word_index}]: písmeno {letter!r} na souřadnici "
+                    f"{path}: písmeno {letter!r} na souřadnici "
                     f"row={row}, column={column} je v rozporu s písmenem "
-                    f"{previous_letter!r} ze $.words[{previous_index}]"
+                    f"{previous_letter!r} z {previous_path}"
                 )
-            occupied.setdefault(coordinate, (letter, word_index))
+            occupied.setdefault(coordinate, (letter, path))
+
+    for secret_index, secret in enumerate(secrets):
+        if not isinstance(secret, SecretCells):
+            continue
+        for cell_index, cell in enumerate(secret.cells):
+            path = f"$.secrets[{secret_index}].cells[{cell_index}]"
+            if cell.row > grid.height or cell.column > grid.width:
+                raise ModelError(
+                    "neplatný datový model: "
+                    f"{path}: souřadnice row={cell.row}, column={cell.column} "
+                    f"leží mimo mřížku {grid.width} × {grid.height}"
+                )
+            if (cell.row, cell.column) not in occupied:
+                raise ModelError(
+                    "neplatný datový model: "
+                    f"{path}: tajenka musí odkazovat na buňku obsazenou písmenem"
+                )
 
     help_words = tuple(word for word in words if word.in_help)
     if help_position is None:

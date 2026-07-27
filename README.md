@@ -64,6 +64,24 @@ words:
 
 Souřadnice se počítají od 1 z levého horního rohu a `start` označuje první písmeno. Směr je `horizontal` nebo `vertical`; vynechané `in_help` znamená `false`. Pokud je alespoň jedno slovo v pomůcce, generátor pro ni použije první volnou buňku, není-li zadané vlastní `help.position`. Ucelenou podobu ukazuje [zadání s umístěnými slovy](examples/specification-placed-words.yaml).
 
+Zadání rozlišuje tajenku složenou z vybraných polí a tajenku, která je souvislým heslem s vlastní legendou:
+
+```yaml
+secrets:
+  - type: cells
+    cells:
+      - {row: 2, column: 2}
+      - {row: 2, column: 5}
+      - {row: 4, column: 2}
+  - type: word
+    answer: AMONIT
+    start: {row: 5, column: 2}
+    direction: horizontal
+    legend: Zkamenělý hlavonožec
+```
+
+U `type: cells` určuje pořadí souřadnic také pořadí čtení a každé vybrané pole musí obsahovat písmeno. `type: word` se umisťuje a kříží stejně jako běžné heslo, ale jeho písmena budou zvýrazněná jako tajenka a legenda je povinná. Obě podoby ukazuje [zadání s tajenkami](examples/specification-secrets.yaml).
+
 Význam obou dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md). Strojová pravidla jsou oddělená v [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json) a [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json).
 
 Mřížka může obsahovat řádky explicitně typovaných buněk:
@@ -76,7 +94,7 @@ grid:
     - [{type: letter, value: Č}, {type: letter, value: CH}, {type: secret, value: Á}]
 ```
 
-Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. České `CH` zabírá jednu buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku. Tajenková buňka má v PDF světle šedé pozadí. Zápis ukazuje [mřížka s českými písmeny](examples/grid-czech-letters.yaml); v [ukázkové mřížce s tajenkou](examples/grid-secret.yaml) zvýrazněné buňky skládají slovo „TAJENKA“.
+Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. České `CH` zabírá jednu buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku. Tajenková buňka má v PDF světle šedé pozadí. Cílová mřížka už nerozlišuje, zda tajenku určil seznam polí, nebo souvislé heslo; u druhé varianty navíc obsahuje běžnou legendovou buňku. Zápis ukazuje [mřížka s českými písmeny](examples/grid-czech-letters.yaml); v [ukázkové mřížce s tajenkou](examples/grid-secret.yaml) zvýrazněné buňky skládají slovo „TAJENKA“.
 
 Legenda používá neprázdný seznam textů a může u nich výslovně uvést směrové šipky:
 
