@@ -27,6 +27,7 @@ from krizovkar.renderer import (
     RenderError,
     render_pdf,
 )
+from krizovkar.validation import validate_dense_swedish_grid_file
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -80,6 +81,17 @@ def _parser() -> argparse.ArgumentParser:
         help="povolí přepsání existujícího YAML souboru",
     )
     generate.set_defaults(handler=_generate)
+
+    validate = commands.add_parser(
+        "validate",
+        help="odliší chyby dat od varování ke kvalitě mřížky",
+        description=(
+            "Ověří cílovou mřížku a posoudí ji podle pravidel dobré husté "
+            "švédské křížovky. Varování zpracování neblokují."
+        ),
+    )
+    validate.add_argument("source", type=Path, metavar="MŘÍŽKA.yaml")
+    validate.set_defaults(handler=_validate)
 
     render = commands.add_parser(
         "render",
@@ -163,6 +175,28 @@ def _render(arguments: argparse.Namespace) -> int:
         return 2
 
     print(f"PDF vytvořeno: {output}")
+    return 0
+
+
+def _validate(arguments: argparse.Namespace) -> int:
+    report = validate_dense_swedish_grid_file(arguments.source)
+    for issue in report.issues:
+        label = "chyba" if issue.severity == "error" else "varování"
+        print(
+            f"{label} [{issue.code}] {issue.path}: {issue.message}",
+            file=sys.stderr,
+        )
+
+    if report.errors:
+        return 2
+
+    if report.warnings:
+        print(
+            f"Mřížka je formálně platná: {arguments.source} "
+            f"({len(report.warnings)} varování kvality)"
+        )
+    else:
+        print(f"Mřížka je platná a bez varování: {arguments.source}")
     return 0
 
 

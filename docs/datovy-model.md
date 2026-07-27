@@ -154,6 +154,15 @@ Loader již ověřuje rozměry, rozsah slov, shodu písmen na kříženích a z�
 
 Strojová pravidla jsou v samostatných schématech pro [cílovou mřížku](../src/krizovkar/schemas/grid-v1.schema.json) a [zadání](../src/krizovkar/schemas/specification-v1.schema.json). Schémata odmítají chybějící, neznámé a chybně napsané položky i nulové, záporné nebo neceločíselné rozměry. Pythonové loadery navíc kontrolují vztahy, které závisejí na více částech dokumentu.
 
+Validace cílové mřížky rozlišuje dvě závažnosti:
+
+- `error` označuje chybu datového modelu, kvůli které dokument nelze bezpečně načíst nebo dále zpracovat,
+- `warning` označuje formálně platnou mřížku, která může být hůře čitelná nebo nesplňuje zvolená pravidla kvality.
+
+Příkaz `krizovkar validate` při chybě vrací kód `2`. Samotná varování vypíše, ale vrací kód `0`, takže neblokují vykreslení ani další zpracování. Každá položka reportu obsahuje závažnost, strojově čitelný kód, cestu k místu v dokumentu a českou zprávu.
+
+Současný kvalitativní profil je určený pro hustou švédskou mřížku bez šipek. Očekává jeden text a jediný bezprostředně navazující směr u každé legendy, souvislé legendové řádky a sloupce včetně horní a levé hrany a nevyplňované buňky pouze v jejich průsečících. Jde o neblokující formální pravidla pro dobrý výsledek, nikoli o omezení obecného datového formátu. Jiný druh křížovky proto může později použít jiný profil nad stejnými daty.
+
 Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-minimal.yaml) a [zadání](../examples/specification-minimal.yaml).
 
 Vyšší zadání ukazuje [příklad s umístěnými slovy a automatickou pomůckou](../examples/specification-placed-words.yaml).

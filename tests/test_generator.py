@@ -9,6 +9,7 @@ from krizovkar.dictionary import CrosswordDictionary, DictionaryEntry
 from krizovkar.generator import GenerationError, generate_swedish_grid
 from krizovkar.layout import create_dense_swedish_layout
 from krizovkar.model import EmptyCell, LegendCell, LetterCell
+from krizovkar.validation import check_dense_swedish_grid
 
 
 def _complete_dictionary(*lengths: int) -> CrosswordDictionary:
@@ -41,6 +42,7 @@ class GeneratorTest(unittest.TestCase):
         self.assertEqual(49, sum(isinstance(cell, LetterCell) for cell in cells))
         self.assertEqual(28, sum(isinstance(cell, LegendCell) for cell in cells))
         self.assertEqual(4, sum(isinstance(cell, EmptyCell) for cell in cells))
+        self.assertEqual((), check_dense_swedish_grid(first).issues)
 
         for row_index, row in enumerate(first.grid.cells):
             for column_index, cell in enumerate(row):

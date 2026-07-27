@@ -132,6 +132,18 @@ Stejný slovník, rozměr a seed vytvoří stejnou mřížku. Generátor rozděl
 
 Legendy pokrývají horní a levou stranu každého písmenného bloku. Na horním okraji chybí legenda jen ve sloupci s dalšími vnitřními legendami a na levém okraji jen v řádku s dalšími vnitřními legendami. Každá legenda má jediný text a právě jeden možný směr navazujícího hesla, takže nepotřebuje šipku. První experimentální verze zatím nevytváří tajenku ani pomůcku a nehodnotí jazykovou kvalitu hesel. Zdrojový slovník není součástí projektu; uživatel musí mít právo jeho obsah použít.
 
+## Validace
+
+Datový formát a pravidla dobré křížovky jsou dvě oddělené vrstvy. Příkaz `validate` nejprve ověří, zda lze YAML bezpečně načíst jako cílovou mřížku, a potom jej posoudí podle současného profilu husté švédské křížovky:
+
+```shell
+uv run krizovkar validate build/generated-grid.yaml
+```
+
+Chyba znamená neplatný nebo vnitřně rozporný datový model a příkaz skončí návratovým kódem `2`. Varování znamená platnou mřížku, kterou lze dál zpracovat a vykreslit, ale porušuje některé pravidlo kvality; návratový kód zůstává `0`.
+
+Profil nyní varuje zejména před šipkami, více texty v jedné legendě, chybějícím či nejednoznačným směrem hesla, mezerou mimo průsečík legendových hran a neúplným pokrytím těchto hran legendami. Tato pravidla nejsou omezením obecného formátu a jiné druhy křížovek mohou v budoucnu používat jiný profil.
+
 ## Vytvoření PDF
 
 Projekt vyžaduje Python 3.11 nebo novější. Závislosti lze nainstalovat a ukázkový YAML převést pomocí [uv](https://docs.astral.sh/uv/):

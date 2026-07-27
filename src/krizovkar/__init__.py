@@ -29,6 +29,12 @@ from krizovkar.model import (
     write_crossword_grid,
 )
 from krizovkar.renderer import RenderError, render_pdf
+from krizovkar.validation import (
+    ValidationIssue,
+    ValidationReport,
+    check_dense_swedish_grid,
+    validate_dense_swedish_grid_file,
+)
 
 __all__ = [
     "Coordinate",
@@ -49,12 +55,16 @@ __all__ = [
     "ModelError",
     "RenderError",
     "SecretCell",
+    "ValidationIssue",
+    "ValidationReport",
     "WordDirection",
     "WordPlacement",
+    "check_dense_swedish_grid",
     "generate_swedish_grid",
     "load_dictionary",
     "load_crossword_grid",
     "load_crossword_specification",
     "render_pdf",
+    "validate_dense_swedish_grid_file",
     "write_crossword_grid",
 ]
