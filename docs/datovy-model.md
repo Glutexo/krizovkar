@@ -73,7 +73,7 @@ secret_prompts:
     alignment: left
 ```
 
-Povinné `text` musí obsahovat alespoň jeden neprázdný znak. `placement` určuje umístění `above` nad mřížkou nebo `below` pod ní a `alignment` zarovná text `left` doleva nebo `right` doprava vzhledem k šířce mřížky. Výchozí hodnoty jsou `above` a `left`. Pořadí položek se zachovává; každé zadání je samostatný odstavec.
+Povinné `text` musí obsahovat alespoň jeden neprázdný znak. `placement` určuje umístění `above` nad mřížkou nebo `below` pod ní a `alignment` zarovná text `left` doleva nebo `right` doprava vzhledem k šířce mřížky. Výchozí hodnoty jsou `above` a `left`. Pořadí položek se zachovává; každé zadání je samostatný odstavec. Renderer text automaticky zalomí na šířku mřížky a započítá jej do vystředění celého obsahu stránky. Spodní zadání jsou mezi mřížkou a případnými číselnými legendami.
 
 Zadání tajenky není legendou hesla. `secret_prompts` proto nijak neomezuje současné použití legendových buněk ani kořenových číselných `clues`.
 
@@ -105,7 +105,7 @@ Každá legenda odkazuje na existující očíslovanou písmennou buňku a dvoji
 
 Čísla, předěly a kořenové `clues` neurčují druh celého dokumentu. Ve stejné mřížce mohou být současně buňky `type: legend`; jedno heslo tak může mít vepsanou legendu a jiné legendu číselnou. Formát nezakazuje ani oba způsoby u téhož hesla. Ucelenou kombinaci ukazuje [příklad se smíšenými legendami](../examples/grid-mixed-clues.yaml).
 
-Renderer sází číslo do levého horního rohu buňky a vnější legendy pod mřížku do samostatných sloupců „Vodorovně“ a „Svisle“. Čísla, legendy, předěly, zvýraznění tajenky a tajenkové šipky zůstávají viditelné i při vykreslení nevyplněné varianty.
+Renderer sází číslo do levého horního rohu buňky a vnější legendy pod mřížku do samostatných sloupců „Vodorovně“ a „Svisle“. Zadání tajenek, čísla, legendy, předěly, zvýraznění tajenky a tajenkové šipky zůstávají viditelné i při vykreslení nevyplněné varianty.
 
 ## Buňka legendy
 

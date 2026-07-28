@@ -130,7 +130,7 @@ grid:
 
 Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. České `CH` zabírá jednu buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku. Tajenková buňka má v PDF světle šedé pozadí a může mít jeden směrový zobáček `arrow` ve směru `up`, `right`, `down` nebo `left`. Jde o jinou značku než seznam `arrows` v legendové buňce. Cílová mřížka už nerozlišuje, zda tajenku určil seznam polí, nebo souvislé heslo; u druhé varianty navíc obsahuje legendovou buňku s textem „Tajenka“. Zápis ukazuje [mřížka s českými písmeny](examples/grid-czech-letters.yaml); [ukázková cesta se zobáčky](examples/grid-secret-arrows.yaml) mění směr dvakrát.
 
-Cílový dokument ukládá texty k tajenkám v kořenovém seznamu `secret_prompts`. Každá položka má stejné `text`, `placement` a `alignment` jako `prompt` ve vstupním zadání; seznam dovoluje v jedné mřížce více tajenek. Zápis ukazuje [cílová mřížka se zadáním tajenky](examples/grid-secret-prompt.yaml).
+Cílový dokument ukládá texty k tajenkám v kořenovém seznamu `secret_prompts`. Každá položka má stejné `text`, `placement` a `alignment` jako `prompt` ve vstupním zadání; seznam dovoluje v jedné mřížce více tajenek. Renderer je sází nad nebo pod mřížku a zarovnává k její levé nebo pravé hraně. Spodní zadání se zobrazí mezi mřížkou a případnými číselnými legendami. Zápis ukazuje [cílová mřížka se zadáním tajenky](examples/grid-secret-prompt.yaml).
 
 Čárkované rozložení může písmenné buňce přidat počáteční `number` a silné mezislovní `bars` na její pravé či dolní hraně. Renderer vloží číslo do levého horního rohu, předěly vykreslí stejným silným tahem jako vnější rám a očíslované `clues` rozdělí pod mřížkou do sloupců „Vodorovně“ a „Svisle“. Číslo bez odpovídající legendy může označit například tajenku bez nápovědy. Tyto položky nijak nevylučují buňky `type: legend`: [smíšená mřížka](examples/grid-mixed-clues.yaml) používá vepsané i číselné legendy současně, zatímco [číslovaná mřížka](examples/grid-classic.yaml) ukazuje samotné vnější legendy.
 
@@ -223,7 +223,7 @@ uv run krizovkar render examples/grid-secret-arrows.yaml \
   --output build/secret-arrows-blank.pdf
 ```
 
-Prázdná varianta skryje hodnoty běžných i tajenkových písmenných buněk. Legendy uvnitř i pod mřížkou, čísla, pomůcky, nevyplňovaná pole, šedé zvýraznění tajenky a její zobáčky zůstanou zobrazené stejně jako ve vyplněné variantě.
+Prázdná varianta skryje hodnoty běžných i tajenkových písmenných buněk. Zadání tajenek nad či pod mřížkou, legendy uvnitř i pod mřížkou, čísla, pomůcky, nevyplňovaná pole, šedé zvýraznění tajenky a její zobáčky zůstanou zobrazené stejně jako ve vyplněné variantě.
 
 Bez volby `--output` vznikne PDF vedle vstupního souboru se stejným názvem. Existující soubor příkaz nepřepíše, dokud není přidána volba `--force`.
 

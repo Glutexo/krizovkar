@@ -10,7 +10,7 @@ from tempfile import NamedTemporaryFile
 from xml.sax.saxutils import escape
 
 import pymupdf_fonts
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A0, A1, A2, A3, A4, A5, A6, LEGAL, LETTER
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
@@ -30,6 +30,8 @@ from krizovkar.model import (
     LetterCell,
     SecretArrow,
     SecretCell,
+    SecretPrompt,
+    SecretPromptPlacement,
 )
 from krizovkar.typography import mark_czech_hyphenation, protect_czech_prepositions
 
@@ -70,6 +72,10 @@ EXTERNAL_CLUE_LEADING = 9.6
 EXTERNAL_CLUE_MIN_AREA_WIDTH = 100 * mm
 EXTERNAL_CLUE_COLUMN_GAP = 6 * mm
 EXTERNAL_CLUE_GRID_GAP = 7 * mm
+SECRET_PROMPT_FONT_SIZE = 9.0
+SECRET_PROMPT_LEADING = 11.0
+SECRET_PROMPT_SPACING = 2 * mm
+SECRET_PROMPT_GRID_GAP = 4 * mm
 DEFAULT_PAGE_FORMAT = "A4"
 SUPPORTED_PAGE_FORMATS = (
     "A0",
@@ -508,6 +514,59 @@ def _draw_letter_cell(
     pdf.drawCentredString(center_x, baseline, cell.value)
 
 
+def _secret_prompt_paragraph(prompt: SecretPrompt) -> Paragraph:
+    _register_text_cell_fonts()
+    text = mark_czech_hyphenation(
+        protect_czech_prepositions(prompt.text)
+    )
+    style = ParagraphStyle(
+        name="secret-prompt",
+        fontName=TEXT_CELL_FONT,
+        fontSize=SECRET_PROMPT_FONT_SIZE,
+        leading=SECRET_PROMPT_LEADING,
+        alignment=TA_LEFT if prompt.alignment == "left" else TA_RIGHT,
+        hyphenationLang="",
+        splitLongWords=0,
+        spaceBefore=0,
+        spaceAfter=0,
+    )
+    return Paragraph(escape(text), style)
+
+
+def _prepare_secret_prompts(
+    prompts: tuple[SecretPrompt, ...],
+    placement: SecretPromptPlacement,
+    width: float,
+    maximum_height: float,
+) -> tuple[tuple[tuple[Paragraph, float], ...], float]:
+    layouts: list[tuple[Paragraph, float]] = []
+    for prompt in prompts:
+        if prompt.placement != placement:
+            continue
+        paragraph = _secret_prompt_paragraph(prompt)
+        _, paragraph_height = paragraph.wrap(width, maximum_height)
+        layouts.append((paragraph, paragraph_height))
+
+    total_height = sum(height for _, height in layouts)
+    if layouts:
+        total_height += SECRET_PROMPT_SPACING * (len(layouts) - 1)
+    return tuple(layouts), total_height
+
+
+def _draw_secret_prompts(
+    pdf: Canvas,
+    layouts: tuple[tuple[Paragraph, float], ...],
+    left: float,
+    bottom: float,
+    height: float,
+) -> None:
+    top = bottom + height
+    for paragraph, paragraph_height in layouts:
+        paragraph_bottom = top - paragraph_height
+        paragraph.drawOn(pdf, left, paragraph_bottom)
+        top = paragraph_bottom - SECRET_PROMPT_SPACING
+
+
 def _external_clue_paragraph(
     heading: str,
     clues: tuple[ExternalClue, ...],
@@ -671,28 +730,61 @@ def _write_pdf(
     height = crossword.grid.height
     available_width = page_width - 2 * PAGE_MARGIN
     available_height = page_height - 2 * PAGE_MARGIN
-    provisional_cell_size = min(MAX_CELL_SIZE, available_width / width)
-    clue_layouts, clue_area_width, clue_height = _prepare_external_clues(
-        crossword,
-        page_width,
-        page_height,
-        width * provisional_cell_size,
-    )
-    clue_gap = EXTERNAL_CLUE_GRID_GAP if clue_layouts else 0.0
-    available_grid_height = available_height - clue_height - clue_gap
-    if available_grid_height <= 0:
-        raise RenderError("vnější legendy se nevejdou na zvolenou stránku")
-    cell_size = min(
-        MAX_CELL_SIZE,
-        available_width / width,
-        available_grid_height / height,
-    )
+    cell_size = min(MAX_CELL_SIZE, available_width / width)
+    for _ in range(50):
+        provisional_grid_width = width * cell_size
+        above_layouts, above_height = _prepare_secret_prompts(
+            crossword.secret_prompts,
+            "above",
+            provisional_grid_width,
+            available_height,
+        )
+        below_layouts, below_height = _prepare_secret_prompts(
+            crossword.secret_prompts,
+            "below",
+            provisional_grid_width,
+            available_height,
+        )
+        clue_layouts, clue_area_width, clue_height = _prepare_external_clues(
+            crossword,
+            page_width,
+            page_height,
+            provisional_grid_width,
+        )
+        clue_gap = EXTERNAL_CLUE_GRID_GAP if clue_layouts else 0.0
+        above_gap = SECRET_PROMPT_GRID_GAP if above_layouts else 0.0
+        below_gap = SECRET_PROMPT_GRID_GAP if below_layouts else 0.0
+        outside_height = (
+            clue_height
+            + clue_gap
+            + below_height
+            + below_gap
+            + above_gap
+            + above_height
+        )
+        available_grid_height = available_height - outside_height
+        if available_grid_height <= 0:
+            raise RenderError(
+                "obsah vně mřížky se nevejde na zvolenou stránku"
+            )
+        next_cell_size = min(
+            cell_size,
+            available_grid_height / height,
+        )
+        if next_cell_size == cell_size:
+            break
+        cell_size = next_cell_size
+    else:
+        raise RenderError("sazbu obsahu vně mřížky se nepodařilo ustálit")
+
     grid_width = width * cell_size
     grid_height = height * cell_size
     left = (page_width - grid_width) / 2
-    content_height = grid_height + clue_gap + clue_height
+    content_height = grid_height + outside_height
     content_bottom = (page_height - content_height) / 2
-    bottom = content_bottom + clue_height + clue_gap
+    below_prompt_bottom = content_bottom + clue_height + clue_gap
+    bottom = below_prompt_bottom + below_height + below_gap
+    above_prompt_bottom = bottom + grid_height + above_gap
     clue_left = (page_width - clue_area_width) / 2
 
     pdf = Canvas(str(target), pagesize=page_size, pageCompression=1)
@@ -815,6 +907,22 @@ def _write_pdf(
             clue_left,
             content_bottom,
             clue_height,
+        )
+    if below_layouts:
+        _draw_secret_prompts(
+            pdf,
+            below_layouts,
+            left,
+            below_prompt_bottom,
+            below_height,
+        )
+    if above_layouts:
+        _draw_secret_prompts(
+            pdf,
+            above_layouts,
+            left,
+            above_prompt_bottom,
+            above_height,
         )
     pdf.showPage()
     pdf.save()

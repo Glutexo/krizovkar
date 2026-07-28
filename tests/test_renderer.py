@@ -7,15 +7,18 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from reportlab.lib.enums import TA_LEFT, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle
 
 from krizovkar.model import (
     CrosswordGrid,
     EmptyCell,
+    ExternalClue,
     Grid,
     LegendCell,
     LetterCell,
     SecretCell,
+    SecretPrompt,
     load_crossword_grid,
 )
 from krizovkar.renderer import (
@@ -32,6 +35,7 @@ from krizovkar.renderer import (
     _draw_legend_cell,
     _draw_letter_cell,
     _draw_secret_beak,
+    _draw_secret_prompts,
     _draw_strong_grid_lines,
     _secret_beak_points,
     _secret_letter_center,
@@ -42,6 +46,7 @@ from krizovkar.typography import SOFT_HYPHEN
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GRID_CLASSIC_EXAMPLE = PROJECT_ROOT / "examples" / "grid-classic.yaml"
 GRID_MIXED_CLUES_EXAMPLE = PROJECT_ROOT / "examples" / "grid-mixed-clues.yaml"
+GRID_SECRET_PROMPT_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret-prompt.yaml"
 
 
 class FittedTextTest(unittest.TestCase):
@@ -199,6 +204,120 @@ class RenderModeTest(unittest.TestCase):
         draw_letter.assert_not_called()
         draw_legend.assert_called_once()
         draw_secret_beak.assert_called_once()
+
+
+class SecretPromptRenderTest(unittest.TestCase):
+    def test_multiple_prompts_keep_top_to_bottom_order(self) -> None:
+        pdf = Mock()
+        first = Mock()
+        second = Mock()
+
+        _draw_secret_prompts(
+            pdf,
+            ((first, 10), (second, 20)),
+            left=5,
+            bottom=10,
+            height=40,
+        )
+
+        first_y = first.drawOn.call_args.args[2]
+        second_y = second.drawOn.call_args.args[2]
+        self.assertEqual(5, first.drawOn.call_args.args[1])
+        self.assertEqual(5, second.drawOn.call_args.args[1])
+        self.assertGreater(first_y, second_y)
+
+    def test_example_prompt_is_drawn_in_blank_pdf(self) -> None:
+        crossword = load_crossword_grid(GRID_SECRET_PROMPT_EXAMPLE)
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "secret-prompt-blank.pdf"
+            with patch(
+                "krizovkar.renderer._draw_secret_prompts",
+                wraps=_draw_secret_prompts,
+            ) as draw_prompts:
+                render_pdf(crossword, output, filled=False)
+
+        draw_prompts.assert_called_once()
+        layouts = draw_prompts.call_args.args[1]
+        self.assertEqual(TA_LEFT, layouts[0][0].style.alignment)
+
+    def test_places_prompts_around_grid_and_above_external_clues(self) -> None:
+        crossword = CrosswordGrid(
+            format_name="krizovkar",
+            kind="grid",
+            version=1,
+            grid=Grid(
+                width=2,
+                height=1,
+                cells=(
+                    (
+                        LetterCell(value="A", number=1),
+                        LetterCell(value="B"),
+                    ),
+                ),
+            ),
+            clues=(
+                ExternalClue(
+                    number=1,
+                    direction="horizontal",
+                    text="Abeceda",
+                ),
+            ),
+            secret_prompts=(
+                SecretPrompt(
+                    text="Zadání nahoře",
+                    placement="above",
+                    alignment="left",
+                ),
+                SecretPrompt(
+                    text="Zadání dole",
+                    placement="below",
+                    alignment="right",
+                ),
+            ),
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "secret-prompts.pdf"
+            with (
+                patch(
+                    "krizovkar.renderer._draw_inner_grid_lines",
+                    wraps=_draw_inner_grid_lines,
+                ) as draw_grid,
+                patch(
+                    "krizovkar.renderer._draw_external_clues",
+                    wraps=_draw_external_clues,
+                ) as draw_clues,
+                patch(
+                    "krizovkar.renderer._draw_secret_prompts",
+                    wraps=_draw_secret_prompts,
+                ) as draw_prompts,
+            ):
+                render_pdf(crossword, output, filled=False)
+
+        _, _, grid_left, grid_bottom, cell_size = draw_grid.call_args.args
+        grid_width = crossword.grid.width * cell_size
+        grid_top = grid_bottom + crossword.grid.height * cell_size
+
+        self.assertEqual(2, draw_prompts.call_count)
+        prompt_calls = {
+            call.args[1][0][0].style.alignment: call.args
+            for call in draw_prompts.call_args_list
+        }
+        _, below_layouts, below_left, below_bottom, below_height = (
+            prompt_calls[TA_RIGHT]
+        )
+        _, above_layouts, above_left, above_bottom, _ = prompt_calls[TA_LEFT]
+
+        self.assertAlmostEqual(grid_left, below_left)
+        self.assertAlmostEqual(grid_left, above_left)
+        self.assertAlmostEqual(grid_width, below_layouts[0][0].width)
+        self.assertAlmostEqual(grid_width, above_layouts[0][0].width)
+        self.assertLess(below_bottom + below_height, grid_bottom)
+        self.assertGreater(above_bottom, grid_top)
+
+        _, _, _, clue_bottom, clue_height = draw_clues.call_args.args
+        self.assertLess(clue_bottom + clue_height, below_bottom)
 
 
 class GridLineRenderTest(unittest.TestCase):
