@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/master/src/krizovkar/schemas/template-v1.schema.json",
+  "title": "Šablona křížovky Křížovkáře, verze 1",
+  "description": "Strukturální mezivýsledek s rolemi buněk a sloty hesel bez konkrétních odpovědí.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "kind",
+    "version",
+    "grid",
+    "slots"
+  ],
+  "properties": {
+    "format": {
+      "description": "Jednoznačný název formátu.",
+      "const": "krizovkar"
+    },
+    "kind": {
+      "description": "Druh dokumentu.",
+      "const": "template"
+    },
+    "version": {
+      "description": "Hlavní verze datového modelu šablony.",
+      "const": 1
+    },
+    "grid": {
+      "description": "Obdélníková matice rolí všech buněk šablony.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height",
+        "cells"
+      ],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cells": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/templateCell"
+            }
+          }
+        }
+      }
+    },
+    "slots": {
+      "description": "Místa pro budoucí hesla v určeném pořadí.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/wordSlot"
+      }
+    }
+  },
+  "$defs": {
+    "coordinate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "row",
+        "column"
+      ],
+      "properties": {
+        "row": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "templateCell": {
+      "description": "Nevyplněné písmeno, budoucí legenda nebo nevyplňovaná buňka.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "letter",
+            "legend",
+            "empty"
+          ]
+        }
+      }
+    },
+    "wordSlot": {
+      "description": "Souvislé místo pro jedno heslo.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "start",
+        "direction",
+        "length"
+      ],
+      "properties": {
+        "id": {
+          "description": "Stabilní identifikátor slotu v rámci šablony.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "start": {
+          "$ref": "#/$defs/coordinate"
+        },
+        "direction": {
+          "enum": [
+            "horizontal",
+            "vertical"
+          ]
+        },
+        "length": {
+          "description": "Počet písmenných buněk; CH zabírá jednu.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "legend": {
+          "description": "Volitelná vepsaná legenda bezprostředně před začátkem slotu.",
+          "$ref": "#/$defs/coordinate"
+        }
+      }
+    }
+  }
+}

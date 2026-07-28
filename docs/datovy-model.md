@@ -2,18 +2,51 @@
 
 Křížovkář ukládá data jako textové dokumenty v YAML 1.2. Model je nezávislý na budoucím editoru, aby stejné soubory mohly používat různé nástroje.
 
-Existují dva samostatné druhy dokumentů:
+Existují tři samostatné druhy dokumentů:
 
 - zadání `specification` popisuje, co se má do křížovky vložit,
+- šablona `template` popisuje dosud nevyplněné buňky a sloty hesel,
 - cílová mřížka `grid` popisuje konkrétní výsledek po rozložení.
 
 ```text
-specification → generování a rozložení → grid → vykreslení PDF
+specification → návrh rozložení → template → plnění → grid → vykreslení PDF
 ```
 
 Každý druh má vlastní JSON Schema a vlastní Pythonový loader. Dokument proto vždy obsahuje povinnou položku `kind`; nástroj nemusí jeho význam odhadovat z ostatních položek.
 
 Položka `kind` rozlišuje fázi dat, nikoli švédskou, čárkovanou nebo jinou podobu křížovky. Všechny používají stejné zadání i stejný model cílové mřížky. Způsob uvedení legendy je vlastnost konkrétního rozložení a jednotlivá hesla v jedné mřížce mohou používat různé způsoby.
+
+## Šablona, verze 1
+
+Šablona je samostatný mezivýsledek, který lze uložit, ručně upravit a později naplnit jiným slovníkem. Neobsahuje konkrétní odpovědi ani texty legend:
+
+```yaml
+format: krizovkar
+kind: template
+version: 1
+grid:
+  width: 3
+  height: 1
+  cells:
+    - [{type: letter}, {type: letter}, {type: letter}]
+slots:
+  - id: h1
+    start: {row: 1, column: 1}
+    direction: horizontal
+    length: 3
+```
+
+Povinná matice `grid.cells` rozlišuje tři role:
+
+- `type: letter` je dosud nevyplněná písmenná buňka,
+- `type: legend` rezervuje buňku pro jednu nebo dvě budoucí vepsané legendy,
+- `type: empty` je nevyplňovaná buňka.
+
+Každý `slot` popisuje jedno budoucí heslo. Povinné `id` je v dokumentu jedinečné, `start` používá souřadnice od 1, `direction` určuje směr doprava nebo dolů a `length` je počet buněk. Stejně jako v ostatních dokumentech zabírá české `CH` jednu buňku.
+
+Volitelná souřadnice `legend` označuje vepsanou legendovou buňku. Musí ležet bezprostředně vlevo od vodorovného slotu nebo nad svislým slotem. Její vynechání znamená budoucí vnější legendu, takže stejný model podporuje švédské, klasické i smíšené rozložení.
+
+Loader navíc kontroluje rozměr matice, přesah slotů, jejich překryvy ve stejném směru a vazby na role buněk. Každá písmenná buňka musí patřit alespoň jednomu slotu a každou legendovou buňku musí používat alespoň jeden slot. Ucelený zápis je v [minimální šabloně](../examples/template-minimal.yaml).
 
 ## Cílová mřížka, verze 1
 

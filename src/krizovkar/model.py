@@ -131,6 +131,55 @@ class Coordinate:
 
 
 @dataclass(frozen=True, slots=True)
+class TemplateLetterCell:
+    """Dosud nevyplněná písmenná buňka šablony."""
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateLegendCell:
+    """Buňka šablony vyhrazená pro jednu nebo dvě legendy."""
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateEmptyCell:
+    """Nevyplňovaná buňka šablony."""
+
+
+TemplateCell = TemplateLetterCell | TemplateLegendCell | TemplateEmptyCell
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateGrid:
+    """Obdélníková matice rolí buněk šablony."""
+
+    width: int
+    height: int
+    cells: tuple[tuple[TemplateCell, ...], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class WordSlot:
+    """Místo pro jedno heslo bez dosud zvolené odpovědi a legendy."""
+
+    identifier: str
+    start: Coordinate
+    direction: WordDirection
+    length: int
+    legend_position: Coordinate | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CrosswordTemplate:
+    """Strukturální mezivýsledek mezi zadáním a vyplněnou mřížkou."""
+
+    format_name: str
+    kind: str
+    version: int
+    grid: TemplateGrid
+    slots: tuple[WordSlot, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class WordPlacement:
     """Slovo umístěné v mřížce spolu se svou legendou."""
 
@@ -380,6 +429,219 @@ def load_crossword_grid(source: str | Path) -> CrosswordGrid:
         clues=clues,
         secret_prompts=secret_prompts,
     )
+
+
+def _template_cell(cell: dict[str, Any]) -> TemplateCell:
+    if cell["type"] == "letter":
+        return TemplateLetterCell()
+    if cell["type"] == "legend":
+        return TemplateLegendCell()
+    if cell["type"] == "empty":
+        return TemplateEmptyCell()
+    raise ModelError(f"nepodporovaný typ buňky šablony: {cell['type']!r}")
+
+
+def _template_cells(
+    grid: dict[str, Any],
+) -> tuple[tuple[TemplateCell, ...], ...]:
+    raw_cells = grid["cells"]
+    if len(raw_cells) != grid["height"]:
+        raise ModelError(
+            "neplatný datový model: $.grid.cells: "
+            f"počet řádků ({len(raw_cells)}) neodpovídá "
+            f"grid.height ({grid['height']})"
+        )
+
+    rows: list[tuple[TemplateCell, ...]] = []
+    for row_index, raw_row in enumerate(raw_cells):
+        if len(raw_row) != grid["width"]:
+            raise ModelError(
+                f"neplatný datový model: $.grid.cells[{row_index}]: "
+                f"počet buněk ({len(raw_row)}) neodpovídá "
+                f"grid.width ({grid['width']})"
+            )
+        rows.append(tuple(_template_cell(cell) for cell in raw_row))
+    return tuple(rows)
+
+
+def load_crossword_template(source: str | Path) -> CrosswordTemplate:
+    """Načte a ověří YAML se strukturální šablonou křížovky."""
+
+    source_path = Path(source)
+    data = _validated_data(source_path, "template-v1.schema.json")
+    raw_grid = data["grid"]
+    template = CrosswordTemplate(
+        format_name=data["format"],
+        kind=data["kind"],
+        version=data["version"],
+        grid=TemplateGrid(
+            width=raw_grid["width"],
+            height=raw_grid["height"],
+            cells=_template_cells(raw_grid),
+        ),
+        slots=tuple(
+            WordSlot(
+                identifier=slot["id"],
+                start=Coordinate(
+                    row=slot["start"]["row"],
+                    column=slot["start"]["column"],
+                ),
+                direction=slot["direction"],
+                length=slot["length"],
+                legend_position=(
+                    Coordinate(
+                        row=slot["legend"]["row"],
+                        column=slot["legend"]["column"],
+                    )
+                    if "legend" in slot
+                    else None
+                ),
+            )
+            for slot in data["slots"]
+        ),
+    )
+    _validate_crossword_template(template)
+    return template
+
+
+def _validate_crossword_template(template: CrosswordTemplate) -> None:
+    grid = template.grid
+    if grid.width < 1 or grid.height < 1:
+        raise ModelError("neplatný datový model: $.grid: rozměry musí být kladné")
+    if len(grid.cells) != grid.height:
+        raise ModelError(
+            "neplatný datový model: $.grid.cells: "
+            f"počet řádků ({len(grid.cells)}) neodpovídá "
+            f"grid.height ({grid.height})"
+        )
+    for row_index, row in enumerate(grid.cells):
+        if len(row) != grid.width:
+            raise ModelError(
+                f"neplatný datový model: $.grid.cells[{row_index}]: "
+                f"počet buněk ({len(row)}) neodpovídá "
+                f"grid.width ({grid.width})"
+            )
+    if not template.slots:
+        raise ModelError("neplatný datový model: $.slots: seznam nesmí být prázdný")
+
+    identifiers: dict[str, str] = {}
+    occupied: dict[tuple[int, int], dict[WordDirection, str]] = {}
+    used_letters: set[tuple[int, int]] = set()
+    used_legends: dict[tuple[int, int], dict[WordDirection, str]] = {}
+
+    for slot_index, slot in enumerate(template.slots):
+        path = f"$.slots[{slot_index}]"
+        if slot.length < 1:
+            raise ModelError(
+                f"neplatný datový model: {path}.length: délka musí být kladná"
+            )
+        if slot.start.row < 1 or slot.start.column < 1:
+            raise ModelError(
+                f"neplatný datový model: {path}.start: souřadnice musí být kladné"
+            )
+        previous_identifier_path = identifiers.get(slot.identifier)
+        if previous_identifier_path is not None:
+            raise ModelError(
+                "neplatný datový model: "
+                f"{path}.id: identifikátor {slot.identifier!r} už používá "
+                f"{previous_identifier_path}"
+            )
+        identifiers[slot.identifier] = f"{path}.id"
+
+        row_step = 1 if slot.direction == "vertical" else 0
+        column_step = 1 if slot.direction == "horizontal" else 0
+        for offset in range(slot.length):
+            row = slot.start.row + offset * row_step
+            column = slot.start.column + offset * column_step
+            if row > grid.height or column > grid.width:
+                raise ModelError(
+                    "neplatný datový model: "
+                    f"{path}: slot {slot.identifier!r} přesahuje šablonu "
+                    f"{grid.width} × {grid.height}"
+                )
+            cell = grid.cells[row - 1][column - 1]
+            if not isinstance(cell, TemplateLetterCell):
+                raise ModelError(
+                    "neplatný datový model: "
+                    f"{path}: slot {slot.identifier!r} vede přes nepísmennou "
+                    f"buňku row={row}, column={column}"
+                )
+
+            coordinate = (row, column)
+            directions = occupied.setdefault(coordinate, {})
+            previous_slot = directions.get(slot.direction)
+            if previous_slot is not None:
+                raise ModelError(
+                    "neplatný datový model: "
+                    f"{path}: slot {slot.identifier!r} se ve stejném směru "
+                    f"překrývá se slotem {previous_slot!r}"
+                )
+            directions[slot.direction] = slot.identifier
+            used_letters.add(coordinate)
+
+        if slot.legend_position is None:
+            continue
+        legend = slot.legend_position
+        if (
+            legend.row < 1
+            or legend.column < 1
+            or legend.row > grid.height
+            or legend.column > grid.width
+        ):
+            raise ModelError(
+                "neplatný datový model: "
+                f"{path}.legend: souřadnice leží mimo šablonu "
+                f"{grid.width} × {grid.height}"
+            )
+        expected_legend = (
+            Coordinate(row=slot.start.row, column=slot.start.column - 1)
+            if slot.direction == "horizontal"
+            else Coordinate(row=slot.start.row - 1, column=slot.start.column)
+        )
+        if legend != expected_legend:
+            raise ModelError(
+                "neplatný datový model: "
+                f"{path}.legend: legenda musí bezprostředně předcházet "
+                "prvnímu písmenu slotu"
+            )
+        legend_cell = grid.cells[legend.row - 1][legend.column - 1]
+        if not isinstance(legend_cell, TemplateLegendCell):
+            raise ModelError(
+                "neplatný datový model: "
+                f"{path}.legend: souřadnice row={legend.row}, "
+                f"column={legend.column} není legendová buňka"
+            )
+        directions = used_legends.setdefault((legend.row, legend.column), {})
+        previous_slot = directions.get(slot.direction)
+        if previous_slot is not None:
+            raise ModelError(
+                "neplatný datový model: "
+                f"{path}.legend: legendu ve směru {slot.direction!r} "
+                f"už používá slot {previous_slot!r}"
+            )
+        directions[slot.direction] = slot.identifier
+
+    for row_index, row in enumerate(grid.cells, start=1):
+        for column_index, cell in enumerate(row, start=1):
+            coordinate = (row_index, column_index)
+            if (
+                isinstance(cell, TemplateLetterCell)
+                and coordinate not in used_letters
+            ):
+                raise ModelError(
+                    "neplatný datový model: "
+                    f"$.grid.cells[{row_index - 1}][{column_index - 1}]: "
+                    "písmenná buňka nepatří do žádného slotu"
+                )
+            if (
+                isinstance(cell, TemplateLegendCell)
+                and coordinate not in used_legends
+            ):
+                raise ModelError(
+                    "neplatný datový model: "
+                    f"$.grid.cells[{row_index - 1}][{column_index - 1}]: "
+                    "legendovou buňku nepoužívá žádný slot"
+                )
 
 
 def _validate_grid_annotations(
@@ -739,14 +1001,61 @@ def _crossword_grid_data(crossword: CrosswordGrid) -> dict[str, Any]:
     return data
 
 
-def write_crossword_grid(
-    crossword: CrosswordGrid,
+def _template_cell_data(cell: TemplateCell) -> dict[str, str]:
+    if isinstance(cell, TemplateLetterCell):
+        return {"type": "letter"}
+    if isinstance(cell, TemplateLegendCell):
+        return {"type": "legend"}
+    if isinstance(cell, TemplateEmptyCell):
+        return {"type": "empty"}
+    raise ModelError(
+        f"nepodporovaný typ buňky šablony pro zápis: {type(cell).__name__}"
+    )
+
+
+def _crossword_template_data(template: CrosswordTemplate) -> dict[str, Any]:
+    _validate_crossword_template(template)
+    slots = []
+    for slot in template.slots:
+        data: dict[str, Any] = {
+            "id": slot.identifier,
+            "start": {
+                "row": slot.start.row,
+                "column": slot.start.column,
+            },
+            "direction": slot.direction,
+            "length": slot.length,
+        }
+        if slot.legend_position is not None:
+            data["legend"] = {
+                "row": slot.legend_position.row,
+                "column": slot.legend_position.column,
+            }
+        slots.append(data)
+
+    return {
+        "format": template.format_name,
+        "kind": template.kind,
+        "version": template.version,
+        "grid": {
+            "width": template.grid.width,
+            "height": template.grid.height,
+            "cells": [
+                [_template_cell_data(cell) for cell in row]
+                for row in template.grid.cells
+            ],
+        },
+        "slots": slots,
+    }
+
+
+def _write_yaml_document(
+    data: dict[str, Any],
     output: str | Path,
     *,
-    overwrite: bool = False,
+    overwrite: bool,
+    subject: str,
 ) -> Path:
-    """Zapíše cílovou mřížku atomicky jako YAML."""
-
     output_path = Path(output)
     if output_path.exists() and not overwrite:
         raise ModelError(f"výstupní soubor již existuje: {output_path}")
@@ -766,16 +1075,48 @@ def write_crossword_grid(
             yaml = YAML()
             yaml.width = 100
             yaml.indent(mapping=2, sequence=2, offset=0)
-            yaml.dump(_crossword_grid_data(crossword), temporary)
+            yaml.dump(data, temporary)
 
         temporary_path.replace(output_path)
     except OSError as error:
         detail = error.strerror or str(error)
         raise ModelError(
-            f"cílovou mřížku nelze zapsat ({output_path}): {detail}"
+            f"{subject} nelze zapsat ({output_path}): {detail}"
         ) from error
     finally:
         if "temporary_path" in locals():
             temporary_path.unlink(missing_ok=True)
 
     return output_path
+
+
+def write_crossword_grid(
+    crossword: CrosswordGrid,
+    output: str | Path,
+    *,
+    overwrite: bool = False,
+) -> Path:
+    """Zapíše cílovou mřížku atomicky jako YAML."""
+
+    return _write_yaml_document(
+        _crossword_grid_data(crossword),
+        output,
+        overwrite=overwrite,
+        subject="cílovou mřížku",
+    )
+
+
+def write_crossword_template(
+    template: CrosswordTemplate,
+    output: str | Path,
+    *,
+    overwrite: bool = False,
+) -> Path:
+    """Zapíše šablonu křížovky atomicky jako YAML."""
+
+    return _write_yaml_document(
+        _crossword_template_data(template),
+        output,
+        overwrite=overwrite,
+        subject="šablonu křížovky",
+    )

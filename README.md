@@ -20,13 +20,15 @@ Experimentální generátor ověřuje základní práci se slovníkem a kříže
 
 ## Datový model
 
-Křížovkář rozlišuje dva samostatné druhy YAML dokumentů:
+Křížovkář rozlišuje tři samostatné druhy YAML dokumentů:
 
 - `kind: specification` je vstupní zadání se slovy, nápovědami, tajenkami a pravidly skládání,
+- `kind: template` je nevyplněná šablona s rolemi buněk a sloty hesel,
 - `kind: grid` je výsledná mřížka s konkrétními buňkami, kterou lze přímo vykreslit.
 
 ```text
-specification → generátor (budoucí) → grid → render → PDF
+specification → návrh rozložení (budoucí) → template
+template + slovník → plnění (budoucí) → grid → render → PDF
 slovník → experimentální generátor → grid → render → PDF
 ```
 
@@ -40,6 +42,8 @@ grid:
   width: 15
   height: 10
 ```
+
+Šablona na rozdíl od cílové mřížky neobsahuje odpovědi ani texty legend. Každému budoucímu heslu určuje stabilní identifikátor, začátek, směr a délku; matice buněk rozlišuje budoucí písmena, vepsané legendy a nevyplňovaná pole. Minimální zápis ukazuje [příklad šablony](examples/template-minimal.yaml).
 
 Samostatné zadání popisuje rozměr a umístěná slova:
 
@@ -114,7 +118,7 @@ secrets:
 
 Slovní části bez výslovné `legend` dostanou postupně popisky `1. část tajenky`, `2. část tajenky` a tak dále. Vlastní text může použít také formulaci `2. díl tajenky` nebo `Tajenka: 3. díl`. Části `type: cells` vlastní legendu nemají, mohou obsahovat samostatná pole a každá může samostatně zapnout zobáčky pro souvislou cestu. Obě vícedílné podoby ukazuje [zadání s vícedílnými tajenkami](examples/specification-multipart-secrets.yaml).
 
-Význam obou dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md). Strojová pravidla jsou oddělená v [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json) a [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json).
+Význam dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md). Strojová pravidla jsou oddělená v [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json), [JSON Schema šablony](src/krizovkar/schemas/template-v1.schema.json) a [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json).
 
 Model nemá přepínač mezi švédskou a čárkovanou křížovkou. Zadání hesla, jeho odpovědi a legendy je v obou případech stejné; konkrétní cílová mřížka pouze určí, zda legendu vloží do samostatné buňky, nebo ji spojí s číslem písmenné buňky a uvede pod mřížkou. Legendová buňka zabírá místo, takže stejné zadání může být platné pro jedno rozložení a nevejít se do jiného. Oba způsoby lze v jedné mřížce libovolně kombinovat.
 
