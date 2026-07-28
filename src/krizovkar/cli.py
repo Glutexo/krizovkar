@@ -15,6 +15,8 @@ from krizovkar.generator import (
     GenerationError,
     SecretRequirement,
     fill_crossword_template,
+    generate_numbered_grid,
+    generate_numbered_template,
     generate_swedish_grid,
     generate_swedish_template,
     normalize_secret_text,
@@ -37,6 +39,10 @@ from krizovkar.renderer import (
 from krizovkar.validation import validate_crossword_grid_file
 
 
+LAYOUT_CHOICES = ("swedish", "numbered")
+DEFAULT_LAYOUT = "swedish"
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="krizovkar",
@@ -46,10 +52,10 @@ def _parser() -> argparse.ArgumentParser:
 
     template = commands.add_parser(
         "template",
-        help="vytvoří nevyplněnou hustou švédskou šablonu",
+        help="vytvoří nevyplněnou hustou šablonu",
         description=(
-            "Rozvrhne písmenné, legendové a nevyplňované buňky a "
-            "zapíše sloty budoucích hesel bez použití slovníku."
+            "Vytvoří švédské nebo číslované rozvržení a zapíše sloty "
+            "budoucích hesel bez použití slovníku."
         ),
     )
     template.add_argument(
@@ -74,6 +80,7 @@ def _parser() -> argparse.ArgumentParser:
         metavar="POČET",
         help=f"počet řádků; výchozí je {DEFAULT_GRID_HEIGHT}",
     )
+    _add_layout_argument(template)
     template.add_argument(
         "--seed",
         type=int,
@@ -127,11 +134,11 @@ def _parser() -> argparse.ArgumentParser:
 
     generate = commands.add_parser(
         "generate",
-        help="vytvoří vyplněnou švédskou mřížku z JSON slovníku",
+        help="vytvoří vyplněnou mřížku z JSON slovníku",
         description=(
-            "Vytvoří šablonu, volitelně do ní umístí konkrétní tajenku, "
-            "vybere křížící se hesla z JSON slovníku a zapíše cílovou "
-            "mřížku ve formátu YAML."
+            "Vytvoří švédskou nebo číslovanou šablonu, volitelně do ní "
+            "umístí konkrétní tajenku, vybere křížící se hesla z JSON "
+            "slovníku a zapíše cílovou mřížku ve formátu YAML."
         ),
     )
     generate.add_argument("source", type=Path, metavar="SLOVNÍK.json")
@@ -157,6 +164,7 @@ def _parser() -> argparse.ArgumentParser:
         metavar="POČET",
         help=f"počet řádků; výchozí je {DEFAULT_GRID_HEIGHT}",
     )
+    _add_layout_argument(generate)
     generate.add_argument(
         "--seed",
         type=int,
@@ -236,6 +244,19 @@ def _secret_part_lengths(value: str) -> tuple[int, ...]:
             "délky částí musí být kladná celá čísla"
         )
     return lengths
+
+
+def _add_layout_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--layout",
+        choices=LAYOUT_CHOICES,
+        default=DEFAULT_LAYOUT,
+        help=(
+            "automatické rozvržení: swedish s legendami v mřížce, "
+            "nebo numbered s číslovanými vnějšími legendami; "
+            f"výchozí je {DEFAULT_LAYOUT}"
+        ),
+    )
 
 
 def _add_secret_arguments(
@@ -343,7 +364,12 @@ def _secret_requirement(arguments: argparse.Namespace) -> SecretRequirement | No
 def _template(arguments: argparse.Namespace) -> int:
     try:
         secret = _secret_requirement(arguments)
-        template = generate_swedish_template(
+        generate_template = (
+            generate_numbered_template
+            if arguments.layout == "numbered"
+            else generate_swedish_template
+        )
+        template = generate_template(
             width=arguments.width,
             height=arguments.height,
             seed=arguments.seed,
@@ -397,7 +423,12 @@ def _generate(arguments: argparse.Namespace) -> int:
     try:
         secret = _secret_requirement(arguments)
         dictionary = load_dictionary(arguments.source)
-        crossword = generate_swedish_grid(
+        generate_grid = (
+            generate_numbered_grid
+            if arguments.layout == "numbered"
+            else generate_swedish_grid
+        )
+        crossword = generate_grid(
             dictionary,
             width=arguments.width,
             height=arguments.height,
@@ -414,7 +445,7 @@ def _generate(arguments: argparse.Namespace) -> int:
         return 2
 
     assert crossword.grid.cells is not None
-    word_count = sum(
+    word_count = len(crossword.clues) + sum(
         len(cell.texts)
         for row in crossword.grid.cells
         for cell in row

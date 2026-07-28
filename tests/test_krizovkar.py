@@ -29,6 +29,7 @@ from krizovkar.model import (
     SecretParts,
     SecretPrompt,
     SecretWord,
+    TemplateLetterCell,
     WordPlacement,
     load_crossword_grid,
     load_crossword_specification,
@@ -1507,6 +1508,39 @@ class CommandTest(unittest.TestCase):
 
             self.assertEqual(0, forced_result)
 
+    def test_template_creates_numbered_structure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "numbered-template.yaml"
+
+            with redirect_stdout(io.StringIO()):
+                result = main(
+                    [
+                        "template",
+                        "--output",
+                        str(output),
+                        "--layout",
+                        "numbered",
+                        "--width",
+                        "7",
+                        "--height",
+                        "7",
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            template = load_crossword_template(output)
+            self.assertEqual(28, len(template.slots))
+            self.assertTrue(
+                all(
+                    isinstance(cell, TemplateLetterCell)
+                    for row in template.grid.cells
+                    for cell in row
+                )
+            )
+            self.assertTrue(
+                all(slot.legend_position is None for slot in template.slots)
+            )
+
     def test_generate_creates_grid_and_refuses_accidental_overwrite(self) -> None:
         answers = tuple(
             "".join(letters) for letters in product("ABCD", repeat=4)
@@ -1559,6 +1593,71 @@ class CommandTest(unittest.TestCase):
                 forced_result = main([*command, "--force"])
 
             self.assertEqual(0, forced_result)
+
+    def test_generate_creates_numbered_grid(self) -> None:
+        answers = tuple(
+            "".join(letters)
+            for length in (3, 4)
+            for letters in product("ABCD", repeat=length)
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            dictionary = Path(directory) / "dictionary.json"
+            output = Path(directory) / "numbered-grid.yaml"
+            dictionary.write_text(
+                json.dumps(
+                    {
+                        answer: [f"Legenda {answer}"]
+                        for answer in answers
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                result = main(
+                    [
+                        "generate",
+                        str(dictionary),
+                        "--output",
+                        str(output),
+                        "--layout",
+                        "numbered",
+                        "--width",
+                        "7",
+                        "--height",
+                        "7",
+                        "--seed",
+                        "42",
+                        "--secret",
+                        "ABCD",
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            self.assertIn("28 hesel", stdout.getvalue())
+            crossword = load_crossword_grid(output)
+            self.assertEqual(28, len(crossword.clues))
+            assert crossword.grid.cells is not None
+            cells = tuple(
+                cell for row in crossword.grid.cells for cell in row
+            )
+            self.assertTrue(
+                all(isinstance(cell, (LetterCell, SecretCell)) for cell in cells)
+            )
+            self.assertEqual(
+                4,
+                sum(isinstance(cell, SecretCell) for cell in cells),
+            )
+            self.assertEqual(14, sum(len(cell.bars) for cell in cells))
+            self.assertEqual(
+                tuple(range(1, 25)),
+                tuple(
+                    cell.number
+                    for cell in cells
+                    if cell.number is not None
+                ),
+            )
 
     def test_page_format_names_are_case_insensitive(self) -> None:
         self.assertEqual(A5, resolve_page_size("a5"))

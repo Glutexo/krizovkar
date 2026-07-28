@@ -68,13 +68,13 @@ Je-li znění tajenky známé, povinné `word_count` u každé části určuje p
 
 Loader navíc kontroluje rozměr matice, přesah slotů, jejich překryvy ve stejném směru a vazby na role buněk. Každá písmenná buňka musí patřit alespoň jednomu slotu a každou legendovou buňku musí používat alespoň jeden slot. Ucelený zápis je v [minimální šabloně](../examples/template-minimal.yaml).
 
-Příkaz `template` vytváří deterministickou hustou švédskou šablonu. Používá stejné rozdělení na legendové osy a písmenné bloky jako experimentální generátor vyplněné mřížky, ale nepotřebuje slovník. Vodorovné sloty dostávají identifikátory `h1`, `h2`, … v pořadí shora dolů a zleva doprava; svislé obdobně `v1`, `v2`, … Volby tajenky mohou určit pouze celkovou délku, pevné délky částí, konkrétní seznam slov s automatickým dělením nebo konkrétní pevné části. Generátor pro ně vybírá navzájem se nepřekrývající sloty a u známého textu ukládá výsledné `word_count`. Místo jediné vyvážené masky prohledává seřazené varianty délek 3 až 8 a vybere první, která obsahuje všechny požadované délky a dovolí jejich nepřekrývající se umístění.
+Příkaz `template` vytváří deterministickou hustou šablonu bez slovníku. Výchozí `--layout swedish` používá legendové osy a písmenné bloky. Volba `--layout numbered` ponechá celou plochu písmennou, rozdělí řádky a sloupce na hesla silnými předěly a vynecháním souřadnic `legend` připraví vnější číslované legendy. Vodorovné sloty dostávají identifikátory `h1`, `h2`, … v pořadí shora dolů a zleva doprava; svislé obdobně `v1`, `v2`, … Volby tajenky mohou určit pouze celkovou délku, pevné délky částí, konkrétní seznam slov s automatickým dělením nebo konkrétní pevné části. Generátor pro ně vybírá navzájem se nepřekrývající sloty a u známého textu ukládá výsledné `word_count`. Místo jediné vyvážené masky prohledává seřazené varianty délek 3 až 8 a vybere první, která obsahuje všechny požadované délky a dovolí jejich nepřekrývající se umístění.
 
 Příkaz `fill` přijímá libovolnou platnou šablonu a slovník. Pomocí zpětného prohledávání přiřadí každému běžnému slotu jiné heslo správné délky a průběžně omezuje kandidáty podle již známých písmen na kříženích. Tajenkové sloty vyplní přímo, bez hledání odpovědi ve slovníku, označí je jako `type: secret` a jejich písmena použije jako pevná omezení křížících se hesel. Neznámou rezervovanou tajenku musí doplnit konkrétní text; není-li v šabloně rezervace, `fill` vhodné sloty automaticky vybere. Rozdělení je přípustné jen tehdy, pokud každá část končí na hranici slova.
 
 Vepsané legendy převezmou texty přiřazených hesel. Sloty bez souřadnice `legend` se převedou na číslovaná hesla s vnějšími legendami; společný začátek vodorovného a svislého slotu sdílí jedno číslo. Seed určuje pořadí kandidátů a zachovává opakovatelnost výsledku.
 
-Příkaz `generate` je zkratka nad stejnými dvěma kroky: nejprve vytvoří hustou švédskou šablonu a potom ji naplní zadaným slovníkem. Přijímá konkrétní tajenku s automatickým nebo pevným dělením; požadavek obsahující jen délku lze uchovat pouze v šabloně, protože k vytvoření cílové mřížky chybějí písmena.
+Příkaz `generate` je zkratka nad stejnými dvěma kroky: podle `--layout` nejprve vytvoří hustou švédskou nebo číslovanou šablonu a potom ji naplní zadaným slovníkem. Přijímá konkrétní tajenku s automatickým nebo pevným dělením; požadavek obsahující jen délku lze uchovat pouze v šabloně, protože k vytvoření cílové mřížky chybějí písmena.
 
 ## Cílová mřížka, verze 1
 
@@ -182,9 +182,9 @@ Legenda neobsahuje `value`, ale neprázdný seznam `texts` s neprázdnými texty
 - Šipky `right` a `down` se přiřazují textům ve stejném pořadí.
 - Renderer text automaticky zalamuje a zmenšuje; české znaky vkládá do PDF pomocí fontu Noto Sans.
 
-Počet textů ani přítomnost šipek nejsou omezením datového formátu. Experimentální generátor přesto vytváří pro každou legendu jediný text bez šipky a rozloží okolní buňky tak, aby z ní vedl právě jeden možný směr hesla doprava nebo dolů.
+Počet textů ani přítomnost šipek nejsou omezením datového formátu. Experimentální švédský generátor přesto vytváří pro každou vepsanou legendu jediný text bez šipky a rozloží okolní buňky tak, aby z ní vedl právě jeden možný směr hesla doprava nebo dolů.
 
-Generovanou mřížku dělí souvislé legendové řádky a sloupce na plně vyplněné písmenné obdélníky. Jejich průsečíky jsou nevyplňované buňky; jiné nevyplňované buňky generátor nevytváří. Každý písmenný řádek obdélníku je platné vodorovné heslo a každý jeho sloupec platné svislé heslo. Horní a levý okraj tvoří legendy s výjimkou průsečíků s další legendovou osou.
+Generovanou švédskou mřížku dělí souvislé legendové řádky a sloupce na plně vyplněné písmenné obdélníky. Jejich průsečíky jsou nevyplňované buňky; jiné nevyplňované buňky generátor nevytváří. Každý písmenný řádek obdélníku je platné vodorovné heslo a každý jeho sloupec platné svislé heslo. Horní a levý okraj tvoří legendy s výjimkou průsečíků s další legendovou osou. Číslované rozvržení naproti tomu používá všechny buňky pro písmena, začátky slotů čísluje po řádcích a jejich nápovědy ukládá do `clues`; hranice dalších slov označuje pomocí `bars`.
 
 ## Nevyplňovaná buňka
 

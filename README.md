@@ -4,7 +4,7 @@ Křížovkář je připravovaný otevřený nástroj pro tvorbu švédských, kl
 
 ## Stav projektu
 
-Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu, experimentální generátor švédské mřížky z JSON slovníku a vykreslení výsledku do PDF. Podoba editoru bude navržena v dalších změnách.
+Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu, experimentální generátory švédské a číslované mřížky z JSON slovníku a vykreslení výsledku do PDF. Podoba editoru bude navržena v dalších změnách.
 
 ## Zaměření
 
@@ -169,7 +169,7 @@ Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-lett
 
 ## Vytvoření šablony
 
-Hustou švédskou šablonu lze vytvořit bez slovníku a bez znalosti budoucích odpovědí:
+Hustou šablonu lze vytvořit bez slovníku a bez znalosti budoucích odpovědí. Výchozí rozvržení je švédské:
 
 ```shell
 uv run krizovkar template \
@@ -178,7 +178,17 @@ uv run krizovkar template \
   --output build/template.yaml
 ```
 
-Stejné rozměry vytvoří stejnou šablonu. Generátor rozdělí plochu na písmenné obdélníky s délkami hesel 3 až 8, zapíše pozice legendových a nevyplňovaných buněk a každému vodorovnému i svislému heslu přidělí vlastní slot. Příkaz existující soubor nepřepíše bez volby `--force`.
+Číslovanou (čárkovanou) šablonu zvolí `--layout numbered`:
+
+```shell
+uv run krizovkar template \
+  --layout numbered \
+  --width 15 \
+  --height 10 \
+  --output build/numbered-template.yaml
+```
+
+Stejné rozvržení a rozměry vytvoří stejnou šablonu. Švédský generátor rozdělí plochu na písmenné obdélníky, legendové buňky a jejich nevyplňované průsečíky. Číslovaná varianta ponechá všechny buňky písmenné, obě osy rozdělí silnými předěly a budoucí legendy umístí vně mřížky. Obě rozvržení používají délky hesel 3 až 8 a každému vodorovnému i svislému heslu přidělí vlastní slot. Příkaz existující soubor nepřepíše bez volby `--force`.
 
 Tajenku lze při tvorbě šablony zadat čtyřmi způsoby:
 
@@ -201,7 +211,7 @@ uv run krizovkar template --width 7 --height 12 \
   --output build/secret-fixed.yaml
 ```
 
-U konkrétního textu se velikost písmen sjednotí, mezery a interpunkce se do buněk nezapisují a seznam slov zachová všechny povolené švy. Automatické dělení nikdy nerozdělí slovo. Generátor podle potřeby změní jinak vyvážené délky běžných slotů tak, aby maska obsahovala požadované délky tajenky od 3 do 8 polí; pokud se požadavek do zadaného rozměru nevejde, skončí s chybou. Volitelné `--secret-prompt` doplní zadání; jeho pozici a zarovnání určují `--secret-prompt-placement` a `--secret-prompt-alignment`. Seed ovlivňuje výběr vhodných slotů.
+Tyto volby fungují pro obě hodnoty `--layout`. U konkrétního textu se velikost písmen sjednotí, mezery a interpunkce se do buněk nezapisují a seznam slov zachová všechny povolené švy. Automatické dělení nikdy nerozdělí slovo. Generátor podle potřeby změní jinak vyvážené délky běžných slotů tak, aby maska obsahovala požadované délky tajenky od 3 do 8 polí; pokud se požadavek do zadaného rozměru nevejde, skončí s chybou. Volitelné `--secret-prompt` doplní zadání; jeho pozici a zarovnání určují `--secret-prompt-placement` a `--secret-prompt-alignment`. Seed ovlivňuje výběr vhodných slotů.
 
 Šablonu lze později vyplnit samostatně:
 
@@ -238,7 +248,18 @@ uv run krizovkar render build/generated-grid.yaml \
   --output build/generated-grid.pdf
 ```
 
-`generate` skládá stejné operace jako samostatné `template` a `fill`. Konkrétní tajenku může vložit rovnou; samotná délka bez odpovědi je určená jen pro uložení šablony:
+Bez volby `--layout` vznikne švédská mřížka. Číslovanou mřížku s vnějšími legendami vytvoří:
+
+```shell
+uv run krizovkar generate slovnik.json \
+  --layout numbered \
+  --width 15 \
+  --height 10 \
+  --seed 10 \
+  --output build/generated-numbered-grid.yaml
+```
+
+`generate` skládá pro obě rozvržení stejné operace jako samostatné `template` a `fill`. Konkrétní tajenku může vložit rovnou; samotná délka bez odpovědi je určená jen pro uložení šablony:
 
 ```shell
 uv run krizovkar generate slovnik.json \
@@ -251,11 +272,11 @@ uv run krizovkar generate slovnik.json \
 
 Automatické dělení víceslovné tajenky používá `--secret`; pevné rozdělení vznikne opakováním `--secret-part`.
 
-Stejný slovník, rozměr a seed vytvoří stejnou mřížku. Generátor rozdělí plochu legendovými řádky a sloupci na písmenné obdélníky a všechny je vyplní platnými křížícími se hesly. Každá písmenná buňka proto patří jednomu vodorovnému i jednomu svislému výrazu; prázdné zůstávají pouze průsečíky legendových řádků a sloupců.
+Stejný slovník, rozvržení, rozměr a seed vytvoří stejnou mřížku. Výchozí švédský generátor rozdělí plochu legendovými řádky a sloupci na písmenné obdélníky; prázdné zůstávají pouze průsečíky legendových os. Číslovaný generátor použije celou plochu pro písmena, začátky hesel očísluje po řádcích a jejich texty zapíše jako vnější legendy. Další hesla v témže řádku nebo sloupci oddělí silným předělem. V obou případech patří každá písmenná buňka jednomu vodorovnému i jednomu svislému výrazu.
 
-Pokud maska obsahuje více písmenných obdélníků oddělených legendovými osami, jejich hesla se navzájem nekříží. Kvalitativní validace proto upozorní, že výsledná slova tvoří oddělené ostrovy; propojení bloků bude úkolem další verze generátoru.
+Pokud švédská maska obsahuje více písmenných obdélníků oddělených legendovými osami, jejich hesla se navzájem nekříží. Kvalitativní validace proto upozorní, že výsledná slova tvoří oddělené ostrovy; číslovaná varianta má naproti tomu souvislou písmennou plochu.
 
-Legendy pokrývají horní a levou stranu každého písmenného bloku. Na horním okraji chybí legenda jen ve sloupci s dalšími vnitřními legendami a na levém okraji jen v řádku s dalšími vnitřními legendami. Každá legenda má jediný text a právě jeden možný směr navazujícího hesla, takže nepotřebuje šipku. První experimentální verze zatím nevytváří pomůcku a nehodnotí jazykovou kvalitu hesel. Zdrojový slovník není součástí projektu; uživatel musí mít právo jeho obsah použít.
+Ve švédské variantě legendy pokrývají horní a levou stranu každého písmenného bloku. Na horním okraji chybí legenda jen ve sloupci s dalšími vnitřními legendami a na levém okraji jen v řádku s dalšími vnitřními legendami. Každá vepsaná legenda má jediný text a právě jeden možný směr navazujícího hesla, takže nepotřebuje šipku. První experimentální verze zatím nevytváří pomůcku a nehodnotí jazykovou kvalitu hesel. Zdrojový slovník není součástí projektu; uživatel musí mít právo jeho obsah použít.
 
 ## Validace
 
