@@ -10,10 +10,13 @@ from dataclasses import dataclass, replace
 from krizovkar.alphabet import SUPPORTED_SINGLE_LETTERS, split_answer_letters
 from krizovkar.dictionary import CrosswordDictionary
 from krizovkar.layout import (
+    MAX_SEGMENT_LENGTH,
+    MIN_SEGMENT_LENGTH,
     AxisSegment,
     LayoutError,
     SwedishLayout,
     create_dense_swedish_layout,
+    create_dense_swedish_layout_candidates,
 )
 from krizovkar.model import (
     Coordinate,
@@ -44,6 +47,7 @@ DEFAULT_SEED = 0
 MAX_CLUE_LENGTH = 48
 GENERATION_ATTEMPTS = 4
 MAX_SEARCH_NODES = 250_000
+PREFERRED_SECRET_PART_LENGTH = 4
 
 GridCoordinate = tuple[int, int]
 
@@ -152,10 +156,43 @@ def generate_swedish_template(
 ) -> CrosswordTemplate:
     """Vytvoří nevyplněnou hustou švédskou šablonu."""
 
-    try:
-        layout = create_dense_swedish_layout(width, height)
-    except LayoutError as error:
-        raise GenerationError(str(error)) from error
+    if secret is None:
+        try:
+            return _swedish_template_from_layout(
+                create_dense_swedish_layout(width, height)
+            )
+        except LayoutError as error:
+            raise GenerationError(str(error)) from error
+
+    _validate_secret_requirement(secret)
+    last_error: Exception | None = None
+    for part_lengths in _secret_length_options(secret):
+        try:
+            layouts = create_dense_swedish_layout_candidates(
+                width,
+                height,
+                required_lengths=part_lengths,
+            )
+        except LayoutError as error:
+            last_error = error
+            continue
+        for layout in layouts:
+            try:
+                return place_secret_in_template(
+                    _swedish_template_from_layout(layout),
+                    secret,
+                    seed=seed,
+                )
+            except GenerationError as error:
+                last_error = error
+
+    detail = f": {last_error}" if last_error is not None else ""
+    raise GenerationError(
+        f"pro rozměr {width} × {height} nelze rozvrhnout tajenku{detail}"
+    )
+
+
+def _swedish_template_from_layout(layout: SwedishLayout) -> CrosswordTemplate:
 
     cells = []
     for row in range(layout.height):
@@ -213,7 +250,7 @@ def generate_swedish_template(
                 )
                 vertical_number += 1
 
-    template = CrosswordTemplate(
+    return CrosswordTemplate(
         format_name="krizovkar",
         kind="template",
         version=1,
@@ -224,9 +261,6 @@ def generate_swedish_template(
         ),
         slots=tuple(slots),
     )
-    if secret is None:
-        return template
-    return place_secret_in_template(template, secret, seed=seed)
 
 
 def _usable_entries(
@@ -297,6 +331,60 @@ def _word_partitions(
 
     search(0, (), ())
     return tuple(sorted(results, key=lambda partition: len(partition[0])))
+
+
+def _total_length_partitions(total_length: int) -> tuple[tuple[int, ...], ...]:
+    results = []
+
+    def search(
+        remaining: int,
+        minimum: int,
+        lengths: tuple[int, ...],
+    ) -> None:
+        if remaining == 0:
+            results.append(lengths)
+            return
+        for length in range(
+            minimum,
+            min(MAX_SEGMENT_LENGTH, remaining) + 1,
+        ):
+            search(remaining - length, length, (*lengths, length))
+
+    search(total_length, MIN_SEGMENT_LENGTH, ())
+    return tuple(
+        sorted(
+            results,
+            key=lambda lengths: (
+                len(lengths),
+                sum(
+                    abs(length - PREFERRED_SECRET_PART_LENGTH)
+                    for length in lengths
+                ),
+                lengths,
+            ),
+        )
+    )
+
+
+def _secret_length_options(
+    requirement: SecretRequirement,
+) -> tuple[tuple[int, ...], ...]:
+    if requirement.total_length is not None:
+        return _total_length_partitions(requirement.total_length)
+    if requirement.part_lengths:
+        return (requirement.part_lengths,)
+    if requirement.part_word_counts:
+        return (
+            _part_lengths_from_word_counts(
+                requirement.words,
+                requirement.part_word_counts,
+            ),
+        )
+    partitions = _word_partitions(
+        requirement.words,
+        frozenset(range(MIN_SEGMENT_LENGTH, MAX_SEGMENT_LENGTH + 1)),
+    )
+    return tuple(lengths for lengths, _ in partitions)
 
 
 def _select_slots_for_lengths(

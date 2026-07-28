@@ -201,7 +201,7 @@ uv run krizovkar template --width 7 --height 12 \
   --output build/secret-fixed.yaml
 ```
 
-U konkrétního textu se velikost písmen sjednotí, mezery a interpunkce se do buněk nezapisují a seznam slov zachová všechny povolené švy. Automatické dělení nikdy nerozdělí slovo. Volitelné `--secret-prompt` doplní zadání; jeho pozici a zarovnání určují `--secret-prompt-placement` a `--secret-prompt-alignment`. Seed ovlivňuje výběr vhodných slotů.
+U konkrétního textu se velikost písmen sjednotí, mezery a interpunkce se do buněk nezapisují a seznam slov zachová všechny povolené švy. Automatické dělení nikdy nerozdělí slovo. Generátor podle potřeby změní jinak vyvážené délky běžných slotů tak, aby maska obsahovala požadované délky tajenky od 3 do 8 polí; pokud se požadavek do zadaného rozměru nevejde, skončí s chybou. Volitelné `--secret-prompt` doplní zadání; jeho pozici a zarovnání určují `--secret-prompt-placement` a `--secret-prompt-alignment`. Seed ovlivňuje výběr vhodných slotů.
 
 Šablonu lze později vyplnit samostatně:
 

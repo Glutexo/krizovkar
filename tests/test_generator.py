@@ -91,6 +91,37 @@ class GeneratorTest(unittest.TestCase):
             ),
         )
 
+    def test_secret_changes_dense_layout_to_include_required_lengths(self) -> None:
+        single = generate_swedish_template(
+            secret=SecretRequirement(words=("ZELENÍ",)),
+        )
+        multipart = generate_swedish_template(
+            secret=SecretRequirement(part_lengths=(5, 6)),
+        )
+
+        single_slots = {slot.identifier: slot for slot in single.slots}
+        multipart_slots = {slot.identifier: slot for slot in multipart.slots}
+        self.assertEqual(
+            (6,),
+            tuple(
+                single_slots[part.slot_identifier].length
+                for part in single.secrets[0].parts
+            ),
+        )
+        self.assertEqual(
+            (5, 6),
+            tuple(
+                multipart_slots[part.slot_identifier].length
+                for part in multipart.secrets[0].parts
+            ),
+        )
+
+    def test_dense_template_rejects_secret_part_shorter_than_words(self) -> None:
+        with self.assertRaisesRegex(GenerationError, "nelze rozvrhnout tajenku"):
+            generate_swedish_template(
+                secret=SecretRequirement(words=("SE",)),
+            )
+
     def test_places_known_secret_with_automatic_word_split(self) -> None:
         template = CrosswordTemplate(
             format_name="krizovkar",

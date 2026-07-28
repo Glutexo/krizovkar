@@ -5,7 +5,11 @@ from __future__ import annotations
 import unittest
 from collections import Counter
 
-from krizovkar.layout import LayoutError, create_dense_swedish_layout
+from krizovkar.layout import (
+    LayoutError,
+    create_dense_swedish_layout,
+    create_dense_swedish_layout_candidates,
+)
 
 
 class LayoutTest(unittest.TestCase):
@@ -84,6 +88,46 @@ class LayoutTest(unittest.TestCase):
 
         self.assertEqual((4, 3), tuple(s.length for s in layout.row_segments))
         self.assertEqual((4, 3), tuple(s.length for s in layout.column_segments))
+
+    def test_can_include_length_required_by_secret(self) -> None:
+        layout = create_dense_swedish_layout(
+            15,
+            10,
+            required_lengths=(6,),
+        )
+
+        lengths = {
+            segment.length
+            for segment in (*layout.row_segments, *layout.column_segments)
+        }
+        self.assertIn(6, lengths)
+        self.assertEqual(
+            (6, 3, 3),
+            tuple(s.length for s in layout.column_segments),
+        )
+
+    def test_can_distribute_multiple_required_lengths_between_axes(self) -> None:
+        layouts = create_dense_swedish_layout_candidates(
+            15,
+            10,
+            required_lengths=(5, 6),
+        )
+
+        self.assertTrue(layouts)
+        for layout in layouts:
+            lengths = {
+                segment.length
+                for segment in (*layout.row_segments, *layout.column_segments)
+            }
+            self.assertTrue({5, 6} <= lengths)
+
+    def test_rejects_required_length_outside_dense_range(self) -> None:
+        with self.assertRaisesRegex(LayoutError, "obsahoval délky: 2"):
+            create_dense_swedish_layout(
+                15,
+                10,
+                required_lengths=(2,),
+            )
 
     def test_rejects_dimension_without_minimum_word_length(self) -> None:
         with self.assertRaisesRegex(LayoutError, "nelze rozdělit"):
