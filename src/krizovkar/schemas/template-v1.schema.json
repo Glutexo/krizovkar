@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/master/src/krizovkar/schemas/template-v1.schema.json",
   "title": "Šablona křížovky Křížovkáře, verze 1",
-  "description": "Strukturální mezivýsledek s rolemi buněk a sloty hesel bez konkrétních odpovědí.",
+  "description": "Strukturální mezivýsledek s rolemi buněk, sloty hesel a volitelně připravenou tajenkou.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -62,6 +62,14 @@
       "minItems": 1,
       "items": {
         "$ref": "#/$defs/wordSlot"
+      }
+    },
+    "secrets": {
+      "description": "Volitelné tajenky rezervované v jednom nebo více slotech.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/templateSecret"
       }
     }
   },
@@ -134,6 +142,83 @@
         "legend": {
           "description": "Volitelná vepsaná legenda bezprostředně před začátkem slotu.",
           "$ref": "#/$defs/coordinate"
+        }
+      }
+    },
+    "secretPrompt": {
+      "description": "Text zadání tajenky a jeho umístění u budoucí mřížky.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "placement": {
+          "enum": [
+            "above",
+            "below"
+          ],
+          "default": "above"
+        },
+        "alignment": {
+          "enum": [
+            "left",
+            "right"
+          ],
+          "default": "left"
+        }
+      }
+    },
+    "templateSecretPart": {
+      "description": "Jedna část tajenky přiřazená slotu.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slot"
+      ],
+      "properties": {
+        "slot": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "word_count": {
+          "description": "Počet po sobě jdoucích slov známé tajenky v této části.",
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "templateSecret": {
+      "description": "Připravená tajenka s volitelně již známými slovy.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parts"
+      ],
+      "properties": {
+        "words": {
+          "description": "Slova tajenky bez mezer a interpunkce; seznam zachovává povolené švy.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-ZÁÄČĎÉĚÍŇÓÔÖŘŠŤÚŮÜÝŽ]+$"
+          }
+        },
+        "parts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/templateSecretPart"
+          }
+        },
+        "prompt": {
+          "$ref": "#/$defs/secretPrompt"
         }
       }
     }

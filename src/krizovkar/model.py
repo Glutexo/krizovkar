@@ -169,6 +169,23 @@ class WordSlot:
 
 
 @dataclass(frozen=True, slots=True)
+class TemplateSecretPart:
+    """Jedna část tajenky rezervovaná v konkrétním slotu."""
+
+    slot_identifier: str
+    word_count: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateSecret:
+    """Připravené sloty tajenky a volitelně její známá slova."""
+
+    parts: tuple[TemplateSecretPart, ...]
+    words: tuple[str, ...] = ()
+    prompt: SecretPrompt | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class CrosswordTemplate:
     """Strukturální mezivýsledek mezi zadáním a vyplněnou mřížkou."""
 
@@ -177,6 +194,7 @@ class CrosswordTemplate:
     version: int
     grid: TemplateGrid
     slots: tuple[WordSlot, ...]
+    secrets: tuple[TemplateSecret, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -499,6 +517,20 @@ def load_crossword_template(source: str | Path) -> CrosswordTemplate:
             )
             for slot in data["slots"]
         ),
+        secrets=tuple(
+            TemplateSecret(
+                parts=tuple(
+                    TemplateSecretPart(
+                        slot_identifier=part["slot"],
+                        word_count=part.get("word_count"),
+                    )
+                    for part in secret["parts"]
+                ),
+                words=tuple(secret.get("words", ())),
+                prompt=_optional_secret_prompt(secret),
+            )
+            for secret in data.get("secrets", ())
+        ),
     )
     _validate_crossword_template(template)
     return template
@@ -641,6 +673,67 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
                     "neplatný datový model: "
                     f"$.grid.cells[{row_index - 1}][{column_index - 1}]: "
                     "legendovou buňku nepoužívá žádný slot"
+                )
+
+    slots_by_identifier = {slot.identifier: slot for slot in template.slots}
+    used_secret_slots: dict[str, str] = {}
+    for secret_index, secret in enumerate(template.secrets):
+        secret_path = f"$.secrets[{secret_index}]"
+        if not secret.parts:
+            raise ModelError(
+                f"neplatný datový model: {secret_path}.parts: "
+                "seznam nesmí být prázdný"
+            )
+        counts = tuple(part.word_count for part in secret.parts)
+        if secret.words:
+            if any(count is None for count in counts):
+                raise ModelError(
+                    f"neplatný datový model: {secret_path}.parts: "
+                    "známá tajenka musí u každé části uvést word_count"
+                )
+            if sum(count for count in counts if count is not None) != len(
+                secret.words
+            ):
+                raise ModelError(
+                    f"neplatný datový model: {secret_path}.parts: "
+                    "součet word_count neodpovídá počtu slov tajenky"
+                )
+        elif any(count is not None for count in counts):
+            raise ModelError(
+                f"neplatný datový model: {secret_path}.parts: "
+                "word_count lze uvést jen u tajenky se známými words"
+            )
+
+        word_offset = 0
+        for part_index, part in enumerate(secret.parts):
+            part_path = f"{secret_path}.parts[{part_index}]"
+            slot = slots_by_identifier.get(part.slot_identifier)
+            if slot is None:
+                raise ModelError(
+                    f"neplatný datový model: {part_path}.slot: "
+                    f"slot {part.slot_identifier!r} v šabloně neexistuje"
+                )
+            previous_path = used_secret_slots.get(part.slot_identifier)
+            if previous_path is not None:
+                raise ModelError(
+                    f"neplatný datový model: {part_path}.slot: "
+                    f"slot {part.slot_identifier!r} už používá {previous_path}"
+                )
+            used_secret_slots[part.slot_identifier] = f"{part_path}.slot"
+
+            if not secret.words:
+                continue
+            assert part.word_count is not None
+            part_words = secret.words[
+                word_offset : word_offset + part.word_count
+            ]
+            word_offset += part.word_count
+            part_length = len(split_answer_letters("".join(part_words)))
+            if part_length != slot.length:
+                raise ModelError(
+                    f"neplatný datový model: {part_path}: "
+                    f"část tajenky má {part_length} polí, ale slot "
+                    f"{slot.identifier!r} má délku {slot.length}"
                 )
 
 
@@ -1033,7 +1126,7 @@ def _crossword_template_data(template: CrosswordTemplate) -> dict[str, Any]:
             }
         slots.append(data)
 
-    return {
+    result: dict[str, Any] = {
         "format": template.format_name,
         "kind": template.kind,
         "version": template.version,
@@ -1047,6 +1140,26 @@ def _crossword_template_data(template: CrosswordTemplate) -> dict[str, Any]:
         },
         "slots": slots,
     }
+    if template.secrets:
+        result["secrets"] = []
+        for secret in template.secrets:
+            parts = []
+            for part in secret.parts:
+                part_data: dict[str, Any] = {"slot": part.slot_identifier}
+                if part.word_count is not None:
+                    part_data["word_count"] = part.word_count
+                parts.append(part_data)
+            secret_data: dict[str, Any] = {"parts": parts}
+            if secret.words:
+                secret_data["words"] = list(secret.words)
+            if secret.prompt is not None:
+                secret_data["prompt"] = {
+                    "text": secret.prompt.text,
+                    "placement": secret.prompt.placement,
+                    "alignment": secret.prompt.alignment,
+                }
+            result["secrets"].append(secret_data)
+    return result
 
 
 def _write_yaml_document(

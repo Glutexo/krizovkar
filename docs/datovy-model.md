@@ -18,7 +18,7 @@ Položka `kind` rozlišuje fázi dat, nikoli švédskou, čárkovanou nebo jinou
 
 ## Šablona, verze 1
 
-Šablona je samostatný mezivýsledek, který lze uložit, ručně upravit a později naplnit jiným slovníkem. Neobsahuje konkrétní odpovědi ani texty legend:
+Šablona je samostatný mezivýsledek, který lze uložit, ručně upravit a později naplnit jiným slovníkem. Neobsahuje běžné odpovědi ani texty legend:
 
 ```yaml
 format: krizovkar
@@ -45,6 +45,26 @@ Povinná matice `grid.cells` rozlišuje tři role:
 Každý `slot` popisuje jedno budoucí heslo. Povinné `id` je v dokumentu jedinečné, `start` používá souřadnice od 1, `direction` určuje směr doprava nebo dolů a `length` je počet buněk. Stejně jako v ostatních dokumentech zabírá české `CH` jednu buňku.
 
 Volitelná souřadnice `legend` označuje vepsanou legendovou buňku. Musí ležet bezprostředně vlevo od vodorovného slotu nebo nad svislým slotem. Její vynechání znamená budoucí vnější legendu, takže stejný model podporuje švédské, klasické i smíšené rozložení.
+
+### Připravená tajenka
+
+Volitelný seznam `secrets` přiřadí části tajenky konkrétním slotům:
+
+```yaml
+secrets:
+  - words: [KOMU, SE, NELENÍ]
+    parts:
+      - {slot: h3, word_count: 2}
+      - {slot: h8, word_count: 1}
+    prompt:
+      text: 'Dokončete lidové rčení.'
+      placement: above
+      alignment: left
+```
+
+Pořadí `parts` je současně pořadí částí tajenky. Každý odkaz `slot` musí existovat a jeden slot smí patřit nejvýše jedné části. Seznam `words` uchovává jednotlivá slova bez mezer a interpunkce. Tím zůstávají známé všechny povolené švy, přestože do buněk se slova zapíší spojeně.
+
+Je-li znění tajenky známé, povinné `word_count` u každé části určuje počet po sobě jdoucích slov v daném slotu. Součet musí odpovídat počtu `words` a spojená slova musí přesně zaplnit délku slotu; žádné rozdělení proto nemůže vzniknout uvnitř slova. Neznámá tajenka vynechá `words` i všechna `word_count`; délky připravených částí pak určují samotné sloty. Volitelné `prompt` má stejný význam jako zadání tajenky v dokumentech `specification` a `grid`. Ucelený příklad je v [šabloně se známou tajenkou](../examples/template-secret.yaml).
 
 Loader navíc kontroluje rozměr matice, přesah slotů, jejich překryvy ve stejném směru a vazby na role buněk. Každá písmenná buňka musí patřit alespoň jednomu slotu a každou legendovou buňku musí používat alespoň jeden slot. Ucelený zápis je v [minimální šabloně](../examples/template-minimal.yaml).
 

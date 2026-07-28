@@ -43,7 +43,9 @@ grid:
   height: 10
 ```
 
-Šablona na rozdíl od cílové mřížky neobsahuje odpovědi ani texty legend. Každému budoucímu heslu určuje stabilní identifikátor, začátek, směr a délku; matice buněk rozlišuje budoucí písmena, vepsané legendy a nevyplňovaná pole. Minimální zápis ukazuje [příklad šablony](examples/template-minimal.yaml).
+Šablona na rozdíl od cílové mřížky neobsahuje běžné odpovědi ani texty legend. Každému budoucímu heslu určuje stabilní identifikátor, začátek, směr a délku; matice buněk rozlišuje budoucí písmena, vepsané legendy a nevyplňovaná pole. Minimální zápis ukazuje [příklad šablony](examples/template-minimal.yaml).
+
+Šablona může navíc rezervovat jeden nebo více slotů pro části tajenky. Známá tajenka se ukládá jako seznam slov bez mezer a interpunkce, aby se neztratila povolená místa budoucího rozdělení. `word_count` u každé části určuje, kolik po sobě jdoucích slov se spojí do příslušného slotu. Ukazuje to [šablona s tajenkou](examples/template-secret.yaml). Pokud konkrétní znění zatím není známé, `words` i `word_count` se vynechají a zůstanou jen připravené sloty.
 
 Samostatné zadání popisuje rozměr a umístěná slova:
 
