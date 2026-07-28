@@ -131,10 +131,20 @@ class WordPlacement:
 
 @dataclass(frozen=True, slots=True)
 class SecretCells:
-    """Tajenka určená posloupností buněk a volitelnou cestou."""
+    """Tajenka určená výběrem buněk a volitelnou souvislou cestou."""
 
     cells: tuple[Coordinate, ...]
     arrows: bool = False
+
+    @property
+    def reading_cells(self) -> tuple[Coordinate, ...]:
+        """Vrátí pole v pořadí čtení tajenky."""
+
+        if self.arrows:
+            return self.cells
+        return tuple(
+            sorted(self.cells, key=lambda cell: (cell.row, cell.column))
+        )
 
 
 def _secret_step_direction(
@@ -168,7 +178,7 @@ def secret_path_arrows(
 
     arrows: list[tuple[Coordinate, SecretArrow]] = []
     previous_direction: SecretArrow | None = None
-    for current, following in pairwise(secret.cells):
+    for current, following in pairwise(secret.reading_cells):
         direction = _secret_step_direction(current, following)
         if previous_direction is None or direction != previous_direction:
             arrows.append((current, direction))
@@ -191,7 +201,7 @@ SecretPart = SecretCells | SecretWord
 
 @dataclass(frozen=True, slots=True)
 class SecretParts:
-    """Jedna tajenka složená z několika souvislých bloků."""
+    """Jedna tajenka složená z několika částí v určeném pořadí."""
 
     parts: tuple[SecretPart, ...]
 
@@ -515,19 +525,18 @@ def _validate_specification_placements(
     help_position: Coordinate | None,
 ) -> None:
     occupied: dict[tuple[int, int], tuple[str, str]] = {}
-    secret_parts: list[tuple[SecretPart, str, bool]] = []
+    secret_parts: list[tuple[SecretPart, str]] = []
     for secret_index, secret in enumerate(secrets):
         if isinstance(secret, SecretParts):
             secret_parts.extend(
                 (
                     part,
                     f"$.secrets[{secret_index}].parts[{part_index}]",
-                    True,
                 )
                 for part_index, part in enumerate(secret.parts)
             )
         else:
-            secret_parts.append((secret, f"$.secrets[{secret_index}]", False))
+            secret_parts.append((secret, f"$.secrets[{secret_index}]"))
 
     placements = [
         (word.answer, word.start, word.direction, f"$.words[{word_index}]")
@@ -535,7 +544,7 @@ def _validate_specification_placements(
     ]
     placements.extend(
         (part.answer, part.start, part.direction, path)
-        for part, path, _ in secret_parts
+        for part, path in secret_parts
         if isinstance(part, SecretWord)
     )
 
@@ -564,7 +573,7 @@ def _validate_specification_placements(
                 )
             occupied.setdefault(coordinate, (letter, path))
 
-    for part, secret_path, grouped in secret_parts:
+    for part, secret_path in secret_parts:
         if not isinstance(part, SecretCells):
             continue
         for cell_index, cell in enumerate(part.cells):
@@ -581,7 +590,7 @@ def _validate_specification_placements(
                     f"{path}: tajenka musí odkazovat na buňku obsazenou písmenem"
                 )
 
-        if not part.arrows and not grouped:
+        if not part.arrows:
             continue
         if part.arrows and len(part.cells) < 2:
             raise ModelError(

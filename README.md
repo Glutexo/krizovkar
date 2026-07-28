@@ -83,9 +83,9 @@ secrets:
     direction: horizontal
 ```
 
-U `type: cells` určuje pořadí souřadnic také pořadí čtení a každé vybrané pole musí obsahovat písmeno. Tato podoba nemá vlastní legendu. Volitelné `arrows: true` vyžaduje cestu přes sousední pole a přidá malou odchozí šipku na její začátek a na každé místo změny směru. Znak má stejné proporce a tah jako šipky u legend. Bez této volby mohou pole zůstat libovolně rozmístěná. `type: word` se umisťuje a kříží stejně jako běžné heslo, ale jeho písmena budou zvýrazněná jako tajenka. Odpověď zadává autor přímo a nemusí být ve slovníku; vynechaná `legend` dostane automaticky text `Tajenka`. Obě podoby ukazuje [zadání s tajenkami](examples/specification-secrets.yaml).
+U `type: cells` musí každé vybrané pole obsahovat písmeno. Bez šipek mohou být pole samostatná a libovolně rozmístěná; tajenka se z nich čte automaticky po řádcích zleva doprava a shora dolů, bez ohledu na pořadí souřadnic v YAML. Ukazuje to [zadání s rozptýlenou tajenkou](examples/specification-scattered-secret.yaml). Volitelné `arrows: true` naopak používá zadané pořadí jako cestu přes sousední pole a přidá malou odchozí šipku na její začátek a na každé místo změny směru. Znak má stejné proporce a tah jako šipky u legend. `type: word` se umisťuje a kříží stejně jako běžné heslo, ale jeho písmena budou zvýrazněná jako tajenka. Odpověď zadává autor přímo a nemusí být ve slovníku; vynechaná `legend` dostane automaticky text `Tajenka`. Obě souvislé podoby ukazuje [zadání s tajenkami](examples/specification-secrets.yaml).
 
-Jedna tajenka může mít také několik souvislých bloků v určeném pořadí:
+Jedna tajenka může mít také několik částí v určeném pořadí:
 
 ```yaml
 secrets:
@@ -101,7 +101,7 @@ secrets:
         direction: horizontal
 ```
 
-Slovní bloky bez výslovné `legend` dostanou postupně popisky `1. část tajenky`, `2. část tajenky` a tak dále. Vlastní text může použít také formulaci `2. díl tajenky` nebo `Tajenka: 3. díl`. Bloky `type: cells` vlastní legendu nemají, ale každý může samostatně zapnout rohové šipky. Obě vícedílné podoby ukazuje [zadání s vícedílnými tajenkami](examples/specification-multipart-secrets.yaml).
+Slovní části bez výslovné `legend` dostanou postupně popisky `1. část tajenky`, `2. část tajenky` a tak dále. Vlastní text může použít také formulaci `2. díl tajenky` nebo `Tajenka: 3. díl`. Části `type: cells` vlastní legendu nemají, mohou obsahovat samostatná pole a každá může samostatně zapnout rohové šipky pro souvislou cestu. Obě vícedílné podoby ukazuje [zadání s vícedílnými tajenkami](examples/specification-multipart-secrets.yaml).
 
 Význam obou dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md). Strojová pravidla jsou oddělená v [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json) a [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json).
 

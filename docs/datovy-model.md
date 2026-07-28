@@ -188,9 +188,11 @@ secrets:
       - {row: 4, column: 5}
 ```
 
-Souřadnice jsou uvedené přímo v pořadí, v jaké se tajenka čte. Nesmějí se v jednom seznamu opakovat, musí ležet uvnitř mřížky a odkazovat na písmena některého umístěného běžného nebo tajenkového slova. Tato podoba tajenky nemá vlastní legendu.
+Souřadnice se nesmějí v jednom seznamu opakovat, musí ležet uvnitř mřížky a odkazovat na písmena některého umístěného běžného nebo tajenkového slova. Tato podoba tajenky nemá vlastní legendu.
 
-Výchozí `arrows: false` dovoluje libovolné rozmístění polí bez ohledu na jejich sousedství. Při `arrows: true` musí tajenka obsahovat alespoň dvě pole a každá dvě po sobě jdoucí pole musí sdílet hranu. Převod do cílové mřížky vloží `arrow` do prvního pole a potom do každého pole, z něhož cesta pokračuje jiným směrem než předchozí krok. Šipka vždy ukazuje k následujícímu poli; koncové pole ji nemá.
+Výchozí `arrows: false` dovoluje libovolné rozmístění samostatných polí bez ohledu na jejich sousedství. Pořadí položek `cells` v tomto případě nemá význam: model tajenku čte po řádcích shora dolů a v každém řádku zleva doprava. [Příklad s rozptýlenými poli](../examples/specification-scattered-secret.yaml) zapisuje souřadnice záměrně v jiném pořadí, ale vytvoří text `TAJENKA`.
+
+Při `arrows: true` naopak pořadí položek určuje cestu. Tajenka musí obsahovat alespoň dvě pole a každá dvě po sobě jdoucí pole musí sdílet hranu. Převod do cílové mřížky vloží `arrow` do prvního pole a potom do každého pole, z něhož cesta pokračuje jiným směrem než předchozí krok. Šipka vždy ukazuje k následujícímu poli; koncové pole ji nemá.
 
 Tajenka `type: word` je souvislé vodorovné nebo svislé slovo:
 
@@ -208,7 +210,7 @@ Vynechaná `legend` se při načtení doplní přesným textem `Tajenka`. Při p
 
 #### Vícedílná tajenka
 
-Tajenka `type: parts` obsahuje alespoň dva souvislé bloky v poli `parts`. Pořadí bloků určuje pořadí, ve kterém se jejich obsah spojí do výsledné tajenky:
+Tajenka `type: parts` obsahuje alespoň dvě části v poli `parts`. Pořadí částí určuje pořadí, ve kterém se jejich obsah spojí do výsledné tajenky:
 
 ```yaml
 secrets:
@@ -229,9 +231,9 @@ secrets:
         legend: 3. díl tajenky
 ```
 
-Každý blok je `type: cells` nebo `type: word`. Blok z buněk musí být souvislý i bez šipek; jeho `arrows: true` označí vlastní začátek a změny směru, nezávisle na ostatních blocích. Jednopísmenný blok je souvislý, ale nemůže mít šipku, protože nemá následující pole.
+Každá část je `type: cells` nebo `type: word`. Část z buněk bez šipek smí obsahovat libovolně rozmístěná pole a čte se po řádcích; její `arrows: true` místo toho určí vlastní souvislou cestu, nezávisle na ostatních částech. Jednopísmenná část nemůže mít šipku, protože nemá následující pole.
 
-Slovní blok bez `legend` dostane podle své pozice automatický popisek `1. část tajenky`, `2. část tajenky` a tak dále. Výslovná neprázdná legenda může použít jinou rovnocennou formulaci, například `2. díl tajenky` nebo `Tajenka: 4. díl`. Číslo se odvozuje od pozice mezi všemi bloky, takže smíšená tajenka může mít například první blok bez legendy a druhý blok označený `2. část tajenky`.
+Slovní část bez `legend` dostane podle své pozice automatický popisek `1. část tajenky`, `2. část tajenky` a tak dále. Výslovná neprázdná legenda může použít jinou rovnocennou formulaci, například `2. díl tajenky` nebo `Tajenka: 4. díl`. Číslo se odvozuje od pozice mezi všemi částmi, takže smíšená tajenka může mít například první část bez legendy a druhou část označenou `2. část tajenky`.
 
 Všechny varianty mohou být v jednom zadání. Cílový dokument `grid` je při vykreslení zobrazuje stejným zvýrazněním; jejich původní definici zachovává pouze `specification`.
 
@@ -268,6 +270,8 @@ Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-
 Vyšší zadání ukazuje [příklad s umístěnými slovy a automatickou pomůckou](../examples/specification-placed-words.yaml).
 
 Oba způsoby určení tajenky ukazuje [příklad s vybranými poli a tajenkovým slovem](../examples/specification-secrets.yaml).
+
+Nespojitá pole čtená po řádcích ukazuje [příklad s rozptýlenou tajenkou](../examples/specification-scattered-secret.yaml).
 
 Více bloků bez legend i s legendami ukazuje [příklad vícedílných tajenek](../examples/specification-multipart-secrets.yaml).
 

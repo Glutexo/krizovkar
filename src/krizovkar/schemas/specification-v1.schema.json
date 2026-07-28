@@ -181,7 +181,7 @@
           ]
         },
         "cells": {
-          "description": "Buňky tajenky v pořadí čtení.",
+          "description": "Vybrané buňky; bez šipek se čtou po řádcích, se šipkami v uvedeném pořadí.",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
@@ -190,7 +190,7 @@
           }
         },
         "arrows": {
-          "description": "Zda se vyznačí začátek a změny směru cesty.",
+          "description": "Zda uvedené pořadí buněk určuje souvislou cestu se šipkami.",
           "type": "boolean",
           "default": false
         },
@@ -218,7 +218,7 @@
           "default": "Tajenka"
         },
         "parts": {
-          "description": "Souvislé bloky jedné tajenky v pořadí čtení.",
+          "description": "Části jedné tajenky v pořadí jejich spojení.",
           "type": "array",
           "minItems": 2,
           "items": {
@@ -356,7 +356,7 @@
       ]
     },
     "secretPart": {
-      "description": "Jeden souvislý blok složené tajenky.",
+      "description": "Jedna část složené tajenky.",
       "oneOf": [
         {
           "type": "object",
@@ -370,7 +370,7 @@
               "const": "cells"
             },
             "cells": {
-              "description": "Buňky bloku v pořadí čtení.",
+              "description": "Vybrané buňky části; bez šipek se čtou po řádcích, se šipkami v uvedeném pořadí.",
               "type": "array",
               "minItems": 1,
               "uniqueItems": true,
@@ -379,7 +379,7 @@
               }
             },
             "arrows": {
-              "description": "Zda se vyznačí začátek a změny směru bloku.",
+              "description": "Zda uvedené pořadí buněk určuje souvislou cestu části se šipkami.",
               "type": "boolean",
               "default": false
             }

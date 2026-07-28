@@ -51,6 +51,9 @@ SPECIFICATION_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "specification-minim
 SPECIFICATION_MULTIPART_SECRETS_EXAMPLE = (
     PROJECT_ROOT / "examples" / "specification-multipart-secrets.yaml"
 )
+SPECIFICATION_SCATTERED_SECRET_EXAMPLE = (
+    PROJECT_ROOT / "examples" / "specification-scattered-secret.yaml"
+)
 SPECIFICATION_PLACED_WORDS_EXAMPLE = (
     PROJECT_ROOT / "examples" / "specification-placed-words.yaml"
 )
@@ -334,6 +337,7 @@ class ModelTest(unittest.TestCase):
             selected.cells,
         )
         self.assertTrue(selected.arrows)
+        self.assertEqual(selected.cells, selected.reading_cells)
         self.assertEqual(
             (
                 (Coordinate(row=2, column=2), "right"),
@@ -347,6 +351,48 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(Coordinate(row=5, column=2), word.start)
         self.assertEqual("horizontal", word.direction)
         self.assertEqual(DEFAULT_SECRET_LEGEND, word.legend)
+
+    def test_reads_scattered_secret_cells_by_rows(self) -> None:
+        specification = load_crossword_specification(
+            SPECIFICATION_SCATTERED_SECRET_EXAMPLE
+        )
+
+        selected = specification.secrets[0]
+        self.assertIsInstance(selected, SecretCells)
+        assert isinstance(selected, SecretCells)
+        self.assertFalse(selected.arrows)
+        self.assertEqual(
+            (
+                Coordinate(row=1, column=1),
+                Coordinate(row=1, column=3),
+                Coordinate(row=1, column=5),
+                Coordinate(row=2, column=2),
+                Coordinate(row=2, column=4),
+                Coordinate(row=3, column=1),
+                Coordinate(row=3, column=5),
+            ),
+            selected.reading_cells,
+        )
+        self.assertNotEqual(selected.cells, selected.reading_cells)
+
+    def test_arrowed_secret_keeps_explicit_path_order(self) -> None:
+        selected = SecretCells(
+            cells=(
+                Coordinate(row=2, column=2),
+                Coordinate(row=2, column=1),
+                Coordinate(row=1, column=1),
+            ),
+            arrows=True,
+        )
+
+        self.assertEqual(selected.cells, selected.reading_cells)
+        self.assertEqual(
+            (
+                (Coordinate(row=2, column=2), "left"),
+                (Coordinate(row=2, column=1), "up"),
+            ),
+            secret_path_arrows(selected),
+        )
 
     def test_loads_arbitrary_secret_word_without_dictionary_or_legend(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -415,7 +461,7 @@ class ModelTest(unittest.TestCase):
         self.assertEqual("2. část tajenky", second_part.legend)
         self.assertEqual("3. díl tajenky", third_part.legend)
 
-    def test_rejects_gap_in_unarrowed_multipart_secret_block(self) -> None:
+    def test_allows_gap_in_unarrowed_multipart_secret_part(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "multipart-secret-gap.yaml"
             source.write_text(
@@ -442,11 +488,21 @@ class ModelTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(
-                ModelError,
-                r"\$\.secrets\[0\]\.parts\[0\]\.cells\[1\].*společnou hranou",
-            ):
-                load_crossword_specification(source)
+            specification = load_crossword_specification(source)
+
+            secret = specification.secrets[0]
+            self.assertIsInstance(secret, SecretParts)
+            assert isinstance(secret, SecretParts)
+            selected = secret.parts[0]
+            self.assertIsInstance(selected, SecretCells)
+            assert isinstance(selected, SecretCells)
+            self.assertEqual(
+                (
+                    Coordinate(row=1, column=1),
+                    Coordinate(row=1, column=3),
+                ),
+                selected.reading_cells,
+            )
 
     def test_rejects_secret_cell_outside_grid(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
