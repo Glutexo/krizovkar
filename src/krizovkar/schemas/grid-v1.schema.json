@@ -133,7 +133,7 @@
           }
         },
         "arrow": {
-          "description": "Volitelná odchozí šipka v rohu tajenkové buňky.",
+          "description": "Volitelný směr plného zobáčku tajenkové buňky.",
           "enum": [
             "up",
             "right",

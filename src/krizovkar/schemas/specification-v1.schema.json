@@ -190,7 +190,7 @@
           }
         },
         "arrows": {
-          "description": "Zda uvedené pořadí buněk určuje souvislou cestu se šipkami.",
+          "description": "Zda uvedené pořadí buněk určuje souvislou cestu se zobáčky.",
           "type": "boolean",
           "default": false
         },
@@ -379,7 +379,7 @@
               }
             },
             "arrows": {
-              "description": "Zda uvedené pořadí buněk určuje souvislou cestu části se šipkami.",
+              "description": "Zda uvedené pořadí buněk určuje souvislou cestu části se zobáčky.",
               "type": "boolean",
               "default": false
             }

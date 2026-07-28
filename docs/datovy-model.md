@@ -58,7 +58,7 @@ Podporované typy jsou:
 - `type: letter` pro běžnou písmennou buňku,
 - `type: secret` pro zvýrazněnou buňku, jejíž písmeno patří do tajenky.
 
-U obou typů musí být `value` právě jedno podporované velké písmeno. Písmena si zachovávají diakritiku; české `CH` se zapisuje jako jedna hodnota a zabírá jednu buňku. Renderer odlišuje tajenkovou buňku světle šedým pozadím. Jen `type: secret` může navíc obsahovat odchozí `arrow` ve směru `up`, `right`, `down` nebo `left`; vykreslí se jako malá šipka v levém horním rohu, nepřekrývá písmeno a používá stejný tah, délku i hrot jako šipka legendy.
+U obou typů musí být `value` právě jedno podporované velké písmeno. Písmena si zachovávají diakritiku; české `CH` se zapisuje jako jedna hodnota a zabírá jednu buňku. Renderer odlišuje tajenkovou buňku světle šedým pozadím. Jen `type: secret` může navíc obsahovat odchozí `arrow` ve směru `up`, `right`, `down` nebo `left`; vykreslí se jako plný černý trojúhelníkový zobáček se základnou na hraně pole a špičkou ve směru pokračování. Zobáček nepřekrývá písmeno a v očíslovaném poli se zmenší a posune mimo číslo.
 
 Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Cílová mřížka pouze označuje buňky tajenky. Jejich pořadí a seskupení uchovává zdrojové zadání `specification`.
 
@@ -192,7 +192,7 @@ Souřadnice se nesmějí v jednom seznamu opakovat, musí ležet uvnitř mříž
 
 Výchozí `arrows: false` dovoluje libovolné rozmístění samostatných polí bez ohledu na jejich sousedství. Pořadí položek `cells` v tomto případě nemá význam: model tajenku čte po řádcích shora dolů a v každém řádku zleva doprava. [Příklad s rozptýlenými poli](../examples/specification-scattered-secret.yaml) zapisuje souřadnice záměrně v jiném pořadí, ale vytvoří text `TAJENKA`.
 
-Při `arrows: true` naopak pořadí položek určuje cestu. Tajenka musí obsahovat alespoň dvě pole a každá dvě po sobě jdoucí pole musí sdílet hranu. Převod do cílové mřížky vloží `arrow` do prvního pole a potom do každého pole, z něhož cesta pokračuje jiným směrem než předchozí krok. Šipka vždy ukazuje k následujícímu poli; koncové pole ji nemá.
+Při `arrows: true` naopak pořadí položek určuje cestu. Tajenka musí obsahovat alespoň dvě pole a každá dvě po sobě jdoucí pole musí sdílet hranu. Převod do cílové mřížky vloží `arrow` do prvního pole a potom do každého pole, z něhož cesta pokračuje jiným směrem než předchozí krok. Vykreslený zobáček vždy ukazuje k následujícímu poli; koncové pole jej nemá.
 
 Tajenka `type: word` je souvislé vodorovné nebo svislé slovo:
 
@@ -231,7 +231,7 @@ secrets:
         legend: 3. díl tajenky
 ```
 
-Každá část je `type: cells` nebo `type: word`. Část z buněk bez šipek smí obsahovat libovolně rozmístěná pole a čte se po řádcích; její `arrows: true` místo toho určí vlastní souvislou cestu, nezávisle na ostatních částech. Jednopísmenná část nemůže mít šipku, protože nemá následující pole.
+Každá část je `type: cells` nebo `type: word`. Část z buněk bez zobáčků smí obsahovat libovolně rozmístěná pole a čte se po řádcích; její `arrows: true` místo toho určí vlastní souvislou cestu, nezávisle na ostatních částech. Jednopísmenná část nemůže mít zobáček, protože nemá následující pole.
 
 Slovní část bez `legend` dostane podle své pozice automatický popisek `1. část tajenky`, `2. část tajenky` a tak dále. Výslovná neprázdná legenda může použít jinou rovnocennou formulaci, například `2. díl tajenky` nebo `Tajenka: 4. díl`. Číslo se odvozuje od pozice mezi všemi částmi, takže smíšená tajenka může mít například první část bez legendy a druhou část označenou `2. část tajenky`.
 
@@ -283,7 +283,7 @@ Vyplněná cílová mřížka je v [příkladu s náhodnými písmeny](../exampl
 
 Smíšené typy buněk ukazuje [příklad s tajenkou](../examples/grid-secret.yaml).
 
-Začátek a dva body obratu ukazuje [příklad tajenkové cesty se šipkami](../examples/grid-secret-arrows.yaml).
+Začátek a dva body obratu ukazuje [příklad tajenkové cesty se zobáčky](../examples/grid-secret-arrows.yaml).
 
 Česká písmena s diakritikou a jednopísmenné `CH` ukazuje [mřížka s českými písmeny](../examples/grid-czech-letters.yaml).
 

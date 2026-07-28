@@ -41,8 +41,11 @@ LETTER_FONT = "KrizovkarNotoSansBold"
 LETTER_SIZE_RATIO = 0.58
 LETTER_BASELINE_OFFSET = 0.35
 SECRET_FILL_GRAY = 0.85
-SECRET_ARROW_CORNER_CENTER_RATIO = 0.18
-SECRET_ARROW_NUMBERED_CENTER_X_RATIO = 0.78
+SECRET_BEAK_DEPTH_RATIO = 0.28
+SECRET_BEAK_BASE_RATIO = 0.82
+SECRET_BEAK_NUMBERED_BASE_RATIO = 0.46
+SECRET_BEAK_NUMBERED_OFFSET_RATIO = 0.18
+SECRET_BEAK_LETTER_OFFSET_RATIO = 0.1
 LEGEND_FILL_GRAY = 0.93
 HELP_FILL_GRAY = 0.93
 TEXT_CELL_FONT = "KrizovkarNotoSans"
@@ -331,7 +334,48 @@ def _draw_arrow(
     pdf.restoreState()
 
 
-def _draw_secret_arrow(
+def _secret_beak_points(
+    direction: SecretArrow,
+    left: float,
+    bottom: float,
+    size: float,
+    *,
+    numbered: bool = False,
+) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
+    direction_x, direction_y = _ARROW_VECTORS[direction]
+    perpendicular_x, perpendicular_y = -direction_y, direction_x
+    base_center_x = left + size * (0.5 - direction_x * 0.5)
+    base_center_y = bottom + size * (0.5 - direction_y * 0.5)
+    number_conflict = numbered and direction in {"right", "down"}
+    base_ratio = (
+        SECRET_BEAK_NUMBERED_BASE_RATIO
+        if number_conflict
+        else SECRET_BEAK_BASE_RATIO
+    )
+    if number_conflict:
+        offset = size * SECRET_BEAK_NUMBERED_OFFSET_RATIO
+        if direction == "right":
+            base_center_y -= offset
+        else:
+            base_center_x += offset
+
+    half_base = size * base_ratio / 2
+    base_start = (
+        base_center_x + perpendicular_x * half_base,
+        base_center_y + perpendicular_y * half_base,
+    )
+    tip = (
+        base_center_x + direction_x * size * SECRET_BEAK_DEPTH_RATIO,
+        base_center_y + direction_y * size * SECRET_BEAK_DEPTH_RATIO,
+    )
+    base_end = (
+        base_center_x - perpendicular_x * half_base,
+        base_center_y - perpendicular_y * half_base,
+    )
+    return base_start, tip, base_end
+
+
+def _draw_secret_beak(
     pdf: Canvas,
     direction: SecretArrow,
     left: float,
@@ -340,18 +384,37 @@ def _draw_secret_arrow(
     *,
     numbered: bool = False,
 ) -> None:
-    direction_x, direction_y = _ARROW_VECTORS[direction]
-    length = size * ARROW_LENGTH_RATIO
-    center_x_ratio = (
-        SECRET_ARROW_NUMBERED_CENTER_X_RATIO
-        if numbered
-        else SECRET_ARROW_CORNER_CENTER_RATIO
+    base_start, tip, base_end = _secret_beak_points(
+        direction,
+        left,
+        bottom,
+        size,
+        numbered=numbered,
     )
-    center_x = left + size * center_x_ratio
-    center_y = bottom + size * (1 - SECRET_ARROW_CORNER_CENTER_RATIO)
-    tip_x = center_x + direction_x * length / 2
-    tip_y = center_y + direction_y * length / 2
-    _draw_arrow(pdf, direction, tip_x, tip_y, length)
+    path = pdf.beginPath()
+    path.moveTo(*base_start)
+    path.lineTo(*tip)
+    path.lineTo(*base_end)
+    path.close()
+
+    pdf.saveState()
+    pdf.setFillColorRGB(0, 0, 0)
+    pdf.drawPath(path, stroke=0, fill=1)
+    pdf.restoreState()
+
+
+def _secret_letter_center(
+    direction: SecretArrow,
+    center_x: float,
+    center_y: float,
+    size: float,
+) -> tuple[float, float]:
+    direction_x, direction_y = _ARROW_VECTORS[direction]
+    offset = size * SECRET_BEAK_LETTER_OFFSET_RATIO
+    return (
+        center_x + direction_x * offset,
+        center_y + direction_y * offset,
+    )
 
 
 def _draw_cell_number(
@@ -637,7 +700,7 @@ def _write_pdf(
                         fill=1,
                     )
                     if cell.arrow is not None:
-                        _draw_secret_arrow(
+                        _draw_secret_beak(
                             pdf,
                             cell.arrow,
                             cell_left,
@@ -690,11 +753,19 @@ def _write_pdf(
                 if not isinstance(cell, (LetterCell, SecretCell)):
                     continue
                 center_x = left + (column_index + 0.5) * cell_size
+                cell_center_y = center_y
+                if isinstance(cell, SecretCell) and cell.arrow is not None:
+                    center_x, cell_center_y = _secret_letter_center(
+                        cell.arrow,
+                        center_x,
+                        cell_center_y,
+                        cell_size,
+                    )
                 _draw_letter_cell(
                     pdf,
                     cell,
                     center_x,
-                    center_y,
+                    cell_center_y,
                     cell_size,
                     font_size,
                 )

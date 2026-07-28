@@ -126,7 +126,7 @@ def _parser() -> argparse.ArgumentParser:
         "--blank",
         action="store_true",
         help=(
-            "skryje písmena; legendy, pomůcky, zvýraznění a šipky tajenky "
+            "skryje písmena; legendy, pomůcky, zvýraznění a zobáčky tajenky "
             "zůstanou"
         ),
     )

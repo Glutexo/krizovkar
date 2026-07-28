@@ -83,7 +83,7 @@ secrets:
     direction: horizontal
 ```
 
-U `type: cells` musí každé vybrané pole obsahovat písmeno. Bez šipek mohou být pole samostatná a libovolně rozmístěná; tajenka se z nich čte automaticky po řádcích zleva doprava a shora dolů, bez ohledu na pořadí souřadnic v YAML. Ukazuje to [zadání s rozptýlenou tajenkou](examples/specification-scattered-secret.yaml). Volitelné `arrows: true` naopak používá zadané pořadí jako cestu přes sousední pole a přidá malou odchozí šipku na její začátek a na každé místo změny směru. Znak má stejné proporce a tah jako šipky u legend. `type: word` se umisťuje a kříží stejně jako běžné heslo, ale jeho písmena budou zvýrazněná jako tajenka. Odpověď zadává autor přímo a nemusí být ve slovníku; vynechaná `legend` dostane automaticky text `Tajenka`. Obě souvislé podoby ukazuje [zadání s tajenkami](examples/specification-secrets.yaml).
+U `type: cells` musí každé vybrané pole obsahovat písmeno. Bez šipek mohou být pole samostatná a libovolně rozmístěná; tajenka se z nich čte automaticky po řádcích zleva doprava a shora dolů, bez ohledu na pořadí souřadnic v YAML. Ukazuje to [zadání s rozptýlenou tajenkou](examples/specification-scattered-secret.yaml). Volitelné `arrows: true` naopak používá zadané pořadí jako cestu přes sousední pole a na její začátek i každé místo změny směru přidá plný černý zobáček. Základnou sedí na hraně pole a špičkou ukazuje dovnitř pokračující tajenky. `type: word` se umisťuje a kříží stejně jako běžné heslo, ale jeho písmena budou zvýrazněná jako tajenka. Odpověď zadává autor přímo a nemusí být ve slovníku; vynechaná `legend` dostane automaticky text `Tajenka`. Obě souvislé podoby ukazuje [zadání s tajenkami](examples/specification-secrets.yaml).
 
 Jedna tajenka může mít také několik částí v určeném pořadí:
 
@@ -101,7 +101,7 @@ secrets:
         direction: horizontal
 ```
 
-Slovní části bez výslovné `legend` dostanou postupně popisky `1. část tajenky`, `2. část tajenky` a tak dále. Vlastní text může použít také formulaci `2. díl tajenky` nebo `Tajenka: 3. díl`. Části `type: cells` vlastní legendu nemají, mohou obsahovat samostatná pole a každá může samostatně zapnout rohové šipky pro souvislou cestu. Obě vícedílné podoby ukazuje [zadání s vícedílnými tajenkami](examples/specification-multipart-secrets.yaml).
+Slovní části bez výslovné `legend` dostanou postupně popisky `1. část tajenky`, `2. část tajenky` a tak dále. Vlastní text může použít také formulaci `2. díl tajenky` nebo `Tajenka: 3. díl`. Části `type: cells` vlastní legendu nemají, mohou obsahovat samostatná pole a každá může samostatně zapnout zobáčky pro souvislou cestu. Obě vícedílné podoby ukazuje [zadání s vícedílnými tajenkami](examples/specification-multipart-secrets.yaml).
 
 Význam obou dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md). Strojová pravidla jsou oddělená v [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json) a [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json).
 
@@ -117,7 +117,7 @@ grid:
     - [{type: secret, value: Č, arrow: right}, {type: letter, value: CH}, {type: letter, value: Á}]
 ```
 
-Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. České `CH` zabírá jednu buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku. Tajenková buňka má v PDF světle šedé pozadí a může mít jednu rohovou `arrow` ve směru `up`, `right`, `down` nebo `left`. Jde o jinou značku než seznam `arrows` v legendové buňce. Cílová mřížka už nerozlišuje, zda tajenku určil seznam polí, nebo souvislé heslo; u druhé varianty navíc obsahuje legendovou buňku s textem „Tajenka“. Zápis ukazuje [mřížka s českými písmeny](examples/grid-czech-letters.yaml); [ukázková cesta se šipkami](examples/grid-secret-arrows.yaml) mění směr dvakrát.
+Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. České `CH` zabírá jednu buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku. Tajenková buňka má v PDF světle šedé pozadí a může mít jeden směrový zobáček `arrow` ve směru `up`, `right`, `down` nebo `left`. Jde o jinou značku než seznam `arrows` v legendové buňce. Cílová mřížka už nerozlišuje, zda tajenku určil seznam polí, nebo souvislé heslo; u druhé varianty navíc obsahuje legendovou buňku s textem „Tajenka“. Zápis ukazuje [mřížka s českými písmeny](examples/grid-czech-letters.yaml); [ukázková cesta se zobáčky](examples/grid-secret-arrows.yaml) mění směr dvakrát.
 
 Čárkované rozložení může písmenné buňce přidat počáteční `number` a silné mezislovní `bars` na její pravé či dolní hraně. Renderer vloží číslo do levého horního rohu, předěly vykreslí stejným silným tahem jako vnější rám a očíslované `clues` rozdělí pod mřížkou do sloupců „Vodorovně“ a „Svisle“. Číslo bez odpovídající legendy může označit například tajenku bez nápovědy. Tyto položky nijak nevylučují buňky `type: legend`: [smíšená mřížka](examples/grid-mixed-clues.yaml) používá vepsané i číselné legendy současně, zatímco [číslovaná mřížka](examples/grid-classic.yaml) ukazuje samotné vnější legendy.
 
@@ -187,7 +187,7 @@ uv run krizovkar validate build/generated-grid.yaml
 
 Chyba znamená neplatný nebo vnitřně rozporný datový model a příkaz skončí návratovým kódem `2`. Varování znamená platnou mřížku, kterou lze dál zpracovat a vykreslit, ale porušuje některé pravidlo kvality; návratový kód zůstává `0`.
 
-Validátor nepřiřazuje celé mřížce jeden druh. U každého začátku hesla samostatně přijme bezprostředně předcházející legendovou buňku nebo číslo; silný předěl přitom zakládá nové heslo. Proto kontroluje vepsané legendy i ve mřížce, která zároveň obsahuje `number`, `bars` nebo vnější `clues`. Dále varuje zejména před směrovými šipkami vepsaných legend, nesouladem počtu jejich textů a navazujících směrů a oddělenými písmennými ostrovy. Rohové šipky tajenky tato varování nevyvolávají.
+Validátor nepřiřazuje celé mřížce jeden druh. U každého začátku hesla samostatně přijme bezprostředně předcházející legendovou buňku nebo číslo; silný předěl přitom zakládá nové heslo. Proto kontroluje vepsané legendy i ve mřížce, která zároveň obsahuje `number`, `bars` nebo vnější `clues`. Dále varuje zejména před směrovými šipkami vepsaných legend, nesouladem počtu jejich textů a navazujících směrů a oddělenými písmennými ostrovy. Zobáčky tajenky tato varování nevyvolávají.
 
 ## Vytvoření PDF
 
@@ -210,7 +210,7 @@ uv run krizovkar render examples/grid-secret-arrows.yaml \
   --output build/secret-arrows-blank.pdf
 ```
 
-Prázdná varianta skryje hodnoty běžných i tajenkových písmenných buněk. Legendy uvnitř i pod mřížkou, čísla, pomůcky, nevyplňovaná pole, šedé zvýraznění tajenky a její rohové šipky zůstanou zobrazené stejně jako ve vyplněné variantě.
+Prázdná varianta skryje hodnoty běžných i tajenkových písmenných buněk. Legendy uvnitř i pod mřížkou, čísla, pomůcky, nevyplňovaná pole, šedé zvýraznění tajenky a její zobáčky zůstanou zobrazené stejně jako ve vyplněné variantě.
 
 Bez volby `--output` vznikne PDF vedle vstupního souboru se stejným názvem. Existující soubor příkaz nepřepíše, dokud není přidána volba `--force`.
 

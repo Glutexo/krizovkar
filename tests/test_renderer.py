@@ -29,8 +29,10 @@ from krizovkar.renderer import (
     _draw_fitted_text,
     _draw_legend_cell,
     _draw_letter_cell,
-    _draw_secret_arrow,
+    _draw_secret_beak,
     _draw_strong_grid_lines,
+    _secret_beak_points,
+    _secret_letter_center,
     render_pdf,
 )
 from krizovkar.typography import SOFT_HYPHEN
@@ -83,6 +85,67 @@ class FittedTextTest(unittest.TestCase):
         )
 
 
+class SecretBeakTest(unittest.TestCase):
+    def test_beak_starts_on_opposite_edge_and_points_in_direction(self) -> None:
+        cases = {
+            "up": ((50, 28), 1, 0),
+            "right": ((28, 50), 0, 0),
+            "down": ((50, 72), 1, 100),
+            "left": ((72, 50), 0, 100),
+        }
+
+        for direction, (expected_tip, edge_axis, edge_value) in cases.items():
+            with self.subTest(direction=direction):
+                base_start, tip, base_end = _secret_beak_points(
+                    direction,
+                    0,
+                    0,
+                    100,
+                )
+
+                for actual, expected in zip(tip, expected_tip, strict=True):
+                    self.assertAlmostEqual(expected, actual)
+                self.assertAlmostEqual(edge_value, base_start[edge_axis])
+                self.assertAlmostEqual(edge_value, base_end[edge_axis])
+
+    def test_beak_is_a_filled_closed_triangle(self) -> None:
+        pdf = Mock()
+        path = pdf.beginPath.return_value
+
+        _draw_secret_beak(pdf, "right", 0, 0, 100)
+
+        path.moveTo.assert_called_once()
+        self.assertEqual(2, path.lineTo.call_count)
+        path.close.assert_called_once_with()
+        pdf.setFillColorRGB.assert_called_once_with(0, 0, 0)
+        pdf.drawPath.assert_called_once_with(path, stroke=0, fill=1)
+
+    def test_numbered_beak_avoids_upper_left_number(self) -> None:
+        right_points = _secret_beak_points(
+            "right",
+            0,
+            0,
+            100,
+            numbered=True,
+        )
+        down_points = _secret_beak_points(
+            "down",
+            0,
+            0,
+            100,
+            numbered=True,
+        )
+
+        self.assertLessEqual(max(point[1] for point in right_points), 55)
+        self.assertGreaterEqual(min(point[0] for point in down_points), 45)
+
+    def test_secret_letter_moves_away_from_beak_base(self) -> None:
+        self.assertEqual((50, 60), _secret_letter_center("up", 50, 50, 100))
+        self.assertEqual((60, 50), _secret_letter_center("right", 50, 50, 100))
+        self.assertEqual((50, 40), _secret_letter_center("down", 50, 50, 100))
+        self.assertEqual((40, 50), _secret_letter_center("left", 50, 50, 100))
+
+
 class RenderModeTest(unittest.TestCase):
     crossword = CrosswordGrid(
         format_name="krizovkar",
@@ -125,15 +188,15 @@ class RenderModeTest(unittest.TestCase):
                     wraps=_draw_legend_cell,
                 ) as draw_legend,
                 patch(
-                    "krizovkar.renderer._draw_secret_arrow",
-                    wraps=_draw_secret_arrow,
-                ) as draw_secret_arrow,
+                    "krizovkar.renderer._draw_secret_beak",
+                    wraps=_draw_secret_beak,
+                ) as draw_secret_beak,
             ):
                 render_pdf(self.crossword, output, filled=False)
 
         draw_letter.assert_not_called()
         draw_legend.assert_called_once()
-        draw_secret_arrow.assert_called_once()
+        draw_secret_beak.assert_called_once()
 
 
 class NumberedClueRenderTest(unittest.TestCase):
@@ -165,17 +228,17 @@ class NumberedClueRenderTest(unittest.TestCase):
                     wraps=_draw_external_clues,
                 ) as draw_clues,
                 patch(
-                    "krizovkar.renderer._draw_secret_arrow",
-                    wraps=_draw_secret_arrow,
-                ) as draw_secret_arrow,
+                    "krizovkar.renderer._draw_secret_beak",
+                    wraps=_draw_secret_beak,
+                ) as draw_secret_beak,
             ):
                 render_pdf(crossword, output, filled=False)
 
         draw_letter.assert_not_called()
         self.assertEqual(20, draw_number.call_count)
         draw_clues.assert_called_once()
-        draw_secret_arrow.assert_called_once()
-        self.assertTrue(draw_secret_arrow.call_args.kwargs["numbered"])
+        draw_secret_beak.assert_called_once()
+        self.assertTrue(draw_secret_beak.call_args.kwargs["numbered"])
 
     def test_inline_and_numbered_clues_are_drawn_together(self) -> None:
         crossword = load_crossword_grid(GRID_MIXED_CLUES_EXAMPLE)
