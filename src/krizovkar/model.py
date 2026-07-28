@@ -93,7 +93,7 @@ class ExternalClue:
 
 @dataclass(frozen=True, slots=True)
 class CrosswordGrid:
-    """Cílová křížovková mřížka načtená z datového souboru."""
+    """Jednotná cílová mřížka s libovolným způsobem uvedení legend."""
 
     format_name: str
     kind: str
@@ -201,7 +201,7 @@ SecretDefinition = SecretPart | SecretParts
 
 @dataclass(frozen=True, slots=True)
 class CrosswordSpecification:
-    """Vstupní zadání, ze kterého má vzniknout cílová mřížka."""
+    """Společné vstupní zadání nezávislé na budoucím rozložení legend."""
 
     format_name: str
     kind: str

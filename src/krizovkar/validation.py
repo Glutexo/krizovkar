@@ -116,17 +116,6 @@ def _letter_component_count(crossword: CrosswordGrid) -> int:
     return component_count
 
 
-def _has_classic_annotations(crossword: CrosswordGrid) -> bool:
-    cells = crossword.grid.cells
-    assert cells is not None
-    return bool(crossword.clues) or any(
-        isinstance(cell, (LetterCell, SecretCell))
-        and (cell.number is not None or cell.bars)
-        for row in cells
-        for cell in row
-    )
-
-
 def _word_start_warnings(crossword: CrosswordGrid) -> list[ValidationIssue]:
     cells = crossword.grid.cells
     assert cells is not None
@@ -137,45 +126,59 @@ def _word_start_warnings(crossword: CrosswordGrid) -> list[ValidationIssue]:
             if not isinstance(cell, (LetterCell, SecretCell)):
                 continue
 
-            left_is_letter = column > 0 and isinstance(
-                cells[row][column - 1],
+            left_cell = cells[row][column - 1] if column > 0 else None
+            continues_from_left = isinstance(
+                left_cell,
                 (LetterCell, SecretCell),
-            )
-            if not left_is_letter and (
-                column == 0
-                or not isinstance(cells[row][column - 1], LegendCell)
+            ) and "right" not in left_cell.bars
+            has_inline_horizontal_clue = isinstance(left_cell, LegendCell)
+            if (
+                not continues_from_left
+                and not has_inline_horizontal_clue
+                and cell.number is None
             ):
-                clue_column = max(0, column - 1)
+                clue_column = (
+                    column
+                    if isinstance(left_cell, (LetterCell, SecretCell))
+                    else max(0, column - 1)
+                )
                 issues.append(
                     _warning(
                         "layout.missing-legend",
                         _cell_path(row, clue_column),
-                        "vodorovné heslo nemá bezprostředně vlevo legendu",
+                        "vodorovné heslo nemá vepsanou ani číselnou legendu",
                     )
                 )
 
-            above_is_letter = row > 0 and isinstance(
-                cells[row - 1][column],
+            above_cell = cells[row - 1][column] if row > 0 else None
+            continues_from_above = isinstance(
+                above_cell,
                 (LetterCell, SecretCell),
-            )
-            if not above_is_letter and (
-                row == 0
-                or not isinstance(cells[row - 1][column], LegendCell)
+            ) and "bottom" not in above_cell.bars
+            has_inline_vertical_clue = isinstance(above_cell, LegendCell)
+            if (
+                not continues_from_above
+                and not has_inline_vertical_clue
+                and cell.number is None
             ):
-                clue_row = max(0, row - 1)
+                clue_row = (
+                    row
+                    if isinstance(above_cell, (LetterCell, SecretCell))
+                    else max(0, row - 1)
+                )
                 issues.append(
                     _warning(
                         "layout.missing-legend",
                         _cell_path(clue_row, column),
-                        "svislé heslo nemá bezprostředně nad sebou legendu",
+                        "svislé heslo nemá vepsanou ani číselnou legendu",
                     )
                 )
 
     return issues
 
 
-def check_dense_swedish_grid(crossword: CrosswordGrid) -> ValidationReport:
-    """Posoudí kvalitu husté švédské mřížky bez jejího odmítnutí."""
+def check_crossword_grid(crossword: CrosswordGrid) -> ValidationReport:
+    """Posoudí kvalitu jednotné křížovkové mřížky bez jejího odmítnutí."""
 
     cells = crossword.grid.cells
     if cells is None:
@@ -201,8 +204,6 @@ def check_dense_swedish_grid(crossword: CrosswordGrid) -> ValidationReport:
             )
         )
 
-    legend_count = 0
-
     for row, cell_row in enumerate(cells):
         for column, cell in enumerate(cell_row):
             if not isinstance(cell, LegendCell):
@@ -210,8 +211,6 @@ def check_dense_swedish_grid(crossword: CrosswordGrid) -> ValidationReport:
 
             path = _cell_path(row, column)
             directions = _answer_directions(crossword, row, column)
-            legend_count += 1
-
             if directions and len(cell.texts) != len(directions):
                 issues.append(
                     _warning(
@@ -247,24 +246,12 @@ def check_dense_swedish_grid(crossword: CrosswordGrid) -> ValidationReport:
                     )
                 )
 
-    if not legend_count:
-        if _has_classic_annotations(crossword):
-            return ValidationReport(tuple(issues))
-        issues.append(
-            _warning(
-                "layout.no-legends",
-                "$.grid.cells",
-                "mřížka neobsahuje žádnou legendu",
-            )
-        )
-        return ValidationReport(tuple(issues))
-
     issues.extend(_word_start_warnings(crossword))
 
     return ValidationReport(tuple(issues))
 
 
-def validate_dense_swedish_grid_file(source: str | Path) -> ValidationReport:
+def validate_crossword_grid_file(source: str | Path) -> ValidationReport:
     """Ověří datový model souboru a poté neblokujícím způsobem jeho kvalitu."""
 
     try:
@@ -280,4 +267,16 @@ def validate_dense_swedish_grid_file(source: str | Path) -> ValidationReport:
                 ),
             )
         )
-    return check_dense_swedish_grid(crossword)
+    return check_crossword_grid(crossword)
+
+
+def check_dense_swedish_grid(crossword: CrosswordGrid) -> ValidationReport:
+    """Zachová původní veřejný název obecné kontroly mřížky."""
+
+    return check_crossword_grid(crossword)
+
+
+def validate_dense_swedish_grid_file(source: str | Path) -> ValidationReport:
+    """Zachová původní veřejný název obecné kontroly souboru."""
+
+    return validate_crossword_grid_file(source)

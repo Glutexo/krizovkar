@@ -27,7 +27,7 @@ from krizovkar.renderer import (
     RenderError,
     render_pdf,
 )
-from krizovkar.validation import validate_dense_swedish_grid_file
+from krizovkar.validation import validate_crossword_grid_file
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -86,8 +86,8 @@ def _parser() -> argparse.ArgumentParser:
         "validate",
         help="odliší chyby dat od varování ke kvalitě mřížky",
         description=(
-            "Ověří cílovou mřížku a posoudí základní pravidla švédské či "
-            "klasické křížovky. Varování zpracování neblokují."
+            "Ověří cílovou mřížku a posoudí společná pravidla pro vepsané "
+            "i číselné legendy. Varování zpracování neblokují."
         ),
     )
     validate.add_argument("source", type=Path, metavar="MŘÍŽKA.yaml")
@@ -188,7 +188,7 @@ def _render(arguments: argparse.Namespace) -> int:
 
 
 def _validate(arguments: argparse.Namespace) -> int:
-    report = validate_dense_swedish_grid_file(arguments.source)
+    report = validate_crossword_grid_file(arguments.source)
     for issue in report.issues:
         label = "chyba" if issue.severity == "error" else "varování"
         print(

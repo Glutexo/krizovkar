@@ -43,6 +43,7 @@ GRID_CZECH_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-czech-letters.yam
 GRID_EMPTY_EXAMPLE = PROJECT_ROOT / "examples" / "grid-empty.yaml"
 GRID_HELP_EXAMPLE = PROJECT_ROOT / "examples" / "grid-help.yaml"
 GRID_LEGEND_EXAMPLE = PROJECT_ROOT / "examples" / "grid-legend.yaml"
+GRID_MIXED_CLUES_EXAMPLE = PROJECT_ROOT / "examples" / "grid-mixed-clues.yaml"
 GRID_RANDOM_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-random-letters.yaml"
 GRID_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret.yaml"
 GRID_SECRET_ARROWS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret-arrows.yaml"
@@ -88,7 +89,7 @@ class ModelTest(unittest.TestCase):
             tuple(cell.value for cell in crossword.grid.cells[0]),
         )
 
-    def test_loads_and_writes_classic_grid_annotations(self) -> None:
+    def test_loads_and_writes_numbered_grid_annotations(self) -> None:
         crossword = load_crossword_grid(GRID_CLASSIC_EXAMPLE)
 
         assert crossword.grid.cells is not None
@@ -127,6 +128,29 @@ class ModelTest(unittest.TestCase):
             output = Path(directory) / "classic.yaml"
             write_crossword_grid(crossword, output)
             self.assertEqual(crossword, load_crossword_grid(output))
+
+    def test_loads_inline_and_numbered_clues_in_one_grid(self) -> None:
+        crossword = load_crossword_grid(GRID_MIXED_CLUES_EXAMPLE)
+
+        assert crossword.grid.cells is not None
+        self.assertTrue(
+            any(
+                isinstance(cell, LegendCell)
+                for row in crossword.grid.cells
+                for cell in row
+            )
+        )
+        self.assertEqual(1, crossword.grid.cells[2][2].number)
+        self.assertEqual(
+            (
+                ExternalClue(
+                    number=1,
+                    direction="horizontal",
+                    text="Operační systém (zkr.)",
+                ),
+            ),
+            crossword.clues,
+        )
 
     def test_rejects_duplicate_grid_cell_number(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1216,7 +1240,7 @@ class CommandTest(unittest.TestCase):
             self.assertEqual(0, result)
             self.assertTrue(output.read_bytes().startswith(b"%PDF-"))
 
-    def test_render_handles_classic_grid_filled_and_blank(self) -> None:
+    def test_render_handles_numbered_grid_filled_and_blank(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             for blank in (False, True):
                 with self.subTest(blank=blank):

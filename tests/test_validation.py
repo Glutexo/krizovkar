@@ -20,12 +20,13 @@ from krizovkar.model import (
     write_crossword_grid,
 )
 from krizovkar.validation import (
-    check_dense_swedish_grid,
-    validate_dense_swedish_grid_file,
+    check_crossword_grid,
+    validate_crossword_grid_file,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GRID_CLASSIC_EXAMPLE = PROJECT_ROOT / "examples" / "grid-classic.yaml"
+GRID_MIXED_CLUES_EXAMPLE = PROJECT_ROOT / "examples" / "grid-mixed-clues.yaml"
 
 
 def _legend() -> LegendCell:
@@ -90,21 +91,21 @@ def _replace_cell(
 
 class QualityValidationTest(unittest.TestCase):
     def test_good_dense_grid_has_no_warning(self) -> None:
-        report = check_dense_swedish_grid(_good_dense_grid())
+        report = check_crossword_grid(_good_dense_grid())
 
         self.assertTrue(report.is_valid)
         self.assertEqual((), report.errors)
         self.assertEqual((), report.warnings)
 
-    def test_classic_grid_with_external_clues_has_no_swedish_warning(self) -> None:
+    def test_numbered_grid_with_external_clues_has_no_warning(self) -> None:
         crossword = load_crossword_grid(GRID_CLASSIC_EXAMPLE)
 
-        report = check_dense_swedish_grid(crossword)
+        report = check_crossword_grid(crossword)
 
         self.assertTrue(report.is_valid)
         self.assertEqual((), report.warnings)
 
-    def test_numbered_classic_grid_without_clues_has_no_swedish_warning(self) -> None:
+    def test_numbered_grid_without_clues_has_no_warning(self) -> None:
         crossword = CrosswordGrid(
             format_name="krizovkar",
             kind="grid",
@@ -116,13 +117,44 @@ class QualityValidationTest(unittest.TestCase):
             ),
         )
 
-        report = check_dense_swedish_grid(crossword)
+        report = check_crossword_grid(crossword)
 
         self.assertTrue(report.is_valid)
         self.assertEqual((), report.warnings)
 
+    def test_inline_and_numbered_clues_can_share_one_grid(self) -> None:
+        crossword = load_crossword_grid(GRID_MIXED_CLUES_EXAMPLE)
+
+        report = check_crossword_grid(crossword)
+
+        self.assertTrue(report.is_valid)
+        self.assertEqual((), report.warnings)
+
+    def test_numbered_word_after_bar_is_checked_as_a_new_start(self) -> None:
+        crossword = load_crossword_grid(GRID_MIXED_CLUES_EXAMPLE)
+        assert crossword.grid.cells is not None
+        rows = [list(row) for row in crossword.grid.cells]
+        rows[2][2] = LetterCell(value="O")
+        crossword = CrosswordGrid(
+            format_name=crossword.format_name,
+            kind=crossword.kind,
+            version=crossword.version,
+            grid=Grid(
+                width=crossword.grid.width,
+                height=crossword.grid.height,
+                cells=tuple(tuple(row) for row in rows),
+            ),
+        )
+
+        report = check_crossword_grid(crossword)
+
+        self.assertIn(
+            "layout.missing-legend",
+            {issue.code for issue in report.warnings},
+        )
+
     def test_disconnected_letter_islands_are_only_a_warning(self) -> None:
-        report = check_dense_swedish_grid(_disconnected_dense_grid())
+        report = check_crossword_grid(_disconnected_dense_grid())
 
         self.assertTrue(report.is_valid)
         self.assertEqual(
@@ -142,7 +174,7 @@ class QualityValidationTest(unittest.TestCase):
             ),
         )
 
-        report = check_dense_swedish_grid(crossword)
+        report = check_crossword_grid(crossword)
 
         self.assertTrue(report.is_valid)
         self.assertEqual((), report.errors)
@@ -163,7 +195,7 @@ class QualityValidationTest(unittest.TestCase):
             LegendCell(texts=("Doprava", "Dolů")),
         )
 
-        report = check_dense_swedish_grid(crossword)
+        report = check_crossword_grid(crossword)
 
         self.assertTrue(report.is_valid)
         self.assertEqual((), report.warnings)
@@ -176,7 +208,7 @@ class QualityValidationTest(unittest.TestCase):
             SecretCell(value="A", arrow="right"),
         )
 
-        report = check_dense_swedish_grid(crossword)
+        report = check_crossword_grid(crossword)
 
         self.assertTrue(report.is_valid)
         self.assertEqual((), report.warnings)
@@ -189,7 +221,7 @@ class QualityValidationTest(unittest.TestCase):
             EmptyCell(),
         )
 
-        report = check_dense_swedish_grid(crossword)
+        report = check_crossword_grid(crossword)
 
         self.assertTrue(report.is_valid)
         self.assertEqual(
@@ -208,7 +240,7 @@ class QualityValidationTest(unittest.TestCase):
             LetterCell(value="A"),
         )
 
-        report = check_dense_swedish_grid(crossword)
+        report = check_crossword_grid(crossword)
 
         self.assertTrue(report.is_valid)
         missing = tuple(
@@ -227,7 +259,7 @@ class QualityValidationTest(unittest.TestCase):
             LegendCell(texts=("Navíc",)),
         )
 
-        report = check_dense_swedish_grid(crossword)
+        report = check_crossword_grid(crossword)
 
         self.assertTrue(report.is_valid)
         self.assertIn(
@@ -248,7 +280,7 @@ class FileValidationTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            report = validate_dense_swedish_grid_file(source)
+            report = validate_crossword_grid_file(source)
 
         self.assertFalse(report.is_valid)
         self.assertEqual(("data-model",), tuple(i.code for i in report.errors))

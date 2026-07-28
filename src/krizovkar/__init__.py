@@ -43,7 +43,9 @@ from krizovkar.renderer import RenderError, render_pdf
 from krizovkar.validation import (
     ValidationIssue,
     ValidationReport,
+    check_crossword_grid,
     check_dense_swedish_grid,
+    validate_crossword_grid_file,
     validate_dense_swedish_grid_file,
 )
 
@@ -80,6 +82,7 @@ __all__ = [
     "ValidationReport",
     "WordDirection",
     "WordPlacement",
+    "check_crossword_grid",
     "check_dense_swedish_grid",
     "generate_swedish_grid",
     "load_dictionary",
@@ -87,6 +90,7 @@ __all__ = [
     "load_crossword_specification",
     "render_pdf",
     "secret_path_arrows",
+    "validate_crossword_grid_file",
     "validate_dense_swedish_grid_file",
     "write_crossword_grid",
 ]

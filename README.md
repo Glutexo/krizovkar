@@ -105,6 +105,8 @@ Slovní bloky bez výslovné `legend` dostanou postupně popisky `1. část taje
 
 Význam obou dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md). Strojová pravidla jsou oddělená v [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json) a [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json).
 
+Model nemá přepínač mezi švédskou a čárkovanou křížovkou. Zadání hesla, jeho odpovědi a legendy je v obou případech stejné; konkrétní cílová mřížka pouze určí, zda legendu vloží do samostatné buňky, nebo ji spojí s číslem písmenné buňky a uvede pod mřížkou. Legendová buňka zabírá místo, takže stejné zadání může být platné pro jedno rozložení a nevejít se do jiného. Oba způsoby lze v jedné mřížce libovolně kombinovat.
+
 Mřížka může obsahovat řádky explicitně typovaných buněk:
 
 ```yaml
@@ -117,7 +119,7 @@ grid:
 
 Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. České `CH` zabírá jednu buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku. Tajenková buňka má v PDF světle šedé pozadí a může mít jednu rohovou `arrow` ve směru `up`, `right`, `down` nebo `left`. Jde o jinou značku než seznam `arrows` v legendové buňce. Cílová mřížka už nerozlišuje, zda tajenku určil seznam polí, nebo souvislé heslo; u druhé varianty navíc obsahuje legendovou buňku s textem „Tajenka“. Zápis ukazuje [mřížka s českými písmeny](examples/grid-czech-letters.yaml); [ukázková cesta se šipkami](examples/grid-secret-arrows.yaml) mění směr dvakrát.
 
-Klasická křížovka může písmenné buňce přidat počáteční `number` a silné mezislovní `bars` na její pravé či dolní hraně. Renderer vloží číslo do levého horního rohu, předěly vykreslí stejným silným tahem jako vnější rám a očíslované `clues` rozdělí pod mřížkou do sloupců „Vodorovně“ a „Svisle“. Číslo bez odpovídající legendy může označit například tajenku bez nápovědy. Ucelený zápis ukazuje [klasická křížovka s vnějšími legendami](examples/grid-classic.yaml).
+Čárkované rozložení může písmenné buňce přidat počáteční `number` a silné mezislovní `bars` na její pravé či dolní hraně. Renderer vloží číslo do levého horního rohu, předěly vykreslí stejným silným tahem jako vnější rám a očíslované `clues` rozdělí pod mřížkou do sloupců „Vodorovně“ a „Svisle“. Číslo bez odpovídající legendy může označit například tajenku bez nápovědy. Tyto položky nijak nevylučují buňky `type: legend`: [smíšená mřížka](examples/grid-mixed-clues.yaml) používá vepsané i číselné legendy současně, zatímco [číslovaná mřížka](examples/grid-classic.yaml) ukazuje samotné vnější legendy.
 
 Legenda používá neprázdný seznam textů a může u nich výslovně uvést směrové šipky:
 
@@ -177,7 +179,7 @@ Legendy pokrývají horní a levou stranu každého písmenného bloku. Na horn�
 
 ## Validace
 
-Datový formát a pravidla dobré křížovky jsou dvě oddělené vrstvy. Příkaz `validate` nejprve ověří, zda lze YAML bezpečně načíst jako cílovou mřížku, a potom jej posoudí podle současného profilu husté švédské křížovky:
+Datový formát a pravidla dobré křížovky jsou dvě oddělené vrstvy. Příkaz `validate` nejprve ověří, zda lze YAML bezpečně načíst jako cílovou mřížku, a potom posoudí společná pravidla jejího rozložení:
 
 ```shell
 uv run krizovkar validate build/generated-grid.yaml
@@ -185,7 +187,7 @@ uv run krizovkar validate build/generated-grid.yaml
 
 Chyba znamená neplatný nebo vnitřně rozporný datový model a příkaz skončí návratovým kódem `2`. Varování znamená platnou mřížku, kterou lze dál zpracovat a vykreslit, ale porušuje některé pravidlo kvality; návratový kód zůstává `0`.
 
-Profil nyní varuje zejména před směrovými šipkami v legendách, nesouladem počtu textů a navazujících směrů, heslem bez bezprostředně předcházející legendy a oddělenými písmennými ostrovy. Rohové šipky tajenky toto varování nevyvolávají. Mřížku s čísly, mezislovními předěly nebo vnějšími `clues` uzná jako klasickou a nevyžaduje v ní legendové buňky. Jednoduchá legenda uvnitř švédské mřížky má jeden text a směr; dvojitá má dva texty v pořadí doprava a dolů. Tato pravidla nejsou omezením obecného formátu a jiné druhy křížovek mohou v budoucnu používat jiný profil.
+Validátor nepřiřazuje celé mřížce jeden druh. U každého začátku hesla samostatně přijme bezprostředně předcházející legendovou buňku nebo číslo; silný předěl přitom zakládá nové heslo. Proto kontroluje vepsané legendy i ve mřížce, která zároveň obsahuje `number`, `bars` nebo vnější `clues`. Dále varuje zejména před směrovými šipkami vepsaných legend, nesouladem počtu jejich textů a navazujících směrů a oddělenými písmennými ostrovy. Rohové šipky tajenky tato varování nevyvolávají.
 
 ## Vytvoření PDF
 

@@ -13,6 +13,8 @@ specification → generování a rozložení → grid → vykreslení PDF
 
 Každý druh má vlastní JSON Schema a vlastní Pythonový loader. Dokument proto vždy obsahuje povinnou položku `kind`; nástroj nemusí jeho význam odhadovat z ostatních položek.
 
+Položka `kind` rozlišuje fázi dat, nikoli švédskou, čárkovanou nebo jinou podobu křížovky. Všechny používají stejné zadání i stejný model cílové mřížky. Způsob uvedení legendy je vlastnost konkrétního rozložení a jednotlivá hesla v jedné mřížce mohou používat různé způsoby.
+
 ## Cílová mřížka, verze 1
 
 Cílová mřížka popisuje obdélníkový rozměr a případný obsah buněk:
@@ -85,6 +87,8 @@ clues:
 ```
 
 Každá legenda odkazuje na existující očíslovanou písmennou buňku a dvojice `number` a `direction` se nesmí opakovat. Začíná-li takto popsané slovo uvnitř souvislého písmenného řádku nebo sloupce, musí je od předchozího slova oddělovat odpovídající silný předěl. Společné počáteční pole může mít pod jedním číslem jednu vodorovnou a jednu svislou legendu. Samotné číslo legendu nevyžaduje; tím lze označit například tajenku bez vlastní nápovědy.
+
+Čísla, předěly a kořenové `clues` neurčují druh celého dokumentu. Ve stejné mřížce mohou být současně buňky `type: legend`; jedno heslo tak může mít vepsanou legendu a jiné legendu číselnou. Formát nezakazuje ani oba způsoby u téhož hesla. Ucelenou kombinaci ukazuje [příklad se smíšenými legendami](../examples/grid-mixed-clues.yaml).
 
 Renderer sází číslo do levého horního rohu buňky a vnější legendy pod mřížku do samostatných sloupců „Vodorovně“ a „Svisle“. Čísla, legendy, předěly, zvýraznění tajenky a tajenkové šipky zůstávají viditelné i při vykreslení nevyplněné varianty.
 
@@ -160,6 +164,8 @@ Každá položka `words` obsahuje:
 - `direction`: hodnotu `horizontal` pro postup doprava nebo `vertical` pro postup dolů,
 - `legend`: neprázdný text legendy,
 - volitelné `in_help`: zda se odpověď vypíše v pomůcce; výchozí hodnota je `false`.
+
+Tento popis hesla je společný pro švédské i čárkované rozložení. `specification` neurčuje, zda se text `legend` později zapíše do samostatné legendové buňky, nebo jako číselná legenda mimo mřížku. Legendové buňky však zabírají souřadnice, a proto může stejné zadání vyhovět rozměru čárkované mřížky, ale po vložení vepsaných legend už nevyhovět rozměru švédské mřížky. Tuto platnost posoudí až konkrétní způsob rozložení při budoucím převodu na `grid`.
 
 Souřadnice používají `row` a `column`, počítají se od 1 a jejich počátek leží v levém horním rohu. Řádky rostou směrem dolů a sloupce doprava. Slova se mohou křížit pouze tehdy, mají-li na společné souřadnici stejné písmeno.
 
@@ -255,7 +261,7 @@ Validace cílové mřížky rozlišuje dvě závažnosti:
 
 Příkaz `krizovkar validate` při chybě vrací kód `2`. Samotná varování vypíše, ale vrací kód `0`, takže neblokují vykreslení ani další zpracování. Každá položka reportu obsahuje závažnost, strojově čitelný kód, cestu k místu v dokumentu a českou zprávu.
 
-Současný kvalitativní profil je určený především pro hustou švédskou mřížku bez směrových šipek v legendách. Každý nový vodorovný či svislý běh písmen musí mít bezprostředně před sebou legendovou buňku. Počet jejích textů odpovídá počtu navazujících směrů: jednoduchá legenda má jeden text, dvojitá dva texty v pořadí doprava a dolů. Dokument s čísly, mezislovními předěly nebo vnějšími `clues` validátor rozpozná jako klasickou křížovku a legendové buňky v něm nevyžaduje. Tajenkové rohové šipky jsou samostatná pomůcka pro pořadí čtení a toto varování nevyvolávají. Všechny běžné a tajenkové písmenné buňky zároveň musí tvořit jedinou oblast propojenou společnými hranami; legendy, pomůcky a nevyplňované buňky jsou její hranice. Jde o neblokující formální pravidla pro dobrý výsledek, nikoli o omezení obecného datového formátu. Jiný druh křížovky proto může později použít jiný profil nad stejnými daty.
+Současná kvalitativní kontrola neurčuje jeden druh celé mřížky. Každý nový vodorovný či svislý běh písmen musí mít vlastní zdroj legendy: bezprostředně předcházející buňku `type: legend`, nebo `number` v počátečním písmenném poli. Za nový běh se považuje také heslo za silným předělem. Vepsaná jednoduchá legenda má jeden text a navazující směr, dvojitá dva texty v pořadí doprava a dolů; tato pravidla se kontrolují i vedle číselných legend v témže dokumentu. Tajenkové rohové šipky jsou samostatná pomůcka pro pořadí čtení a varování pro směrové šipky legend nevyvolávají. Všechny běžné a tajenkové písmenné buňky zároveň musí tvořit jedinou oblast propojenou společnými hranami; legendy, pomůcky a nevyplňované buňky jsou její hranice. Jde o neblokující formální pravidla pro dobrý výsledek, nikoli o další omezení datového formátu.
 
 Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-minimal.yaml) a [zadání](../examples/specification-minimal.yaml).
 
@@ -265,7 +271,9 @@ Oba způsoby určení tajenky ukazuje [příklad s vybranými poli a tajenkovým
 
 Více bloků bez legend i s legendami ukazuje [příklad vícedílných tajenek](../examples/specification-multipart-secrets.yaml).
 
-Čísla, silné mezislovní předěly a vnější legendy ukazuje [příklad klasické křížovky](../examples/grid-classic.yaml).
+Čísla, silné mezislovní předěly a vnější legendy ukazuje [příklad s číselnými legendami](../examples/grid-classic.yaml).
+
+Současné použití vepsaných a číselných legend ukazuje [příklad se smíšenými legendami](../examples/grid-mixed-clues.yaml).
 
 Vyplněná cílová mřížka je v [příkladu s náhodnými písmeny](../examples/grid-random-letters.yaml).
 

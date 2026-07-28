@@ -1,0 +1,25 @@
+format: krizovkar
+kind: grid
+version: 1
+grid:
+  width: 4
+  height: 4
+  cells:
+    - - {type: empty}
+      - {type: legend, texts: [Svislé heslo MLR]}
+      - {type: legend, texts: [Svislé heslo EOA]}
+      - {type: legend, texts: [Svislé heslo TSD]}
+    - - {type: legend, texts: [Prudký hod]}
+      - {type: letter, value: M}
+      - {type: letter, value: E}
+      - {type: letter, value: T}
+    - - {type: legend, texts: [Římských padesát]}
+      - {type: letter, value: L, bars: [right]}
+      - {type: letter, value: O, number: 1}
+      - {type: letter, value: S}
+    - - {type: legend, texts: [Jednotka dávky záření]}
+      - {type: letter, value: R}
+      - {type: letter, value: A}
+      - {type: letter, value: D}
+clues:
+  - {number: 1, direction: horizontal, text: Operační systém (zkr.)}

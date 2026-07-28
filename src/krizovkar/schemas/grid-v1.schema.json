@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/master/src/krizovkar/schemas/grid-v1.schema.json",
   "title": "Cílová mřížka Křížovkáře, verze 1",
-  "description": "Datový model výsledné křížovkové mřížky.",
+  "description": "Společný datový model výsledné mřížky s vepsanými, číselnými nebo smíšenými legendami.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -58,7 +58,7 @@
       }
     },
     "clues": {
-      "description": "Volitelné očíslované legendy uvedené vně mřížky.",
+      "description": "Volitelné očíslované legendy uvedené vně mřížky; mohou se kombinovat s legendovými buňkami.",
       "type": "array",
       "minItems": 1,
       "items": {

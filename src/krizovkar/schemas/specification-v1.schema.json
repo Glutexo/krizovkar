@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/master/src/krizovkar/schemas/specification-v1.schema.json",
   "title": "Zadání křížovky Křížovkáře, verze 1",
-  "description": "Datový model vstupního zadání, ze kterého vznikne cílová mřížka.",
+  "description": "Společný datový model vstupního zadání pro švédské, čárkované i smíšené rozložení.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -125,7 +125,7 @@
       }
     },
     "placedWord": {
-      "description": "Slovo s polohou, směrem a legendou.",
+      "description": "Slovo s polohou, směrem a legendou nezávisle na způsobu jejího budoucího umístění.",
       "type": "object",
       "additionalProperties": false,
       "required": [

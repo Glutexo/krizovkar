@@ -9,7 +9,7 @@ from krizovkar.dictionary import CrosswordDictionary, DictionaryEntry
 from krizovkar.generator import GenerationError, generate_swedish_grid
 from krizovkar.layout import create_dense_swedish_layout
 from krizovkar.model import EmptyCell, LegendCell, LetterCell
-from krizovkar.validation import check_dense_swedish_grid
+from krizovkar.validation import check_crossword_grid
 
 
 def _complete_dictionary(*lengths: int) -> CrosswordDictionary:
@@ -46,7 +46,7 @@ class GeneratorTest(unittest.TestCase):
             ("layout.disconnected-letters",),
             tuple(
                 issue.code
-                for issue in check_dense_swedish_grid(first).warnings
+                for issue in check_crossword_grid(first).warnings
             ),
         )
 
