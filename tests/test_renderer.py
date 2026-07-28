@@ -19,6 +19,7 @@ from krizovkar.model import (
     load_crossword_grid,
 )
 from krizovkar.renderer import (
+    INNER_LINE_WIDTH,
     MAX_CELL_SIZE,
     TEXT_CELL_FONT_STEP,
     TEXT_CELL_MAX_FONT_SIZE,
@@ -27,6 +28,7 @@ from krizovkar.renderer import (
     _draw_cell_number,
     _draw_external_clues,
     _draw_fitted_text,
+    _draw_inner_grid_lines,
     _draw_legend_cell,
     _draw_letter_cell,
     _draw_secret_beak,
@@ -199,7 +201,22 @@ class RenderModeTest(unittest.TestCase):
         draw_secret_beak.assert_called_once()
 
 
-class NumberedClueRenderTest(unittest.TestCase):
+class GridLineRenderTest(unittest.TestCase):
+    def test_all_inner_row_and_column_lines_are_visible(self) -> None:
+        grid = Grid(width=5, height=5)
+        pdf = Mock()
+
+        _draw_inner_grid_lines(pdf, grid, 0, 0, 10)
+
+        pdf.setStrokeColorRGB.assert_called_once_with(0, 0, 0)
+        pdf.setLineWidth.assert_called_once_with(INNER_LINE_WIDTH)
+        self.assertEqual(8, pdf.line.call_count)
+        pdf.line.assert_any_call(10, 0, 10, 50)
+        pdf.line.assert_any_call(40, 0, 40, 50)
+        pdf.line.assert_any_call(0, 10, 50, 10)
+        pdf.line.assert_any_call(0, 40, 50, 40)
+        self.assertLess(INNER_LINE_WIDTH, STRONG_LINE_WIDTH)
+
     def test_word_bars_and_outer_frame_share_strong_line_width(self) -> None:
         crossword = load_crossword_grid(GRID_CLASSIC_EXAMPLE)
         pdf = Mock()
@@ -210,6 +227,8 @@ class NumberedClueRenderTest(unittest.TestCase):
         self.assertEqual(12, pdf.line.call_count)
         pdf.rect.assert_called_once_with(0, 0, 60, 60, stroke=1, fill=0)
 
+
+class NumberedClueRenderTest(unittest.TestCase):
     def test_blank_numbered_pdf_keeps_numbers_clues_and_secret_arrow(self) -> None:
         crossword = load_crossword_grid(GRID_CLASSIC_EXAMPLE)
         with tempfile.TemporaryDirectory() as directory:

@@ -35,7 +35,7 @@ from krizovkar.typography import mark_czech_hyphenation, protect_czech_prepositi
 
 PAGE_MARGIN = 15 * mm
 MAX_CELL_SIZE = 12 * mm
-INNER_LINE_WIDTH = 0.5
+INNER_LINE_WIDTH = 0.75
 STRONG_LINE_WIDTH = 1.25
 LETTER_FONT = "KrizovkarNotoSansBold"
 LETTER_SIZE_RATIO = 0.58
@@ -587,6 +587,29 @@ def _draw_external_clues(
         )
 
 
+def _draw_inner_grid_lines(
+    pdf: Canvas,
+    grid: Grid,
+    left: float,
+    bottom: float,
+    cell_size: float,
+) -> None:
+    grid_width = grid.width * cell_size
+    grid_height = grid.height * cell_size
+
+    pdf.saveState()
+    pdf.setStrokeColorRGB(0, 0, 0)
+    pdf.setLineWidth(INNER_LINE_WIDTH)
+    pdf.setLineCap(0)
+    for column in range(1, grid.width):
+        x = left + column * cell_size
+        pdf.line(x, bottom, x, bottom + grid_height)
+    for row in range(1, grid.height):
+        y = bottom + row * cell_size
+        pdf.line(left, y, left + grid_width, y)
+    pdf.restoreState()
+
+
 def _draw_strong_grid_lines(
     pdf: Canvas,
     grid: Grid,
@@ -770,13 +793,13 @@ def _write_pdf(
                     font_size,
                 )
 
-    pdf.setLineWidth(INNER_LINE_WIDTH)
-    for column in range(1, width):
-        x = left + column * cell_size
-        pdf.line(x, bottom, x, bottom + grid_height)
-    for row in range(1, height):
-        y = bottom + row * cell_size
-        pdf.line(left, y, left + grid_width, y)
+    _draw_inner_grid_lines(
+        pdf,
+        crossword.grid,
+        left,
+        bottom,
+        cell_size,
+    )
 
     _draw_strong_grid_lines(
         pdf,
