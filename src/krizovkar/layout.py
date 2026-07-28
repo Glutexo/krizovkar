@@ -1,4 +1,4 @@
-"""Hustá maska švédské křížovky bez směrových šipek."""
+"""Deterministická rozvržení hustých křížovkových mřížek."""
 
 from __future__ import annotations
 
@@ -28,6 +28,18 @@ class AxisSegment:
     """Souvislý písmenný úsek bezprostředně za legendovou souřadnicí."""
 
     legend: int
+    start: int
+    length: int
+
+    @property
+    def stop(self) -> int:
+        return self.start + self.length
+
+
+@dataclass(frozen=True, slots=True)
+class NumberedAxisSegment:
+    """Souvislý písmenný úsek číslované mřížky."""
+
     start: int
     length: int
 
@@ -68,6 +80,16 @@ class SwedishLayout:
         if legend_column:
             return "horizontal_legend"
         return "letter"
+
+
+@dataclass(frozen=True, slots=True)
+class NumberedLayout:
+    """Rozdělení plně písmenné mřížky silnými mezislovními předěly."""
+
+    width: int
+    height: int
+    row_segments: tuple[NumberedAxisSegment, ...]
+    column_segments: tuple[NumberedAxisSegment, ...]
 
 
 def _segment_score(lengths: tuple[int, ...]) -> tuple[int, int]:
@@ -137,6 +159,73 @@ def _segment_lengths(dimension: int) -> tuple[int, ...]:
     return _segment_length_candidates(dimension)[0]
 
 
+def _numbered_segment_score(
+    lengths: tuple[int, ...],
+) -> tuple[int, int, int]:
+    return (
+        sum(abs(length - PREFERRED_SEGMENT_LENGTH) for length in lengths),
+        len(lengths),
+        max(lengths) - min(lengths),
+    )
+
+
+@cache
+def _numbered_segment_length_candidates(
+    dimension: int,
+) -> tuple[tuple[int, ...], ...]:
+    candidates = []
+    for segment_count in range(1, dimension + 1):
+        if not (
+            segment_count * MIN_SEGMENT_LENGTH
+            <= dimension
+            <= segment_count * MAX_SEGMENT_LENGTH
+        ):
+            continue
+
+        def search(
+            remaining_count: int,
+            remaining_letters: int,
+            maximum: int,
+            lengths: tuple[int, ...],
+        ) -> None:
+            if remaining_count == 0:
+                if remaining_letters == 0:
+                    candidates.append(lengths)
+                return
+            minimum_rest = (remaining_count - 1) * MIN_SEGMENT_LENGTH
+            maximum_rest = (remaining_count - 1) * MAX_SEGMENT_LENGTH
+            for length in range(
+                min(MAX_SEGMENT_LENGTH, maximum),
+                MIN_SEGMENT_LENGTH - 1,
+                -1,
+            ):
+                rest = remaining_letters - length
+                if minimum_rest <= rest <= maximum_rest:
+                    search(
+                        remaining_count - 1,
+                        rest,
+                        length,
+                        (*lengths, length),
+                    )
+
+        search(segment_count, dimension, MAX_SEGMENT_LENGTH, ())
+
+    if not candidates:
+        raise LayoutError(
+            f"rozměr {dimension} nelze rozdělit na písmenné úseky "
+            f"délky {MIN_SEGMENT_LENGTH} až {MAX_SEGMENT_LENGTH}"
+        )
+    return tuple(
+        sorted(
+            candidates,
+            key=lambda lengths: (
+                *_numbered_segment_score(lengths),
+                tuple(-length for length in lengths),
+            ),
+        )
+    )
+
+
 def _axis_segments(
     dimension: int,
     lengths: tuple[int, ...] | None = None,
@@ -146,6 +235,17 @@ def _axis_segments(
     for length in lengths or _segment_lengths(dimension):
         segments.append(AxisSegment(legend=legend, start=legend + 1, length=length))
         legend += length + 1
+    return tuple(segments)
+
+
+def _numbered_axis_segments(
+    lengths: tuple[int, ...],
+) -> tuple[NumberedAxisSegment, ...]:
+    segments = []
+    start = 0
+    for length in lengths:
+        segments.append(NumberedAxisSegment(start=start, length=length))
+        start += length
     return tuple(segments)
 
 
@@ -201,6 +301,66 @@ def create_dense_swedish_layout(
     """Vytvoří masku s legendami na horní a levé straně každého bloku."""
 
     return create_dense_swedish_layout_candidates(
+        width,
+        height,
+        required_lengths=required_lengths,
+    )[0]
+
+
+def create_dense_numbered_layout_candidates(
+    width: int,
+    height: int,
+    *,
+    required_lengths: tuple[int, ...] = (),
+) -> tuple[NumberedLayout, ...]:
+    """Seřadí číslovaná rozvržení obsahující požadované délky."""
+
+    required = frozenset(required_lengths)
+    candidates = []
+    for column_lengths in _numbered_segment_length_candidates(width):
+        for row_lengths in _numbered_segment_length_candidates(height):
+            if not required <= set((*column_lengths, *row_lengths)):
+                continue
+            candidates.append(
+                (
+                    (
+                        _numbered_segment_score(column_lengths)[0]
+                        + _numbered_segment_score(row_lengths)[0],
+                        len(column_lengths) + len(row_lengths),
+                        max(column_lengths) - min(column_lengths),
+                        max(row_lengths) - min(row_lengths),
+                        tuple(-length for length in column_lengths),
+                        tuple(-length for length in row_lengths),
+                    ),
+                    NumberedLayout(
+                        width=width,
+                        height=height,
+                        row_segments=_numbered_axis_segments(row_lengths),
+                        column_segments=_numbered_axis_segments(column_lengths),
+                    ),
+                )
+            )
+    if not candidates:
+        lengths = ", ".join(str(length) for length in sorted(required))
+        raise LayoutError(
+            f"rozměr {width} × {height} nelze rozdělit tak, "
+            f"aby obsahoval délky: {lengths}"
+        )
+    return tuple(
+        layout
+        for _, layout in sorted(candidates, key=lambda item: item[0])
+    )
+
+
+def create_dense_numbered_layout(
+    width: int,
+    height: int,
+    *,
+    required_lengths: tuple[int, ...] = (),
+) -> NumberedLayout:
+    """Vytvoří plně písmennou masku s mezislovními předěly."""
+
+    return create_dense_numbered_layout_candidates(
         width,
         height,
         required_lengths=required_lengths,

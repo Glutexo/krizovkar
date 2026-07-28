@@ -1,4 +1,4 @@
-"""Testy husté masky švédské křížovky."""
+"""Testy hustých masek křížovek."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ from collections import Counter
 
 from krizovkar.layout import (
     LayoutError,
+    create_dense_numbered_layout,
+    create_dense_numbered_layout_candidates,
     create_dense_swedish_layout,
     create_dense_swedish_layout_candidates,
 )
@@ -132,6 +134,45 @@ class LayoutTest(unittest.TestCase):
     def test_rejects_dimension_without_minimum_word_length(self) -> None:
         with self.assertRaisesRegex(LayoutError, "nelze rozdělit"):
             create_dense_swedish_layout(3, 10)
+
+    def test_creates_dense_numbered_layout(self) -> None:
+        layout = create_dense_numbered_layout(15, 10)
+
+        self.assertEqual(
+            (4, 4, 4, 3),
+            tuple(segment.length for segment in layout.column_segments),
+        )
+        self.assertEqual(
+            (0, 4, 8, 12),
+            tuple(segment.start for segment in layout.column_segments),
+        )
+        self.assertEqual(
+            (5, 5),
+            tuple(segment.length for segment in layout.row_segments),
+        )
+        self.assertEqual(
+            (0, 5),
+            tuple(segment.start for segment in layout.row_segments),
+        )
+
+    def test_numbered_layout_can_include_required_length(self) -> None:
+        layouts = create_dense_numbered_layout_candidates(
+            15,
+            10,
+            required_lengths=(6,),
+        )
+
+        self.assertTrue(layouts)
+        for layout in layouts:
+            lengths = {
+                segment.length
+                for segment in (*layout.row_segments, *layout.column_segments)
+            }
+            self.assertIn(6, lengths)
+
+    def test_numbered_layout_rejects_too_short_dimension(self) -> None:
+        with self.assertRaisesRegex(LayoutError, "nelze rozdělit"):
+            create_dense_numbered_layout(2, 10)
 
 
 if __name__ == "__main__":

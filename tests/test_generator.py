@@ -12,6 +12,8 @@ from krizovkar.generator import (
     GenerationError,
     SecretRequirement,
     fill_crossword_template,
+    generate_numbered_grid,
+    generate_numbered_template,
     generate_swedish_grid,
     generate_swedish_template,
     normalize_secret_text,
@@ -526,6 +528,42 @@ class GeneratorTest(unittest.TestCase):
             (first_slot.legend_position.row, first_slot.legend_position.column),
         )
 
+    def test_generates_numbered_template_without_dictionary(self) -> None:
+        first = generate_numbered_template(width=7, height=7)
+        second = generate_numbered_template(width=7, height=7)
+
+        self.assertEqual(first, second)
+        self.assertEqual("template", first.kind)
+        self.assertEqual(7, first.grid.width)
+        self.assertEqual(7, first.grid.height)
+        self.assertTrue(
+            all(
+                isinstance(cell, TemplateLetterCell)
+                for row in first.grid.cells
+                for cell in row
+            )
+        )
+        self.assertEqual(28, len(first.slots))
+        self.assertTrue(
+            all(slot.legend_position is None for slot in first.slots)
+        )
+        self.assertEqual(
+            (
+                ("h1", 1, 1, 4),
+                ("h2", 1, 5, 3),
+                ("h3", 2, 1, 4),
+            ),
+            tuple(
+                (
+                    slot.identifier,
+                    slot.start.row,
+                    slot.start.column,
+                    slot.length,
+                )
+                for slot in first.slots[:3]
+            ),
+        )
+
     def test_template_rejects_too_small_grid(self) -> None:
         with self.assertRaisesRegex(GenerationError, "nelze rozdělit"):
             generate_swedish_template(width=3, height=9)
@@ -579,6 +617,63 @@ class GeneratorTest(unittest.TestCase):
                     )
                 )
                 self.assertNotEqual(right_is_letter, down_is_letter)
+
+    def test_generates_deterministic_numbered_grid(self) -> None:
+        first = generate_numbered_grid(
+            TEST_DICTIONARY,
+            width=7,
+            height=7,
+            seed=42,
+        )
+        second = generate_numbered_grid(
+            TEST_DICTIONARY,
+            width=7,
+            height=7,
+            seed=42,
+        )
+        composed = fill_crossword_template(
+            generate_numbered_template(width=7, height=7),
+            TEST_DICTIONARY,
+            seed=42,
+        )
+
+        self.assertEqual(first, second)
+        self.assertEqual(first, composed)
+        self.assertEqual(28, len(first.clues))
+        assert first.grid.cells is not None
+        cells = tuple(cell for row in first.grid.cells for cell in row)
+        self.assertTrue(all(isinstance(cell, LetterCell) for cell in cells))
+        self.assertEqual(
+            tuple(range(1, 25)),
+            tuple(
+                cell.number
+                for cell in cells
+                if cell.number is not None
+            ),
+        )
+        self.assertEqual(14, sum(len(cell.bars) for cell in cells))
+        self.assertFalse(check_crossword_grid(first).warnings)
+
+    def test_generates_numbered_grid_with_secret(self) -> None:
+        crossword = generate_numbered_grid(
+            TEST_DICTIONARY,
+            width=7,
+            height=7,
+            seed=42,
+            secret=SecretRequirement(words=("ABCD",)),
+        )
+
+        assert crossword.grid.cells is not None
+        secret_cells = tuple(
+            cell
+            for row in crossword.grid.cells
+            for cell in row
+            if isinstance(cell, SecretCell)
+        )
+        self.assertEqual(4, len(secret_cells))
+        self.assertEqual("ABCD", "".join(cell.value for cell in secret_cells))
+        self.assertIn("Tajenka", tuple(clue.text for clue in crossword.clues))
+        self.assertFalse(check_crossword_grid(crossword).warnings)
 
     def test_every_letter_run_is_a_dictionary_entry(self) -> None:
         crossword = generate_swedish_grid(

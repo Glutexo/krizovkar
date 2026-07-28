@@ -13,7 +13,10 @@ from krizovkar.layout import (
     MAX_SEGMENT_LENGTH,
     MIN_SEGMENT_LENGTH,
     LayoutError,
+    NumberedLayout,
     SwedishLayout,
+    create_dense_numbered_layout,
+    create_dense_numbered_layout_candidates,
     create_dense_swedish_layout,
     create_dense_swedish_layout_candidates,
 )
@@ -185,6 +188,51 @@ def generate_swedish_template(
     )
 
 
+def generate_numbered_template(
+    *,
+    width: int = DEFAULT_GRID_WIDTH,
+    height: int = DEFAULT_GRID_HEIGHT,
+    seed: int = DEFAULT_SEED,
+    secret: SecretRequirement | None = None,
+) -> CrosswordTemplate:
+    """Vytvoří nevyplněnou hustou číslovanou šablonu."""
+
+    if secret is None:
+        try:
+            return _numbered_template_from_layout(
+                create_dense_numbered_layout(width, height)
+            )
+        except LayoutError as error:
+            raise GenerationError(str(error)) from error
+
+    _validate_secret_requirement(secret)
+    last_error: Exception | None = None
+    for part_lengths in _secret_length_options(secret):
+        try:
+            layouts = create_dense_numbered_layout_candidates(
+                width,
+                height,
+                required_lengths=part_lengths,
+            )
+        except LayoutError as error:
+            last_error = error
+            continue
+        for layout in layouts:
+            try:
+                return place_secret_in_template(
+                    _numbered_template_from_layout(layout),
+                    secret,
+                    seed=seed,
+                )
+            except GenerationError as error:
+                last_error = error
+
+    detail = f": {last_error}" if last_error is not None else ""
+    raise GenerationError(
+        f"pro rozměr {width} × {height} nelze rozvrhnout tajenku{detail}"
+    )
+
+
 def _swedish_template_from_layout(layout: SwedishLayout) -> CrosswordTemplate:
 
     cells = []
@@ -251,6 +299,60 @@ def _swedish_template_from_layout(layout: SwedishLayout) -> CrosswordTemplate:
             width=layout.width,
             height=layout.height,
             cells=tuple(cells),
+        ),
+        slots=tuple(slots),
+    )
+
+
+def _numbered_template_from_layout(
+    layout: NumberedLayout,
+) -> CrosswordTemplate:
+    cells = tuple(
+        tuple(TemplateLetterCell() for _ in range(layout.width))
+        for _ in range(layout.height)
+    )
+
+    slots = []
+    horizontal_number = 1
+    for row in range(layout.height):
+        for column_segment in layout.column_segments:
+            slots.append(
+                WordSlot(
+                    identifier=f"h{horizontal_number}",
+                    start=Coordinate(
+                        row=row + 1,
+                        column=column_segment.start + 1,
+                    ),
+                    direction="horizontal",
+                    length=column_segment.length,
+                )
+            )
+            horizontal_number += 1
+
+    vertical_number = 1
+    for row_segment in layout.row_segments:
+        for column in range(layout.width):
+            slots.append(
+                WordSlot(
+                    identifier=f"v{vertical_number}",
+                    start=Coordinate(
+                        row=row_segment.start + 1,
+                        column=column + 1,
+                    ),
+                    direction="vertical",
+                    length=row_segment.length,
+                )
+            )
+            vertical_number += 1
+
+    return CrosswordTemplate(
+        format_name="krizovkar",
+        kind="template",
+        version=1,
+        grid=TemplateGrid(
+            width=layout.width,
+            height=layout.height,
+            cells=cells,
         ),
         slots=tuple(slots),
     )
@@ -910,6 +1012,29 @@ def generate_swedish_grid(
     """Vyplní hustou švédskou mřížku platnými křížícími se hesly."""
 
     template = generate_swedish_template(
+        width=width,
+        height=height,
+        seed=seed,
+        secret=secret,
+    )
+    return fill_crossword_template(
+        template,
+        dictionary,
+        seed=seed,
+    )
+
+
+def generate_numbered_grid(
+    dictionary: CrosswordDictionary,
+    *,
+    width: int = DEFAULT_GRID_WIDTH,
+    height: int = DEFAULT_GRID_HEIGHT,
+    seed: int = DEFAULT_SEED,
+    secret: SecretRequirement | None = None,
+) -> CrosswordGrid:
+    """Vyplní hustou číslovanou mřížku platnými křížícími se hesly."""
+
+    template = generate_numbered_template(
         width=width,
         height=height,
         seed=seed,
