@@ -27,6 +27,7 @@ from krizovkar.model import (
     SecretCell,
     SecretCells,
     SecretParts,
+    SecretPrompt,
     SecretWord,
     WordPlacement,
     load_crossword_grid,
@@ -47,6 +48,7 @@ GRID_MIXED_CLUES_EXAMPLE = PROJECT_ROOT / "examples" / "grid-mixed-clues.yaml"
 GRID_RANDOM_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-random-letters.yaml"
 GRID_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret.yaml"
 GRID_SECRET_ARROWS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret-arrows.yaml"
+GRID_SECRET_PROMPT_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret-prompt.yaml"
 SPECIFICATION_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "specification-minimal.yaml"
 SPECIFICATION_MULTIPART_SECRETS_EXAMPLE = (
     PROJECT_ROOT / "examples" / "specification-multipart-secrets.yaml"
@@ -59,6 +61,9 @@ SPECIFICATION_PLACED_WORDS_EXAMPLE = (
 )
 SPECIFICATION_SECRETS_EXAMPLE = (
     PROJECT_ROOT / "examples" / "specification-secrets.yaml"
+)
+SPECIFICATION_SECRET_PROMPT_EXAMPLE = (
+    PROJECT_ROOT / "examples" / "specification-secret-prompt.yaml"
 )
 
 
@@ -154,6 +159,79 @@ class ModelTest(unittest.TestCase):
             ),
             crossword.clues,
         )
+
+    def test_loads_and_writes_secret_prompts(self) -> None:
+        crossword = load_crossword_grid(GRID_SECRET_PROMPT_EXAMPLE)
+
+        self.assertEqual(
+            (
+                SecretPrompt(
+                    text='Lidové rčení: „Komu se nelení, tomu se …“',
+                    placement="above",
+                    alignment="left",
+                ),
+            ),
+            crossword.secret_prompts,
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "secret-prompt.yaml"
+            write_crossword_grid(crossword, output)
+            self.assertEqual(crossword, load_crossword_grid(output))
+
+    def test_secret_prompt_uses_default_placement_and_alignment(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "secret-prompt-defaults.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: grid\n"
+                "version: 1\n"
+                "grid: {width: 1, height: 1}\n"
+                "secret_prompts:\n"
+                "  - text: Zadání tajenky\n",
+                encoding="utf-8",
+            )
+
+            crossword = load_crossword_grid(source)
+
+        self.assertEqual(
+            (SecretPrompt(text="Zadání tajenky"),),
+            crossword.secret_prompts,
+        )
+
+    def test_rejects_invalid_secret_prompt(self) -> None:
+        invalid_properties = (
+            ("text", "'   '"),
+            ("placement", "beside"),
+            ("alignment", "center"),
+        )
+        for property_name, value in invalid_properties:
+            with self.subTest(property_name=property_name):
+                with tempfile.TemporaryDirectory() as directory:
+                    source = Path(directory) / "invalid-secret-prompt.yaml"
+                    prompt = (
+                        f"  - text: {value}\n"
+                        if property_name == "text"
+                        else (
+                            "  - text: Zadání tajenky\n"
+                            f"    {property_name}: {value}\n"
+                        )
+                    )
+                    source.write_text(
+                        "format: krizovkar\n"
+                        "kind: grid\n"
+                        "version: 1\n"
+                        "grid: {width: 1, height: 1}\n"
+                        "secret_prompts:\n"
+                        f"{prompt}",
+                        encoding="utf-8",
+                    )
+
+                    with self.assertRaisesRegex(
+                        ModelError,
+                        rf"\$\.secret_prompts\[0\]\.{property_name}",
+                    ):
+                        load_crossword_grid(source)
 
     def test_rejects_duplicate_grid_cell_number(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -351,6 +429,72 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(Coordinate(row=5, column=2), word.start)
         self.assertEqual("horizontal", word.direction)
         self.assertEqual(DEFAULT_SECRET_LEGEND, word.legend)
+
+    def test_loads_secret_prompt_from_specification(self) -> None:
+        specification = load_crossword_specification(
+            SPECIFICATION_SECRET_PROMPT_EXAMPLE
+        )
+
+        self.assertEqual(1, len(specification.secrets))
+        secret = specification.secrets[0]
+        self.assertIsInstance(secret, SecretWord)
+        assert isinstance(secret, SecretWord)
+        self.assertEqual("ZELENÍ", secret.answer)
+        self.assertEqual(
+            SecretPrompt(
+                text='Lidové rčení: „Komu se nelení, tomu se …“',
+                placement="above",
+                alignment="left",
+            ),
+            secret.prompt,
+        )
+
+    def test_all_secret_types_accept_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "all-secret-prompts.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 2, height: 1}\n"
+                "words:\n"
+                "  - answer: AB\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    legend: Abeceda\n"
+                "secrets:\n"
+                "  - type: cells\n"
+                "    cells: [{row: 1, column: 1}]\n"
+                "    prompt: {text: První zadání}\n"
+                "  - type: parts\n"
+                "    prompt:\n"
+                "      text: Druhé zadání\n"
+                "      placement: below\n"
+                "      alignment: right\n"
+                "    parts:\n"
+                "      - type: cells\n"
+                "        cells: [{row: 1, column: 1}]\n"
+                "      - type: cells\n"
+                "        cells: [{row: 1, column: 2}]\n",
+                encoding="utf-8",
+            )
+
+            specification = load_crossword_specification(source)
+
+        cells, parts = specification.secrets
+        self.assertIsInstance(cells, SecretCells)
+        self.assertIsInstance(parts, SecretParts)
+        assert isinstance(cells, SecretCells)
+        assert isinstance(parts, SecretParts)
+        self.assertEqual(SecretPrompt(text="První zadání"), cells.prompt)
+        self.assertEqual(
+            SecretPrompt(
+                text="Druhé zadání",
+                placement="below",
+                alignment="right",
+            ),
+            parts.prompt,
+        )
 
     def test_reads_scattered_secret_cells_by_rows(self) -> None:
         specification = load_crossword_specification(

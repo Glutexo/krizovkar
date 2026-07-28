@@ -27,6 +27,8 @@ WordDirection = Literal["horizontal", "vertical"]
 LegendArrow = Literal["right", "down"]
 SecretArrow = Literal["up", "right", "down", "left"]
 CellBar = Literal["right", "bottom"]
+SecretPromptPlacement = Literal["above", "below"]
+SecretPromptAlignment = Literal["left", "right"]
 DEFAULT_SECRET_LEGEND = "Tajenka"
 DEFAULT_SECRET_PART_LEGEND = "{number}. část tajenky"
 
@@ -92,6 +94,15 @@ class ExternalClue:
 
 
 @dataclass(frozen=True, slots=True)
+class SecretPrompt:
+    """Text zadání tajenky umístěný vně mřížky."""
+
+    text: str
+    placement: SecretPromptPlacement = "above"
+    alignment: SecretPromptAlignment = "left"
+
+
+@dataclass(frozen=True, slots=True)
 class CrosswordGrid:
     """Jednotná cílová mřížka s libovolným způsobem uvedení legend."""
 
@@ -100,6 +111,7 @@ class CrosswordGrid:
     version: int
     grid: Grid
     clues: tuple[ExternalClue, ...] = ()
+    secret_prompts: tuple[SecretPrompt, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +147,7 @@ class SecretCells:
 
     cells: tuple[Coordinate, ...]
     arrows: bool = False
+    prompt: SecretPrompt | None = None
 
     @property
     def reading_cells(self) -> tuple[Coordinate, ...]:
@@ -194,6 +207,7 @@ class SecretWord:
     start: Coordinate
     direction: WordDirection
     legend: str = DEFAULT_SECRET_LEGEND
+    prompt: SecretPrompt | None = None
 
 
 SecretPart = SecretCells | SecretWord
@@ -204,6 +218,7 @@ class SecretParts:
     """Jedna tajenka složená z několika částí v určeném pořadí."""
 
     parts: tuple[SecretPart, ...]
+    prompt: SecretPrompt | None = None
 
 
 SecretDefinition = SecretPart | SecretParts
@@ -321,6 +336,19 @@ def _grid_cells(grid: dict[str, Any]) -> tuple[tuple[GridCell, ...], ...] | None
     return tuple(rows)
 
 
+def _secret_prompt(data: dict[str, Any]) -> SecretPrompt:
+    return SecretPrompt(
+        text=data["text"],
+        placement=data.get("placement", "above"),
+        alignment=data.get("alignment", "left"),
+    )
+
+
+def _optional_secret_prompt(data: dict[str, Any]) -> SecretPrompt | None:
+    raw_prompt = data.get("prompt")
+    return _secret_prompt(raw_prompt) if raw_prompt is not None else None
+
+
 def load_crossword_grid(source: str | Path) -> CrosswordGrid:
     """Načte a ověří YAML s cílovou křížovkovou mřížkou."""
 
@@ -340,6 +368,9 @@ def load_crossword_grid(source: str | Path) -> CrosswordGrid:
         )
         for clue in data.get("clues", ())
     )
+    secret_prompts = tuple(
+        _secret_prompt(prompt) for prompt in data.get("secret_prompts", ())
+    )
     _validate_grid_annotations(grid, clues)
     return CrosswordGrid(
         format_name=data["format"],
@@ -347,6 +378,7 @@ def load_crossword_grid(source: str | Path) -> CrosswordGrid:
         version=data["version"],
         grid=grid,
         clues=clues,
+        secret_prompts=secret_prompts,
     )
 
 
@@ -492,6 +524,7 @@ def _secret_part(data: dict[str, Any], default_legend: str) -> SecretPart:
                 for cell in data["cells"]
             ),
             arrows=data.get("arrows", False),
+            prompt=_optional_secret_prompt(data),
         )
     return SecretWord(
         answer=data["answer"],
@@ -501,6 +534,7 @@ def _secret_part(data: dict[str, Any], default_legend: str) -> SecretPart:
         ),
         direction=data["direction"],
         legend=data.get("legend", default_legend),
+        prompt=_optional_secret_prompt(data),
     )
 
 
@@ -514,7 +548,8 @@ def _secret_definition(data: dict[str, Any]) -> SecretDefinition:
                 DEFAULT_SECRET_PART_LEGEND.format(number=part_index + 1),
             )
             for part_index, part in enumerate(data["parts"])
-        )
+        ),
+        prompt=_optional_secret_prompt(data),
     )
 
 
@@ -683,6 +718,15 @@ def _crossword_grid_data(crossword: CrosswordGrid) -> dict[str, Any]:
         "version": crossword.version,
         "grid": grid,
     }
+    if crossword.secret_prompts:
+        data["secret_prompts"] = [
+            {
+                "text": prompt.text,
+                "placement": prompt.placement,
+                "alignment": prompt.alignment,
+            }
+            for prompt in crossword.secret_prompts
+        ]
     if crossword.clues:
         data["clues"] = [
             {

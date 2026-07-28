@@ -62,6 +62,21 @@ U obou typů musí být `value` právě jedno podporované velké písmeno. Pís
 
 Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Cílová mřížka pouze označuje buňky tajenky. Jejich pořadí a seskupení uchovává zdrojové zadání `specification`.
 
+### Zadání tajenky vně mřížky
+
+Volitelný kořenový seznam `secret_prompts` uchovává texty zadání jedné nebo více tajenek:
+
+```yaml
+secret_prompts:
+  - text: 'Lidové rčení: „Komu se nelení, tomu se …“'
+    placement: above
+    alignment: left
+```
+
+Povinné `text` musí obsahovat alespoň jeden neprázdný znak. `placement` určuje umístění `above` nad mřížkou nebo `below` pod ní a `alignment` zarovná text `left` doleva nebo `right` doprava vzhledem k šířce mřížky. Výchozí hodnoty jsou `above` a `left`. Pořadí položek se zachovává; každé zadání je samostatný odstavec.
+
+Zadání tajenky není legendou hesla. `secret_prompts` proto nijak neomezuje současné použití legendových buněk ani kořenových číselných `clues`.
+
 ### Čísla, mezislovní předěly a vnější legendy
 
 Běžná i tajenková písmenná buňka může obsahovat kladné celé `number`. Číslo označuje začátek vodorovného slova, svislého slova nebo obou současně. V jedné mřížce smí být každé číslo pouze v jedné buňce. Doporučené klasické číslování prochází počáteční pole po řádcích zleva doprava a shora dolů.
@@ -173,6 +188,22 @@ Souřadnice používají `row` a `column`, počítají se od 1 a jejich počáte
 
 Volitelný seznam `secrets` uchovává jednu nebo více tajenek. Povinné `type` rozlišuje tajenku určenou poli, souvislým slovem nebo několika bloky.
 
+Každá položka `secrets` může mít jedno volitelné zadání `prompt`:
+
+```yaml
+secrets:
+  - type: word
+    answer: ZELENÍ
+    start: {row: 1, column: 1}
+    direction: horizontal
+    prompt:
+      text: 'Lidové rčení: „Komu se nelení, tomu se …“'
+      placement: above
+      alignment: left
+```
+
+`prompt.text` je text pro luštitele mimo mřížku. Volitelné `placement` (`above` nebo `below`) a `alignment` (`left` nebo `right`) mají stejný význam jako v cílovém `secret_prompts`; výchozí je umístění nahoře a zarovnání doleva. Zadání patří celé tajence, takže u `type: parts` se uvádí vedle `parts`, nikoli u jednotlivých částí. Jde o jiný údaj než `legend`: tajenkové slovo může mít současně legendu uvnitř mřížky nebo pod ní i zadání celé tajenky nad či pod mřížkou.
+
 Tajenka `type: cells` obsahuje neprázdný seznam `cells`:
 
 ```yaml
@@ -270,6 +301,8 @@ Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-
 Vyšší zadání ukazuje [příklad s umístěnými slovy a automatickou pomůckou](../examples/specification-placed-words.yaml).
 
 Oba způsoby určení tajenky ukazuje [příklad s vybranými poli a tajenkovým slovem](../examples/specification-secrets.yaml).
+
+Text lidového rčení a odpověď `ZELENÍ` ukazuje [zadání tajenky s textem](../examples/specification-secret-prompt.yaml) a odpovídající [cílová mřížka](../examples/grid-secret-prompt.yaml).
 
 Nespojitá pole čtená po řádcích ukazuje [příklad s rozptýlenou tajenkou](../examples/specification-scattered-secret.yaml).
 

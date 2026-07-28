@@ -64,6 +64,14 @@
       "items": {
         "$ref": "#/$defs/externalClue"
       }
+    },
+    "secret_prompts": {
+      "description": "Volitelná zadání tajenek zobrazená nad nebo pod mřížkou.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/secretPrompt"
+      }
     }
   },
   "$defs": {
@@ -91,6 +99,35 @@
           "type": "string",
           "minLength": 1,
           "pattern": "\\S"
+        }
+      }
+    },
+    "secretPrompt": {
+      "description": "Text zadání tajenky a jeho umístění vůči mřížce.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "placement": {
+          "enum": [
+            "above",
+            "below"
+          ],
+          "default": "above"
+        },
+        "alignment": {
+          "enum": [
+            "left",
+            "right"
+          ],
+          "default": "left"
         }
       }
     },

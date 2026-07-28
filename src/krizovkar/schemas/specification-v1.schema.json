@@ -164,6 +164,35 @@
         }
       }
     },
+    "secretPrompt": {
+      "description": "Text zadání tajenky a jeho budoucí umístění vůči mřížce.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "placement": {
+          "enum": [
+            "above",
+            "below"
+          ],
+          "default": "above"
+        },
+        "alignment": {
+          "enum": [
+            "left",
+            "right"
+          ],
+          "default": "left"
+        }
+      }
+    },
     "secret": {
       "description": "Tajenka jako buňky, umístěné slovo nebo více bloků.",
       "type": "object",
@@ -216,6 +245,9 @@
           "minLength": 1,
           "pattern": "\\S",
           "default": "Tajenka"
+        },
+        "prompt": {
+          "$ref": "#/$defs/secretPrompt"
         },
         "parts": {
           "description": "Části jedné tajenky v pořadí jejich spojení.",

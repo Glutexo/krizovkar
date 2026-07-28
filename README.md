@@ -85,6 +85,17 @@ secrets:
 
 U `type: cells` musí každé vybrané pole obsahovat písmeno. Bez šipek mohou být pole samostatná a libovolně rozmístěná; tajenka se z nich čte automaticky po řádcích zleva doprava a shora dolů, bez ohledu na pořadí souřadnic v YAML. Ukazuje to [zadání s rozptýlenou tajenkou](examples/specification-scattered-secret.yaml). Volitelné `arrows: true` naopak používá zadané pořadí jako cestu přes sousední pole a na její začátek i každé místo změny směru přidá plný černý zobáček. Základnou sedí na hraně pole a špičkou ukazuje dovnitř pokračující tajenky. `type: word` se umisťuje a kříží stejně jako běžné heslo, ale jeho písmena budou zvýrazněná jako tajenka. Odpověď zadává autor přímo a nemusí být ve slovníku; vynechaná `legend` dostane automaticky text `Tajenka`. Obě souvislé podoby ukazuje [zadání s tajenkami](examples/specification-secrets.yaml).
 
+Každá tajenka může mít vlastní zadání `prompt`, které je nezávislé na vepsané nebo číselné `legend`:
+
+```yaml
+prompt:
+  text: 'Lidové rčení: „Komu se nelení, tomu se …“'
+  placement: above
+  alignment: left
+```
+
+`placement` vybírá umístění `above` nebo `below` a `alignment` zarovná text `left` nebo `right`; při vynechání se použije `above` a `left`. U `type: parts` patří zadání celé složené tajence. Ucelený zápis odpovědi `ZELENÍ` ukazuje [zadání tajenky s textem](examples/specification-secret-prompt.yaml).
+
 Jedna tajenka může mít také několik částí v určeném pořadí:
 
 ```yaml
@@ -118,6 +129,8 @@ grid:
 ```
 
 Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. České `CH` zabírá jednu buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku. Tajenková buňka má v PDF světle šedé pozadí a může mít jeden směrový zobáček `arrow` ve směru `up`, `right`, `down` nebo `left`. Jde o jinou značku než seznam `arrows` v legendové buňce. Cílová mřížka už nerozlišuje, zda tajenku určil seznam polí, nebo souvislé heslo; u druhé varianty navíc obsahuje legendovou buňku s textem „Tajenka“. Zápis ukazuje [mřížka s českými písmeny](examples/grid-czech-letters.yaml); [ukázková cesta se zobáčky](examples/grid-secret-arrows.yaml) mění směr dvakrát.
+
+Cílový dokument ukládá texty k tajenkám v kořenovém seznamu `secret_prompts`. Každá položka má stejné `text`, `placement` a `alignment` jako `prompt` ve vstupním zadání; seznam dovoluje v jedné mřížce více tajenek. Zápis ukazuje [cílová mřížka se zadáním tajenky](examples/grid-secret-prompt.yaml).
 
 Čárkované rozložení může písmenné buňce přidat počáteční `number` a silné mezislovní `bars` na její pravé či dolní hraně. Renderer vloží číslo do levého horního rohu, předěly vykreslí stejným silným tahem jako vnější rám a očíslované `clues` rozdělí pod mřížkou do sloupců „Vodorovně“ a „Svisle“. Číslo bez odpovídající legendy může označit například tajenku bez nápovědy. Tyto položky nijak nevylučují buňky `type: legend`: [smíšená mřížka](examples/grid-mixed-clues.yaml) používá vepsané i číselné legendy současně, zatímco [číslovaná mřížka](examples/grid-classic.yaml) ukazuje samotné vnější legendy.
 
