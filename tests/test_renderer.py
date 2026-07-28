@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -40,6 +41,7 @@ from krizovkar.renderer import (
     _secret_beak_points,
     _secret_letter_center,
     render_pdf,
+    render_pdf_stream,
 )
 from krizovkar.typography import SOFT_HYPHEN
 
@@ -181,6 +183,16 @@ class RenderModeTest(unittest.TestCase):
                 render_pdf(self.crossword, output)
 
         self.assertEqual(2, draw_letter.call_count)
+
+    def test_renders_pdf_to_binary_stream(self) -> None:
+        output = BytesIO()
+
+        render_pdf_stream(self.crossword, output)
+
+        content = output.getvalue()
+        self.assertTrue(content.startswith(b"%PDF-"))
+        self.assertIn(b"%%EOF", content)
+        self.assertFalse(output.closed)
 
     def test_blank_pdf_keeps_legend_and_secret_arrow(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from io import StringIO
 from pathlib import Path
 
 from krizovkar.model import (
     ModelError,
     SecretPrompt,
     TemplateLetterCell,
+    dump_crossword_template,
     load_crossword_template,
     write_crossword_template,
 )
@@ -47,6 +49,18 @@ class TemplateModelTest(unittest.TestCase):
             output = Path(directory) / "written.yaml"
             write_crossword_template(template, output)
             self.assertEqual(template, load_crossword_template(output))
+
+    def test_dumps_template_to_text_stream(self) -> None:
+        template = load_crossword_template(TEMPLATE_MINIMAL_EXAMPLE)
+        output = StringIO()
+
+        dump_crossword_template(template, output)
+
+        self.assertTrue(output.getvalue().startswith("format: krizovkar\n"))
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "stream.yaml"
+            source.write_text(output.getvalue(), encoding="utf-8")
+            self.assertEqual(template, load_crossword_template(source))
 
     def test_loads_and_writes_template_with_known_secret(self) -> None:
         template = load_crossword_template(TEMPLATE_SECRET_EXAMPLE)

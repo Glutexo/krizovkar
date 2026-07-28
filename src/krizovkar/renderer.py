@@ -7,6 +7,7 @@ from functools import cache
 from io import BytesIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import BinaryIO
 from xml.sax.saxutils import escape
 
 import pymupdf_fonts
@@ -720,7 +721,7 @@ def resolve_page_size(page_format: str) -> tuple[float, float]:
 
 def _write_pdf(
     crossword: CrosswordGrid,
-    target: Path,
+    target: str | Path | BinaryIO,
     page_size: tuple[float, float],
     *,
     filled: bool,
@@ -787,7 +788,8 @@ def _write_pdf(
     above_prompt_bottom = bottom + grid_height + above_gap
     clue_left = (page_width - clue_area_width) / 2
 
-    pdf = Canvas(str(target), pagesize=page_size, pageCompression=1)
+    canvas_target = str(target) if isinstance(target, (str, Path)) else target
+    pdf = Canvas(canvas_target, pagesize=page_size, pageCompression=1)
     pdf.setTitle(f"Křížovkář – mřížka {width} × {height}")
     pdf.setCreator("Křížovkář")
     if crossword.grid.cells is None:
@@ -968,3 +970,25 @@ def render_pdf(
             temporary_path.unlink(missing_ok=True)
 
     return output_path
+
+
+def render_pdf_stream(
+    crossword: CrosswordGrid,
+    output: BinaryIO,
+    *,
+    page_format: str = DEFAULT_PAGE_FORMAT,
+    filled: bool = True,
+) -> None:
+    """Vykreslí vyplněnou či nevyplněnou křížovku do binárního proudu."""
+
+    page_size = resolve_page_size(page_format)
+    try:
+        _write_pdf(
+            crossword,
+            output,
+            page_size,
+            filled=filled,
+        )
+    except OSError as error:
+        detail = error.strerror or str(error)
+        raise RenderError(f"PDF nelze zapsat: {detail}") from error

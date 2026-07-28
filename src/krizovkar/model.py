@@ -9,7 +9,7 @@ from importlib.resources import files
 from itertools import pairwise
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Literal
+from typing import Any, Literal, TextIO
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
@@ -1185,14 +1185,11 @@ def _write_yaml_document(
             delete=False,
         ) as temporary:
             temporary_path = Path(temporary.name)
-            yaml = YAML()
-            yaml.width = 100
-            yaml.indent(mapping=2, sequence=2, offset=0)
-            yaml.dump(data, temporary)
+            _dump_yaml_document(data, temporary)
 
         temporary_path.replace(output_path)
-    except OSError as error:
-        detail = error.strerror or str(error)
+    except (OSError, YAMLError) as error:
+        detail = getattr(error, "strerror", None) or str(error)
         raise ModelError(
             f"{subject} nelze zapsat ({output_path}): {detail}"
         ) from error
@@ -1201,6 +1198,29 @@ def _write_yaml_document(
             temporary_path.unlink(missing_ok=True)
 
     return output_path
+
+
+def _dump_yaml_document(
+    data: dict[str, Any],
+    output: TextIO,
+) -> None:
+    yaml = YAML()
+    yaml.width = 100
+    yaml.indent(mapping=2, sequence=2, offset=0)
+    yaml.dump(data, output)
+
+
+def _dump_yaml_document_safely(
+    data: dict[str, Any],
+    output: TextIO,
+    *,
+    subject: str,
+) -> None:
+    try:
+        _dump_yaml_document(data, output)
+    except (OSError, YAMLError) as error:
+        detail = getattr(error, "strerror", None) or str(error)
+        raise ModelError(f"{subject} nelze zapsat: {detail}") from error
 
 
 def write_crossword_grid(
@@ -1219,6 +1239,16 @@ def write_crossword_grid(
     )
 
 
+def dump_crossword_grid(crossword: CrosswordGrid, output: TextIO) -> None:
+    """Zapíše cílovou mřížku jako YAML do textového proudu."""
+
+    _dump_yaml_document_safely(
+        _crossword_grid_data(crossword),
+        output,
+        subject="cílovou mřížku",
+    )
+
+
 def write_crossword_template(
     template: CrosswordTemplate,
     output: str | Path,
@@ -1231,5 +1261,18 @@ def write_crossword_template(
         _crossword_template_data(template),
         output,
         overwrite=overwrite,
+        subject="šablonu křížovky",
+    )
+
+
+def dump_crossword_template(
+    template: CrosswordTemplate,
+    output: TextIO,
+) -> None:
+    """Zapíše šablonu křížovky jako YAML do textového proudu."""
+
+    _dump_yaml_document_safely(
+        _crossword_template_data(template),
+        output,
         subject="šablonu křížovky",
     )

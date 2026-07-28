@@ -31,6 +31,7 @@ from krizovkar.model import (
     SecretWord,
     TemplateLetterCell,
     WordPlacement,
+    dump_crossword_grid,
     load_crossword_grid,
     load_crossword_specification,
     load_crossword_template,
@@ -1073,6 +1074,18 @@ class ModelTest(unittest.TestCase):
             with self.assertRaisesRegex(ModelError, "již existuje"):
                 write_crossword_grid(crossword, output)
             write_crossword_grid(crossword, output, overwrite=True)
+
+    def test_dumps_grid_to_text_stream(self) -> None:
+        crossword = load_crossword_grid(GRID_LEGEND_EXAMPLE)
+        output = io.StringIO()
+
+        dump_crossword_grid(crossword, output)
+
+        self.assertTrue(output.getvalue().startswith("format: krizovkar\n"))
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "stream.yaml"
+            source.write_text(output.getvalue(), encoding="utf-8")
+            self.assertEqual(crossword, load_crossword_grid(source))
 
     def test_loads_help_cell(self) -> None:
         crossword = load_crossword_grid(GRID_HELP_EXAMPLE)
