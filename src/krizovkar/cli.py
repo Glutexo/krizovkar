@@ -6,6 +6,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import BinaryIO
 
 from krizovkar.dictionary import DictionaryError, load_dictionary
 from krizovkar.generator import (
@@ -25,6 +26,8 @@ from krizovkar.model import (
     LegendCell,
     ModelError,
     SecretPrompt,
+    dump_crossword_grid,
+    dump_crossword_template,
     load_crossword_grid,
     load_crossword_template,
     write_crossword_grid,
@@ -35,6 +38,7 @@ from krizovkar.renderer import (
     SUPPORTED_PAGE_FORMATS,
     RenderError,
     render_pdf,
+    render_pdf_stream,
 )
 from krizovkar.validation import validate_crossword_grid_file
 
@@ -62,9 +66,8 @@ def _parser() -> argparse.ArgumentParser:
         "-o",
         "--output",
         type=Path,
-        required=True,
         metavar="ŠABLONA.yaml",
-        help="cílový YAML soubor",
+        help="cílový YAML soubor; bez volby standardní výstup",
     )
     template.add_argument(
         "--width",
@@ -113,9 +116,8 @@ def _parser() -> argparse.ArgumentParser:
         "-o",
         "--output",
         type=Path,
-        required=True,
         metavar="MŘÍŽKA.yaml",
-        help="cílový YAML soubor",
+        help="cílový YAML soubor; bez volby standardní výstup",
     )
     fill.add_argument(
         "--seed",
@@ -146,9 +148,8 @@ def _parser() -> argparse.ArgumentParser:
         "-o",
         "--output",
         type=Path,
-        required=True,
         metavar="MŘÍŽKA.yaml",
-        help="cílový YAML soubor",
+        help="cílový YAML soubor; bez volby standardní výstup",
     )
     generate.add_argument(
         "--width",
@@ -202,7 +203,7 @@ def _parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         metavar="VÝSTUP.pdf",
-        help="cílový soubor; výchozí je MŘÍŽKA.pdf vedle YAML",
+        help="cílový PDF soubor; bez volby standardní výstup",
     )
     render.add_argument(
         "--force",
@@ -361,6 +362,22 @@ def _secret_requirement(arguments: argparse.Namespace) -> SecretRequirement | No
     )
 
 
+def _output_description(output: Path | None) -> str:
+    return str(output) if output is not None else "standardní výstup"
+
+
+def _print_success(message: str, output: Path | None) -> None:
+    stream = sys.stdout if output is not None else sys.stderr
+    print(message, file=stream)
+
+
+def _binary_standard_output() -> BinaryIO:
+    output = getattr(sys.stdout, "buffer", None)
+    if output is None:
+        raise RenderError("standardní výstup nepodporuje binární zápis")
+    return output
+
+
 def _template(arguments: argparse.Namespace) -> int:
     try:
         secret = _secret_requirement(arguments)
@@ -375,18 +392,22 @@ def _template(arguments: argparse.Namespace) -> int:
             seed=arguments.seed,
             secret=secret,
         )
-        write_crossword_template(
-            template,
-            arguments.output,
-            overwrite=arguments.force,
-        )
+        if arguments.output is None:
+            dump_crossword_template(template, sys.stdout)
+        else:
+            write_crossword_template(
+                template,
+                arguments.output,
+                overwrite=arguments.force,
+            )
     except (GenerationError, ModelError) as error:
         print(f"chyba: {error}", file=sys.stderr)
         return 2
 
-    print(
-        f"Šablona vytvořena: {arguments.output} "
-        f"({arguments.width} × {arguments.height}, {len(template.slots)} slotů)"
+    _print_success(
+        f"Šablona vytvořena: {_output_description(arguments.output)} "
+        f"({arguments.width} × {arguments.height}, {len(template.slots)} slotů)",
+        arguments.output,
     )
     return 0
 
@@ -402,19 +423,23 @@ def _fill(arguments: argparse.Namespace) -> int:
             seed=arguments.seed,
             secret=secret,
         )
-        write_crossword_grid(
-            crossword,
-            arguments.output,
-            overwrite=arguments.force,
-        )
+        if arguments.output is None:
+            dump_crossword_grid(crossword, sys.stdout)
+        else:
+            write_crossword_grid(
+                crossword,
+                arguments.output,
+                overwrite=arguments.force,
+            )
     except (DictionaryError, GenerationError, ModelError) as error:
         print(f"chyba: {error}", file=sys.stderr)
         return 2
 
-    print(
-        f"Mřížka vytvořena: {arguments.output} "
+    _print_success(
+        f"Mřížka vytvořena: {_output_description(arguments.output)} "
         f"({template.grid.width} × {template.grid.height}, "
-        f"{len(template.slots)} hesel, seed {arguments.seed})"
+        f"{len(template.slots)} hesel, seed {arguments.seed})",
+        arguments.output,
     )
     return 0
 
@@ -435,11 +460,14 @@ def _generate(arguments: argparse.Namespace) -> int:
             seed=arguments.seed,
             secret=secret,
         )
-        write_crossword_grid(
-            crossword,
-            arguments.output,
-            overwrite=arguments.force,
-        )
+        if arguments.output is None:
+            dump_crossword_grid(crossword, sys.stdout)
+        else:
+            write_crossword_grid(
+                crossword,
+                arguments.output,
+                overwrite=arguments.force,
+            )
     except (DictionaryError, GenerationError, ModelError) as error:
         print(f"chyba: {error}", file=sys.stderr)
         return 2
@@ -451,31 +479,41 @@ def _generate(arguments: argparse.Namespace) -> int:
         for cell in row
         if isinstance(cell, LegendCell)
     )
-    print(
-        f"Mřížka vytvořena: {arguments.output} "
+    _print_success(
+        f"Mřížka vytvořena: {_output_description(arguments.output)} "
         f"({arguments.width} × {arguments.height}, {word_count} hesel, "
-        f"seed {arguments.seed})"
+        f"seed {arguments.seed})",
+        arguments.output,
     )
     return 0
 
 
 def _render(arguments: argparse.Namespace) -> int:
-    output = arguments.output or arguments.source.with_suffix(".pdf")
-
     try:
         crossword = load_crossword_grid(arguments.source)
-        render_pdf(
-            crossword,
-            output,
-            overwrite=arguments.force,
-            page_format=arguments.page_format,
-            filled=not arguments.blank,
-        )
+        if arguments.output is None:
+            render_pdf_stream(
+                crossword,
+                _binary_standard_output(),
+                page_format=arguments.page_format,
+                filled=not arguments.blank,
+            )
+        else:
+            render_pdf(
+                crossword,
+                arguments.output,
+                overwrite=arguments.force,
+                page_format=arguments.page_format,
+                filled=not arguments.blank,
+            )
     except (ModelError, RenderError) as error:
         print(f"chyba: {error}", file=sys.stderr)
         return 2
 
-    print(f"PDF vytvořeno: {output}")
+    _print_success(
+        f"PDF vytvořeno: {_output_description(arguments.output)}",
+        arguments.output,
+    )
     return 0
 
 

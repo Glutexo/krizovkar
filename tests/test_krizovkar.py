@@ -71,6 +71,12 @@ SPECIFICATION_SECRET_PROMPT_EXAMPLE = (
 TEMPLATE_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "template-secret.yaml"
 
 
+class _BinaryStdout(io.StringIO):
+    def __init__(self) -> None:
+        super().__init__()
+        self.buffer = io.BytesIO()
+
+
 class ModelTest(unittest.TestCase):
     def test_loads_minimal_example(self) -> None:
         crossword = load_crossword_grid(GRID_MINIMAL_EXAMPLE)
@@ -1293,6 +1299,107 @@ class ModelTest(unittest.TestCase):
 
 
 class CommandTest(unittest.TestCase):
+    def test_template_writes_yaml_to_stdout_without_output(self) -> None:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            result = main(
+                [
+                    "template",
+                    "--width",
+                    "5",
+                    "--height",
+                    "5",
+                ]
+            )
+
+        self.assertEqual(0, result)
+        self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
+        self.assertNotIn("Šablona vytvořena", stdout.getvalue())
+        self.assertIn("Šablona vytvořena: standardní výstup", stderr.getvalue())
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "template.yaml"
+            source.write_text(stdout.getvalue(), encoding="utf-8")
+            template = load_crossword_template(source)
+            self.assertEqual(5, template.grid.width)
+            self.assertEqual(5, template.grid.height)
+
+    def test_fill_writes_yaml_to_stdout_without_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            dictionary = Path(directory) / "dictionary.json"
+            dictionary.write_text(
+                json.dumps({"LES": ["Porost stromů"]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                result = main(
+                    [
+                        "fill",
+                        str(TEMPLATE_SECRET_EXAMPLE),
+                        str(dictionary),
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
+            self.assertNotIn("Mřížka vytvořena", stdout.getvalue())
+            self.assertIn("Mřížka vytvořena: standardní výstup", stderr.getvalue())
+            source = Path(directory) / "grid.yaml"
+            source.write_text(stdout.getvalue(), encoding="utf-8")
+            crossword = load_crossword_grid(source)
+            assert crossword.grid.cells is not None
+            self.assertEqual(
+                "ZELENÍ",
+                "".join(cell.value for cell in crossword.grid.cells[0]),
+            )
+
+    def test_generate_writes_yaml_to_stdout_without_output(self) -> None:
+        answers = tuple(
+            "".join(letters) for letters in product("ABCD", repeat=4)
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            dictionary = Path(directory) / "dictionary.json"
+            dictionary.write_text(
+                json.dumps(
+                    {
+                        answer: [f"Legenda {answer}"]
+                        for answer in answers
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                result = main(
+                    [
+                        "generate",
+                        str(dictionary),
+                        "--width",
+                        "5",
+                        "--height",
+                        "5",
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
+            self.assertNotIn("Mřížka vytvořena", stdout.getvalue())
+            self.assertIn(
+                "Mřížka vytvořena: standardní výstup",
+                stderr.getvalue(),
+            )
+            source = Path(directory) / "grid.yaml"
+            source.write_text(stdout.getvalue(), encoding="utf-8")
+            crossword = load_crossword_grid(source)
+            self.assertEqual(5, crossword.grid.width)
+            self.assertEqual(5, crossword.grid.height)
+
     def test_generate_creates_complete_grid_with_secret(self) -> None:
         answers = tuple(
             "".join(letters) for letters in product("ABCD", repeat=4)
@@ -1712,6 +1819,27 @@ class CommandTest(unittest.TestCase):
                 forced_result = main([*command, "--force"])
 
             self.assertEqual(0, forced_result)
+
+    def test_render_writes_pdf_to_stdout_without_output(self) -> None:
+        stdout = _BinaryStdout()
+        stderr = io.StringIO()
+
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            result = main(
+                [
+                    "render",
+                    str(GRID_LEGEND_EXAMPLE),
+                    "--page-format",
+                    "A5",
+                ]
+            )
+
+        self.assertEqual(0, result)
+        self.assertEqual("", stdout.getvalue())
+        pdf = stdout.buffer.getvalue()
+        self.assertTrue(pdf.startswith(b"%PDF-"))
+        self.assertIn(b"%%EOF", pdf[-1024:])
+        self.assertIn("PDF vytvořeno: standardní výstup", stderr.getvalue())
 
     def test_render_handles_empty_cells(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

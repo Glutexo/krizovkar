@@ -167,6 +167,18 @@ V PDF renderer doplní tučný nadpis „Pomůcka:“ a položky vypíše za ní
 
 Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-letters.yaml) obsahuje 15 × 10 běžných buněk. Minimální soubory jsou v příkladech [mřížky](examples/grid-minimal.yaml) a [zadání](examples/specification-minimal.yaml).
 
+## Výstup příkazů
+
+Volba `-o` neboli `--output` je u příkazů `template`, `fill`, `generate` a `render` nepovinná. Bez ní příkaz zapíše výsledný YAML nebo binární PDF na standardní výstup, takže jej lze přesměrovat nebo předat dalšímu programu:
+
+```shell
+uv run krizovkar template --width 15 --height 10 > build/template.yaml
+uv run krizovkar generate slovnik.json > build/grid.yaml
+uv run krizovkar render build/grid.yaml > build/grid.pdf
+```
+
+Stavová hláška jde v tomto režimu na standardní chybový výstup a výsledná data neznečistí. Při zadaném `--output` se dál zapisuje atomicky do souboru, existující soubor se bez `--force` nepřepíše a stavová hláška se vypíše na standardní výstup.
+
 ## Vytvoření šablony
 
 Hustou šablonu lze vytvořit bez slovníku a bez znalosti budoucích odpovědí. Výchozí rozvržení je švédské:
@@ -313,7 +325,7 @@ uv run krizovkar render examples/grid-secret-arrows.yaml \
 
 Prázdná varianta skryje hodnoty běžných i tajenkových písmenných buněk. Zadání tajenek nad či pod mřížkou, legendy uvnitř i pod mřížkou, čísla, pomůcky, nevyplňovaná pole, šedé zvýraznění tajenky a její zobáčky zůstanou zobrazené stejně jako ve vyplněné variantě.
 
-Bez volby `--output` vznikne PDF vedle vstupního souboru se stejným názvem. Existující soubor příkaz nepřepíše, dokud není přidána volba `--force`.
+Bez volby `--output` se binární PDF zapíše na standardní výstup. Pro uložení pomocí přesměrování lze použít například `uv run krizovkar render mřížka.yaml > mřížka.pdf`. Při výslovném `--output` příkaz existující soubor nepřepíše, dokud není přidána volba `--force`.
 
 Nápovědu vypíše:
 
