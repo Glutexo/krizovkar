@@ -9,8 +9,6 @@ from dataclasses import dataclass
 from krizovkar.alphabet import split_answer_letters
 from krizovkar.dictionary import CrosswordDictionary
 from krizovkar.layout import (
-    MAX_SEGMENT_LENGTH,
-    MIN_SEGMENT_LENGTH,
     AxisSegment,
     LayoutError,
     SwedishLayout,
@@ -21,6 +19,7 @@ from krizovkar.model import (
     CrosswordGrid,
     CrosswordTemplate,
     EmptyCell,
+    ExternalClue,
     Grid,
     LegendCell,
     LetterCell,
@@ -150,8 +149,6 @@ def _usable_entries(
     entries: dict[int, list[_Entry]] = defaultdict(list)
     for entry in dictionary.entries:
         letters = split_answer_letters(entry.answer)
-        if not MIN_SEGMENT_LENGTH <= len(letters) <= MAX_SEGMENT_LENGTH:
-            continue
         clue = next(
             (clue for clue in entry.clues if len(clue) <= MAX_CLUE_LENGTH),
             None,
@@ -161,6 +158,246 @@ def _usable_entries(
                 _Entry(answer=entry.answer, clue=clue, letters=letters)
             )
     return {length: tuple(values) for length, values in entries.items()}
+
+
+def _slot_coordinates(slot: WordSlot) -> tuple[GridCoordinate, ...]:
+    row_step = 1 if slot.direction == "vertical" else 0
+    column_step = 1 if slot.direction == "horizontal" else 0
+    return tuple(
+        (
+            slot.start.row - 1 + offset * row_step,
+            slot.start.column - 1 + offset * column_step,
+        )
+        for offset in range(slot.length)
+    )
+
+
+def _fill_template_slots(
+    template: CrosswordTemplate,
+    entries_by_length: dict[int, tuple[_Entry, ...]],
+    randomizer: random.Random,
+) -> dict[str, _Entry]:
+    candidates_by_length = {
+        length: list(entries)
+        for length, entries in entries_by_length.items()
+    }
+    for candidates in candidates_by_length.values():
+        randomizer.shuffle(candidates)
+
+    coordinates = {
+        slot.identifier: _slot_coordinates(slot) for slot in template.slots
+    }
+    assigned: dict[str, _Entry] = {}
+    letters: dict[GridCoordinate, str] = {}
+    used_answers: set[str] = set()
+    search_nodes = 0
+
+    def compatible_entries(slot: WordSlot) -> list[_Entry]:
+        slot_coordinates = coordinates[slot.identifier]
+        return [
+            entry
+            for entry in candidates_by_length.get(slot.length, ())
+            if entry.answer not in used_answers
+            and all(
+                coordinate not in letters or letters[coordinate] == letter
+                for coordinate, letter in zip(slot_coordinates, entry.letters)
+            )
+        ]
+
+    def search() -> dict[str, _Entry] | None:
+        nonlocal search_nodes
+        if len(assigned) == len(template.slots):
+            return dict(assigned)
+
+        selected_slot: WordSlot | None = None
+        selected_candidates: list[_Entry] | None = None
+        for slot in template.slots:
+            if slot.identifier in assigned:
+                continue
+            candidates = compatible_entries(slot)
+            if not candidates:
+                return None
+            if (
+                selected_candidates is None
+                or len(candidates) < len(selected_candidates)
+            ):
+                selected_slot = slot
+                selected_candidates = candidates
+
+        assert selected_slot is not None
+        assert selected_candidates is not None
+        slot_coordinates = coordinates[selected_slot.identifier]
+        for entry in selected_candidates:
+            search_nodes += 1
+            if search_nodes > MAX_SEARCH_NODES:
+                raise _SearchFailed
+
+            new_coordinates = []
+            for coordinate, letter in zip(slot_coordinates, entry.letters):
+                if coordinate not in letters:
+                    letters[coordinate] = letter
+                    new_coordinates.append(coordinate)
+            assigned[selected_slot.identifier] = entry
+            used_answers.add(entry.answer)
+
+            result = search()
+            if result is not None:
+                return result
+
+            used_answers.remove(entry.answer)
+            del assigned[selected_slot.identifier]
+            for coordinate in new_coordinates:
+                del letters[coordinate]
+        return None
+
+    result = search()
+    if result is None:
+        raise _SearchFailed
+    return result
+
+
+def _filled_template_grid(
+    template: CrosswordTemplate,
+    assignments: dict[str, _Entry],
+) -> CrosswordGrid:
+    letters: dict[GridCoordinate, str] = {}
+    slots_by_legend: dict[GridCoordinate, list[tuple[WordSlot, _Entry]]] = (
+        defaultdict(list)
+    )
+    external_slots = []
+    bars: dict[GridCoordinate, set[str]] = defaultdict(set)
+
+    for slot in template.slots:
+        entry = assignments[slot.identifier]
+        for coordinate, letter in zip(_slot_coordinates(slot), entry.letters):
+            letters[coordinate] = letter
+        if slot.legend_position is None:
+            external_slots.append((slot, entry))
+        else:
+            legend_coordinate = (
+                slot.legend_position.row - 1,
+                slot.legend_position.column - 1,
+            )
+            slots_by_legend[legend_coordinate].append((slot, entry))
+
+        if slot.direction == "horizontal" and slot.start.column > 1:
+            previous = (slot.start.row - 1, slot.start.column - 2)
+            if isinstance(
+                template.grid.cells[previous[0]][previous[1]],
+                TemplateLetterCell,
+            ):
+                bars[previous].add("right")
+        if slot.direction == "vertical" and slot.start.row > 1:
+            previous = (slot.start.row - 2, slot.start.column - 1)
+            if isinstance(
+                template.grid.cells[previous[0]][previous[1]],
+                TemplateLetterCell,
+            ):
+                bars[previous].add("bottom")
+
+    external_starts = sorted(
+        {
+            (slot.start.row - 1, slot.start.column - 1)
+            for slot, _ in external_slots
+        }
+    )
+    numbers = {
+        coordinate: number
+        for number, coordinate in enumerate(external_starts, start=1)
+    }
+    direction_order = {"horizontal": 0, "vertical": 1}
+    clues = tuple(
+        ExternalClue(
+            number=numbers[(slot.start.row - 1, slot.start.column - 1)],
+            direction=slot.direction,
+            text=entry.clue,
+        )
+        for slot, entry in sorted(
+            external_slots,
+            key=lambda item: (
+                numbers[(item[0].start.row - 1, item[0].start.column - 1)],
+                direction_order[item[0].direction],
+            ),
+        )
+    )
+
+    cells = []
+    for row_index, template_row in enumerate(template.grid.cells):
+        row = []
+        for column_index, template_cell in enumerate(template_row):
+            coordinate = (row_index, column_index)
+            if isinstance(template_cell, TemplateEmptyCell):
+                row.append(EmptyCell())
+            elif isinstance(template_cell, TemplateLegendCell):
+                legend_slots = sorted(
+                    slots_by_legend[coordinate],
+                    key=lambda item: direction_order[item[0].direction],
+                )
+                row.append(
+                    LegendCell(
+                        texts=tuple(entry.clue for _, entry in legend_slots)
+                    )
+                )
+            else:
+                cell_bars = bars.get(coordinate, set())
+                row.append(
+                    LetterCell(
+                        value=letters[coordinate],
+                        number=numbers.get(coordinate),
+                        bars=tuple(
+                            bar
+                            for bar in ("right", "bottom")
+                            if bar in cell_bars
+                        ),
+                    )
+                )
+        cells.append(tuple(row))
+
+    return CrosswordGrid(
+        format_name="krizovkar",
+        kind="grid",
+        version=1,
+        grid=Grid(
+            width=template.grid.width,
+            height=template.grid.height,
+            cells=tuple(cells),
+        ),
+        clues=clues,
+    )
+
+
+def fill_crossword_template(
+    template: CrosswordTemplate,
+    dictionary: CrosswordDictionary,
+    *,
+    seed: int = DEFAULT_SEED,
+) -> CrosswordGrid:
+    """Vyplní všechny sloty šablony různými hesly ze slovníku."""
+
+    entries_by_length = _usable_entries(dictionary)
+    required_lengths = {slot.length for slot in template.slots}
+    missing_lengths = sorted(required_lengths - entries_by_length.keys())
+    if missing_lengths:
+        missing = ", ".join(str(length) for length in missing_lengths)
+        raise GenerationError(
+            f"slovník neobsahuje použitelná hesla délky: {missing}"
+        )
+
+    for attempt in range(GENERATION_ATTEMPTS):
+        attempt_seed = seed + attempt * 1_000_003
+        try:
+            assignments = _fill_template_slots(
+                template,
+                entries_by_length,
+                random.Random(attempt_seed),
+            )
+            return _filled_template_grid(template, assignments)
+        except _SearchFailed:
+            continue
+
+    raise GenerationError(
+        "nepodařilo se vyplnit všechny sloty platnými křížícími se hesly"
+    )
 
 
 def _prefixes(entries: tuple[_Entry, ...]) -> frozenset[tuple[str, ...]]:

@@ -50,6 +50,8 @@ Loader navíc kontroluje rozměr matice, přesah slotů, jejich překryvy ve ste
 
 Příkaz `template` vytváří deterministickou hustou švédskou šablonu. Používá stejné rozdělení na legendové osy a písmenné bloky jako experimentální generátor vyplněné mřížky, ale nepotřebuje slovník. Vodorovné sloty dostávají identifikátory `h1`, `h2`, … v pořadí shora dolů a zleva doprava; svislé obdobně `v1`, `v2`, …
 
+Příkaz `fill` přijímá libovolnou platnou šablonu a slovník. Pomocí zpětného prohledávání přiřadí každému slotu jiné heslo správné délky a průběžně omezuje kandidáty podle již známých písmen na kříženích. Vepsané legendy převezmou texty přiřazených hesel. Sloty bez souřadnice `legend` se převedou na číslovaná hesla s vnějšími legendami; společný začátek vodorovného a svislého slotu sdílí jedno číslo. Seed určuje pořadí kandidátů a zachovává opakovatelnost výsledku.
+
 ## Cílová mřížka, verze 1
 
 Cílová mřížka popisuje obdélníkový rozměr a případný obsah buněk:

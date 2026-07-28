@@ -1278,6 +1278,82 @@ class ModelTest(unittest.TestCase):
 
 
 class CommandTest(unittest.TestCase):
+    def test_fill_creates_grid_from_template_and_dictionary(self) -> None:
+        answers = tuple(
+            "".join(letters) for letters in product("ABCD", repeat=4)
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            template = Path(directory) / "template.yaml"
+            dictionary = Path(directory) / "dictionary.json"
+            output = Path(directory) / "grid.yaml"
+            dictionary.write_text(
+                json.dumps(
+                    {
+                        answer: [f"Legenda {answer}"]
+                        for answer in answers
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    0,
+                    main(
+                        [
+                            "template",
+                            "--output",
+                            str(template),
+                            "--width",
+                            "5",
+                            "--height",
+                            "5",
+                        ]
+                    ),
+                )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                result = main(
+                    [
+                        "fill",
+                        str(template),
+                        str(dictionary),
+                        "--output",
+                        str(output),
+                        "--seed",
+                        "42",
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            self.assertIn("Mřížka vytvořena:", stdout.getvalue())
+            crossword = load_crossword_grid(output)
+            self.assertEqual(5, crossword.grid.width)
+            self.assertEqual(5, crossword.grid.height)
+            assert crossword.grid.cells is not None
+            self.assertTrue(
+                all(
+                    isinstance(cell, (LetterCell, LegendCell, EmptyCell))
+                    for row in crossword.grid.cells
+                    for cell in row
+                )
+            )
+
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                second_result = main(
+                    [
+                        "fill",
+                        str(template),
+                        str(dictionary),
+                        "--output",
+                        str(output),
+                    ]
+                )
+
+            self.assertEqual(2, second_result)
+            self.assertIn("již existuje", stderr.getvalue())
+
     def test_template_creates_structure_and_refuses_accidental_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "template.yaml"

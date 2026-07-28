@@ -13,6 +13,7 @@ from krizovkar.generator import (
     DEFAULT_GRID_WIDTH,
     DEFAULT_SEED,
     GenerationError,
+    fill_crossword_template,
     generate_swedish_grid,
     generate_swedish_template,
 )
@@ -20,6 +21,7 @@ from krizovkar.model import (
     LegendCell,
     ModelError,
     load_crossword_grid,
+    load_crossword_template,
     write_crossword_grid,
     write_crossword_template,
 )
@@ -75,6 +77,38 @@ def _parser() -> argparse.ArgumentParser:
         help="povolí přepsání existujícího YAML souboru",
     )
     template.set_defaults(handler=_template)
+
+    fill = commands.add_parser(
+        "fill",
+        help="vyplní uloženou šablonu hesly ze slovníku",
+        description=(
+            "Přiřadí různá hesla všem slotům šablony, dodrží jejich "
+            "délky a písmena na kříženích a zapíše cílovou mřížku."
+        ),
+    )
+    fill.add_argument("template", type=Path, metavar="ŠABLONA.yaml")
+    fill.add_argument("dictionary", type=Path, metavar="SLOVNÍK.json")
+    fill.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        required=True,
+        metavar="MŘÍŽKA.yaml",
+        help="cílový YAML soubor",
+    )
+    fill.add_argument(
+        "--seed",
+        type=int,
+        default=DEFAULT_SEED,
+        metavar="ČÍSLO",
+        help=f"seed náhodných voleb; výchozí je {DEFAULT_SEED}",
+    )
+    fill.add_argument(
+        "--force",
+        action="store_true",
+        help="povolí přepsání existujícího YAML souboru",
+    )
+    fill.set_defaults(handler=_fill)
 
     generate = commands.add_parser(
         "generate",
@@ -191,6 +225,32 @@ def _template(arguments: argparse.Namespace) -> int:
     print(
         f"Šablona vytvořena: {arguments.output} "
         f"({arguments.width} × {arguments.height}, {len(template.slots)} slotů)"
+    )
+    return 0
+
+
+def _fill(arguments: argparse.Namespace) -> int:
+    try:
+        template = load_crossword_template(arguments.template)
+        dictionary = load_dictionary(arguments.dictionary)
+        crossword = fill_crossword_template(
+            template,
+            dictionary,
+            seed=arguments.seed,
+        )
+        write_crossword_grid(
+            crossword,
+            arguments.output,
+            overwrite=arguments.force,
+        )
+    except (DictionaryError, GenerationError, ModelError) as error:
+        print(f"chyba: {error}", file=sys.stderr)
+        return 2
+
+    print(
+        f"Mřížka vytvořena: {arguments.output} "
+        f"({template.grid.width} × {template.grid.height}, "
+        f"{len(template.slots)} hesel, seed {arguments.seed})"
     )
     return 0
 

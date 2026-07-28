@@ -8,6 +8,7 @@ from krizovkar.dictionary import (
 )
 from krizovkar.generator import (
     GenerationError,
+    fill_crossword_template,
     generate_swedish_grid,
     generate_swedish_template,
 )
@@ -110,6 +111,7 @@ __all__ = [
     "WordSlot",
     "check_crossword_grid",
     "check_dense_swedish_grid",
+    "fill_crossword_template",
     "generate_swedish_grid",
     "generate_swedish_template",
     "load_dictionary",

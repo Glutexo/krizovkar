@@ -28,7 +28,7 @@ Křížovkář rozlišuje tři samostatné druhy YAML dokumentů:
 
 ```text
 specification → návrh rozložení (budoucí) → template
-template + slovník → plnění (budoucí) → grid → render → PDF
+template + slovník → fill → grid → render → PDF
 slovník → experimentální generátor → grid → render → PDF
 ```
 
@@ -177,6 +177,16 @@ uv run krizovkar template \
 ```
 
 Stejné rozměry vytvoří stejnou šablonu. Generátor rozdělí plochu na písmenné obdélníky s délkami hesel 3 až 8, zapíše pozice legendových a nevyplňovaných buněk a každému vodorovnému i svislému heslu přidělí vlastní slot. Příkaz existující soubor nepřepíše bez volby `--force`.
+
+Šablonu lze později vyplnit samostatně:
+
+```shell
+uv run krizovkar fill build/template.yaml slovnik.json \
+  --seed 10 \
+  --output build/filled-grid.yaml
+```
+
+Plnění funguje i pro ručně vytvořené šablony. Pro každý slot vybere heslo odpovídající délky, zachová shodná písmena na kříženích a stejnou odpověď nepoužije dvakrát. Slot s vepsanou legendovou buňkou vytvoří švédskou legendu; slot bez ní dostane číslo a vnější legendu. Stejná šablona, slovník a seed vytvoří stejnou cílovou mřížku.
 
 ## Pokusné generování
 
