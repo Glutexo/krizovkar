@@ -14,12 +14,14 @@ from krizovkar.generator import (
     DEFAULT_SEED,
     GenerationError,
     generate_swedish_grid,
+    generate_swedish_template,
 )
 from krizovkar.model import (
     LegendCell,
     ModelError,
     load_crossword_grid,
     write_crossword_grid,
+    write_crossword_template,
 )
 from krizovkar.renderer import (
     DEFAULT_PAGE_FORMAT,
@@ -36,6 +38,43 @@ def _parser() -> argparse.ArgumentParser:
         description="Tvorba švédských, klasických a dalších křížovek.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
+
+    template = commands.add_parser(
+        "template",
+        help="vytvoří nevyplněnou hustou švédskou šablonu",
+        description=(
+            "Rozvrhne písmenné, legendové a nevyplňované buňky a "
+            "zapíše sloty budoucích hesel bez použití slovníku."
+        ),
+    )
+    template.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        required=True,
+        metavar="ŠABLONA.yaml",
+        help="cílový YAML soubor",
+    )
+    template.add_argument(
+        "--width",
+        type=int,
+        default=DEFAULT_GRID_WIDTH,
+        metavar="POČET",
+        help=f"počet sloupců; výchozí je {DEFAULT_GRID_WIDTH}",
+    )
+    template.add_argument(
+        "--height",
+        type=int,
+        default=DEFAULT_GRID_HEIGHT,
+        metavar="POČET",
+        help=f"počet řádků; výchozí je {DEFAULT_GRID_HEIGHT}",
+    )
+    template.add_argument(
+        "--force",
+        action="store_true",
+        help="povolí přepsání existujícího YAML souboru",
+    )
+    template.set_defaults(handler=_template)
 
     generate = commands.add_parser(
         "generate",
@@ -132,6 +171,28 @@ def _parser() -> argparse.ArgumentParser:
     )
     render.set_defaults(handler=_render)
     return parser
+
+
+def _template(arguments: argparse.Namespace) -> int:
+    try:
+        template = generate_swedish_template(
+            width=arguments.width,
+            height=arguments.height,
+        )
+        write_crossword_template(
+            template,
+            arguments.output,
+            overwrite=arguments.force,
+        )
+    except (GenerationError, ModelError) as error:
+        print(f"chyba: {error}", file=sys.stderr)
+        return 2
+
+    print(
+        f"Šablona vytvořena: {arguments.output} "
+        f"({arguments.width} × {arguments.height}, {len(template.slots)} slotů)"
+    )
+    return 0
 
 
 def _generate(arguments: argparse.Namespace) -> int:

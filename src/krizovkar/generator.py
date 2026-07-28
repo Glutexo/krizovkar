@@ -16,7 +16,20 @@ from krizovkar.layout import (
     SwedishLayout,
     create_dense_swedish_layout,
 )
-from krizovkar.model import CrosswordGrid, EmptyCell, Grid, LegendCell, LetterCell
+from krizovkar.model import (
+    Coordinate,
+    CrosswordGrid,
+    CrosswordTemplate,
+    EmptyCell,
+    Grid,
+    LegendCell,
+    LetterCell,
+    TemplateEmptyCell,
+    TemplateGrid,
+    TemplateLegendCell,
+    TemplateLetterCell,
+    WordSlot,
+)
 
 
 DEFAULT_GRID_WIDTH = 15
@@ -26,7 +39,7 @@ MAX_CLUE_LENGTH = 48
 GENERATION_ATTEMPTS = 4
 MAX_SEARCH_NODES = 250_000
 
-Coordinate = tuple[int, int]
+GridCoordinate = tuple[int, int]
 
 
 class GenerationError(RuntimeError):
@@ -48,6 +61,87 @@ class _Entry:
 class _BlockFill:
     horizontal: tuple[_Entry, ...]
     vertical: tuple[_Entry, ...]
+
+
+def generate_swedish_template(
+    *,
+    width: int = DEFAULT_GRID_WIDTH,
+    height: int = DEFAULT_GRID_HEIGHT,
+) -> CrosswordTemplate:
+    """Vytvoří nevyplněnou hustou švédskou šablonu."""
+
+    try:
+        layout = create_dense_swedish_layout(width, height)
+    except LayoutError as error:
+        raise GenerationError(str(error)) from error
+
+    cells = []
+    for row in range(layout.height):
+        cell_row = []
+        for column in range(layout.width):
+            role = layout.role(row, column)
+            if role == "empty":
+                cell_row.append(TemplateEmptyCell())
+            elif role in {"horizontal_legend", "vertical_legend"}:
+                cell_row.append(TemplateLegendCell())
+            else:
+                cell_row.append(TemplateLetterCell())
+        cells.append(tuple(cell_row))
+
+    slots = []
+    horizontal_number = 1
+    for row_segment in layout.row_segments:
+        for row in range(row_segment.start, row_segment.stop):
+            for column_segment in layout.column_segments:
+                slots.append(
+                    WordSlot(
+                        identifier=f"h{horizontal_number}",
+                        start=Coordinate(
+                            row=row + 1,
+                            column=column_segment.start + 1,
+                        ),
+                        direction="horizontal",
+                        length=column_segment.length,
+                        legend_position=Coordinate(
+                            row=row + 1,
+                            column=column_segment.legend + 1,
+                        ),
+                    )
+                )
+                horizontal_number += 1
+
+    vertical_number = 1
+    for row_segment in layout.row_segments:
+        for column_segment in layout.column_segments:
+            for column in range(column_segment.start, column_segment.stop):
+                slots.append(
+                    WordSlot(
+                        identifier=f"v{vertical_number}",
+                        start=Coordinate(
+                            row=row_segment.start + 1,
+                            column=column + 1,
+                        ),
+                        direction="vertical",
+                        length=row_segment.length,
+                        legend_position=Coordinate(
+                            row=row_segment.legend + 1,
+                            column=column + 1,
+                        ),
+                    )
+                )
+                vertical_number += 1
+
+    return CrosswordTemplate(
+        format_name="krizovkar",
+        kind="template",
+        version=1,
+        grid=TemplateGrid(
+            width=layout.width,
+            height=layout.height,
+            cells=tuple(cells),
+        ),
+        slots=tuple(slots),
+    )
 
 
 def _usable_entries(
@@ -170,8 +264,8 @@ def _filled_crossword(
     entries_by_length: dict[int, tuple[_Entry, ...]],
     randomizer: random.Random,
 ) -> CrosswordGrid:
-    letters: dict[Coordinate, str] = {}
-    legends: dict[Coordinate, str] = {}
+    letters: dict[GridCoordinate, str] = {}
+    legends: dict[GridCoordinate, str] = {}
     used_answers: set[str] = set()
 
     for row_segment, column_segment in _block_order(layout):

@@ -6,7 +6,11 @@ from krizovkar.dictionary import (
     DictionaryError,
     load_dictionary,
 )
-from krizovkar.generator import GenerationError, generate_swedish_grid
+from krizovkar.generator import (
+    GenerationError,
+    generate_swedish_grid,
+    generate_swedish_template,
+)
 
 from krizovkar.model import (
     CellBar,
@@ -107,6 +111,7 @@ __all__ = [
     "check_crossword_grid",
     "check_dense_swedish_grid",
     "generate_swedish_grid",
+    "generate_swedish_template",
     "load_dictionary",
     "load_crossword_grid",
     "load_crossword_specification",

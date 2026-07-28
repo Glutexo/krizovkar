@@ -48,6 +48,8 @@ Volitelná souřadnice `legend` označuje vepsanou legendovou buňku. Musí lež
 
 Loader navíc kontroluje rozměr matice, přesah slotů, jejich překryvy ve stejném směru a vazby na role buněk. Každá písmenná buňka musí patřit alespoň jednomu slotu a každou legendovou buňku musí používat alespoň jeden slot. Ucelený zápis je v [minimální šabloně](../examples/template-minimal.yaml).
 
+Příkaz `template` vytváří deterministickou hustou švédskou šablonu. Používá stejné rozdělení na legendové osy a písmenné bloky jako experimentální generátor vyplněné mřížky, ale nepotřebuje slovník. Vodorovné sloty dostávají identifikátory `h1`, `h2`, … v pořadí shora dolů a zleva doprava; svislé obdobně `v1`, `v2`, …
+
 ## Cílová mřížka, verze 1
 
 Cílová mřížka popisuje obdélníkový rozměr a případný obsah buněk:

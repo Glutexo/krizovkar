@@ -32,6 +32,7 @@ from krizovkar.model import (
     WordPlacement,
     load_crossword_grid,
     load_crossword_specification,
+    load_crossword_template,
     secret_path_arrows,
     write_crossword_grid,
 )
@@ -1277,6 +1278,42 @@ class ModelTest(unittest.TestCase):
 
 
 class CommandTest(unittest.TestCase):
+    def test_template_creates_structure_and_refuses_accidental_overwrite(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "template.yaml"
+            command = [
+                "template",
+                "--output",
+                str(output),
+                "--width",
+                "9",
+                "--height",
+                "9",
+            ]
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                result = main(command)
+
+            self.assertEqual(0, result)
+            self.assertIn("Šablona vytvořena:", stdout.getvalue())
+            template = load_crossword_template(output)
+            self.assertEqual(9, template.grid.width)
+            self.assertEqual(9, template.grid.height)
+            self.assertEqual(28, len(template.slots))
+
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                second_result = main(command)
+
+            self.assertEqual(2, second_result)
+            self.assertIn("již existuje", stderr.getvalue())
+
+            with redirect_stdout(io.StringIO()):
+                forced_result = main([*command, "--force"])
+
+            self.assertEqual(0, forced_result)
+
     def test_generate_creates_grid_and_refuses_accidental_overwrite(self) -> None:
         answers = tuple(
             "".join(letters) for letters in product("ABCD", repeat=4)

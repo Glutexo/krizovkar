@@ -165,6 +165,19 @@ V PDF renderer doplní tučný nadpis „Pomůcka:“ a položky vypíše za ní
 
 Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-letters.yaml) obsahuje 15 × 10 běžných buněk. Minimální soubory jsou v příkladech [mřížky](examples/grid-minimal.yaml) a [zadání](examples/specification-minimal.yaml).
 
+## Vytvoření šablony
+
+Hustou švédskou šablonu lze vytvořit bez slovníku a bez znalosti budoucích odpovědí:
+
+```shell
+uv run krizovkar template \
+  --width 15 \
+  --height 10 \
+  --output build/template.yaml
+```
+
+Stejné rozměry vytvoří stejnou šablonu. Generátor rozdělí plochu na písmenné obdélníky s délkami hesel 3 až 8, zapíše pozice legendových a nevyplňovaných buněk a každému vodorovnému i svislému heslu přidělí vlastní slot. Příkaz existující soubor nepřepíše bez volby `--force`.
+
 ## Pokusné generování
 
 Generátor přijímá slovník jako JSON objekt. Klíčem je heslo složené z podporovaných velkých písmen včetně diakritiky a hodnotou neprázdný seznam možných legend v preferovaném pořadí:

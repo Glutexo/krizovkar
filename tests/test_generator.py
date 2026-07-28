@@ -6,9 +6,20 @@ import unittest
 from itertools import product
 
 from krizovkar.dictionary import CrosswordDictionary, DictionaryEntry
-from krizovkar.generator import GenerationError, generate_swedish_grid
+from krizovkar.generator import (
+    GenerationError,
+    generate_swedish_grid,
+    generate_swedish_template,
+)
 from krizovkar.layout import create_dense_swedish_layout
-from krizovkar.model import EmptyCell, LegendCell, LetterCell
+from krizovkar.model import (
+    EmptyCell,
+    LegendCell,
+    LetterCell,
+    TemplateEmptyCell,
+    TemplateLegendCell,
+    TemplateLetterCell,
+)
 from krizovkar.validation import check_crossword_grid
 
 
@@ -27,6 +38,57 @@ TEST_DICTIONARY = _complete_dictionary(3, 4)
 
 
 class GeneratorTest(unittest.TestCase):
+    def test_generates_dense_template_without_dictionary(self) -> None:
+        first = generate_swedish_template(width=9, height=9)
+        second = generate_swedish_template(width=9, height=9)
+
+        self.assertEqual(first, second)
+        self.assertEqual("template", first.kind)
+        self.assertEqual(9, first.grid.width)
+        self.assertEqual(9, first.grid.height)
+        cells = tuple(cell for row in first.grid.cells for cell in row)
+        self.assertEqual(
+            49,
+            sum(isinstance(cell, TemplateLetterCell) for cell in cells),
+        )
+        self.assertEqual(
+            28,
+            sum(isinstance(cell, TemplateLegendCell) for cell in cells),
+        )
+        self.assertEqual(
+            4,
+            sum(isinstance(cell, TemplateEmptyCell) for cell in cells),
+        )
+        self.assertEqual(28, len(first.slots))
+        self.assertEqual(
+            tuple(f"h{number}" for number in range(1, 15)),
+            tuple(
+                slot.identifier
+                for slot in first.slots
+                if slot.direction == "horizontal"
+            ),
+        )
+        self.assertEqual(
+            tuple(f"v{number}" for number in range(1, 15)),
+            tuple(
+                slot.identifier
+                for slot in first.slots
+                if slot.direction == "vertical"
+            ),
+        )
+        first_slot = first.slots[0]
+        self.assertEqual((2, 2), (first_slot.start.row, first_slot.start.column))
+        self.assertEqual(4, first_slot.length)
+        assert first_slot.legend_position is not None
+        self.assertEqual(
+            (2, 1),
+            (first_slot.legend_position.row, first_slot.legend_position.column),
+        )
+
+    def test_template_rejects_too_small_grid(self) -> None:
+        with self.assertRaisesRegex(GenerationError, "nelze rozdělit"):
+            generate_swedish_template(width=3, height=9)
+
     def test_generates_deterministic_dense_grid(self) -> None:
         first = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=42)
         second = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=42)
