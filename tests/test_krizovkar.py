@@ -66,6 +66,7 @@ SPECIFICATION_SECRETS_EXAMPLE = (
 SPECIFICATION_SECRET_PROMPT_EXAMPLE = (
     PROJECT_ROOT / "examples" / "specification-secret-prompt.yaml"
 )
+TEMPLATE_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "template-secret.yaml"
 
 
 class ModelTest(unittest.TestCase):
@@ -1278,6 +1279,74 @@ class ModelTest(unittest.TestCase):
 
 
 class CommandTest(unittest.TestCase):
+    def test_template_reserves_known_secret_and_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "template.yaml"
+
+            with redirect_stdout(io.StringIO()):
+                result = main(
+                    [
+                        "template",
+                        "--output",
+                        str(output),
+                        "--width",
+                        "5",
+                        "--height",
+                        "5",
+                        "--secret",
+                        "ABCD",
+                        "--secret-prompt",
+                        "Doplňte tajenku",
+                        "--secret-prompt-placement",
+                        "below",
+                        "--secret-prompt-alignment",
+                        "right",
+                        "--seed",
+                        "8",
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            template = load_crossword_template(output)
+            self.assertEqual(1, len(template.secrets))
+            self.assertEqual(("ABCD",), template.secrets[0].words)
+            self.assertEqual(1, template.secrets[0].parts[0].word_count)
+            assert template.secrets[0].prompt is not None
+            self.assertEqual("below", template.secrets[0].prompt.placement)
+            self.assertEqual("right", template.secrets[0].prompt.alignment)
+
+    def test_fill_uses_secret_already_stored_in_template(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            dictionary = Path(directory) / "dictionary.json"
+            output = Path(directory) / "grid.yaml"
+            dictionary.write_text(
+                json.dumps({"LES": ["Porost stromů"]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(io.StringIO()):
+                result = main(
+                    [
+                        "fill",
+                        str(TEMPLATE_SECRET_EXAMPLE),
+                        str(dictionary),
+                        "--output",
+                        str(output),
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            crossword = load_crossword_grid(output)
+            assert crossword.grid.cells is not None
+            self.assertEqual(
+                "ZELENÍ",
+                "".join(cell.value for cell in crossword.grid.cells[0]),
+            )
+            self.assertTrue(
+                all(isinstance(cell, SecretCell) for cell in crossword.grid.cells[0])
+            )
+            self.assertEqual(1, len(crossword.secret_prompts))
+
     def test_fill_creates_grid_from_template_and_dictionary(self) -> None:
         answers = tuple(
             "".join(letters) for letters in product("ABCD", repeat=4)

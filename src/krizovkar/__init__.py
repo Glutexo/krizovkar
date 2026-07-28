@@ -8,9 +8,12 @@ from krizovkar.dictionary import (
 )
 from krizovkar.generator import (
     GenerationError,
+    SecretRequirement,
     fill_crossword_template,
     generate_swedish_grid,
     generate_swedish_template,
+    normalize_secret_text,
+    place_secret_in_template,
 )
 
 from krizovkar.model import (
@@ -100,6 +103,7 @@ __all__ = [
     "SecretPrompt",
     "SecretPromptAlignment",
     "SecretPromptPlacement",
+    "SecretRequirement",
     "SecretWord",
     "TemplateCell",
     "TemplateEmptyCell",
@@ -122,6 +126,8 @@ __all__ = [
     "load_crossword_grid",
     "load_crossword_specification",
     "load_crossword_template",
+    "normalize_secret_text",
+    "place_secret_in_template",
     "render_pdf",
     "secret_path_arrows",
     "validate_crossword_grid_file",

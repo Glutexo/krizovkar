@@ -13,13 +13,16 @@ from krizovkar.generator import (
     DEFAULT_GRID_WIDTH,
     DEFAULT_SEED,
     GenerationError,
+    SecretRequirement,
     fill_crossword_template,
     generate_swedish_grid,
     generate_swedish_template,
+    normalize_secret_text,
 )
 from krizovkar.model import (
     LegendCell,
     ModelError,
+    SecretPrompt,
     load_crossword_grid,
     load_crossword_template,
     write_crossword_grid,
@@ -72,6 +75,17 @@ def _parser() -> argparse.ArgumentParser:
         help=f"počet řádků; výchozí je {DEFAULT_GRID_HEIGHT}",
     )
     template.add_argument(
+        "--seed",
+        type=int,
+        default=DEFAULT_SEED,
+        metavar="ČÍSLO",
+        help=(
+            "seed výběru tajenkových slotů; "
+            f"výchozí je {DEFAULT_SEED}"
+        ),
+    )
+    _add_secret_arguments(template, allow_lengths=True)
+    template.add_argument(
         "--force",
         action="store_true",
         help="povolí přepsání existujícího YAML souboru",
@@ -103,6 +117,7 @@ def _parser() -> argparse.ArgumentParser:
         metavar="ČÍSLO",
         help=f"seed náhodných voleb; výchozí je {DEFAULT_SEED}",
     )
+    _add_secret_arguments(fill, allow_lengths=False)
     fill.add_argument(
         "--force",
         action="store_true",
@@ -207,11 +222,130 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _secret_part_lengths(value: str) -> tuple[int, ...]:
+    try:
+        lengths = tuple(int(item) for item in value.split(","))
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "délky částí musí být celá čísla oddělená čárkou"
+        ) from error
+    if not lengths or any(length < 1 for length in lengths):
+        raise argparse.ArgumentTypeError(
+            "délky částí musí být kladná celá čísla"
+        )
+    return lengths
+
+
+def _add_secret_arguments(
+    parser: argparse.ArgumentParser,
+    *,
+    allow_lengths: bool,
+) -> None:
+    group = parser.add_mutually_exclusive_group()
+    if allow_lengths:
+        group.add_argument(
+            "--secret-length",
+            type=int,
+            metavar="POČET",
+            help="rezervuje tajenku o zadaném celkovém počtu polí",
+        )
+        group.add_argument(
+            "--secret-parts",
+            type=_secret_part_lengths,
+            metavar="DÉLKY",
+            help="rezervuje pevné délky částí oddělené čárkou",
+        )
+    group.add_argument(
+        "--secret",
+        metavar="TEXT",
+        help="konkrétní tajenka s automatickým dělením na švech slov",
+    )
+    group.add_argument(
+        "--secret-part",
+        action="append",
+        metavar="TEXT",
+        help="jedna pevná část tajenky; volbu lze zopakovat",
+    )
+    parser.add_argument(
+        "--secret-prompt",
+        metavar="TEXT",
+        help="zadání tajenky zobrazené vně mřížky",
+    )
+    parser.add_argument(
+        "--secret-prompt-placement",
+        choices=("above", "below"),
+        help="umístění zadání nad nebo pod mřížkou",
+    )
+    parser.add_argument(
+        "--secret-prompt-alignment",
+        choices=("left", "right"),
+        help="zarovnání zadání doleva nebo doprava",
+    )
+
+
+def _secret_requirement(arguments: argparse.Namespace) -> SecretRequirement | None:
+    total_length = getattr(arguments, "secret_length", None)
+    part_lengths = getattr(arguments, "secret_parts", None)
+    secret_text = getattr(arguments, "secret", None)
+    raw_parts = getattr(arguments, "secret_part", None)
+    prompt_text = getattr(arguments, "secret_prompt", None)
+    prompt_placement = getattr(arguments, "secret_prompt_placement", None)
+    prompt_alignment = getattr(arguments, "secret_prompt_alignment", None)
+    if (
+        total_length is None
+        and part_lengths is None
+        and secret_text is None
+        and raw_parts is None
+    ):
+        if any((prompt_text, prompt_placement, prompt_alignment)):
+            raise GenerationError(
+                "zadání tajenky lze uvést jen společně s tajenkou"
+            )
+        return None
+
+    if prompt_text is not None and not prompt_text.strip():
+        raise GenerationError("zadání tajenky nesmí být prázdné")
+
+    prompt = (
+        SecretPrompt(
+            text=prompt_text,
+            placement=prompt_placement or "above",
+            alignment=prompt_alignment or "left",
+        )
+        if prompt_text is not None
+        else None
+    )
+    if prompt is None and any((prompt_placement, prompt_alignment)):
+        raise GenerationError(
+            "umístění a zarovnání vyžaduje --secret-prompt"
+        )
+    if total_length is not None:
+        return SecretRequirement(total_length=total_length, prompt=prompt)
+    if part_lengths is not None:
+        return SecretRequirement(part_lengths=part_lengths, prompt=prompt)
+    if secret_text is not None:
+        return SecretRequirement(
+            words=normalize_secret_text(secret_text),
+            prompt=prompt,
+        )
+
+    assert raw_parts is not None
+    normalized_parts = tuple(normalize_secret_text(part) for part in raw_parts)
+    return SecretRequirement(
+        words=tuple(word for part in normalized_parts for word in part),
+        part_word_counts=tuple(len(part) for part in normalized_parts),
+        prompt=prompt,
+    )
+
+
 def _template(arguments: argparse.Namespace) -> int:
     try:
+        secret = _secret_requirement(arguments)
         template = generate_swedish_template(
             width=arguments.width,
             height=arguments.height,
+            seed=arguments.seed,
+            secret=secret,
         )
         write_crossword_template(
             template,
@@ -231,12 +365,14 @@ def _template(arguments: argparse.Namespace) -> int:
 
 def _fill(arguments: argparse.Namespace) -> int:
     try:
+        secret = _secret_requirement(arguments)
         template = load_crossword_template(arguments.template)
         dictionary = load_dictionary(arguments.dictionary)
         crossword = fill_crossword_template(
             template,
             dictionary,
             seed=arguments.seed,
+            secret=secret,
         )
         write_crossword_grid(
             crossword,

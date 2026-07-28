@@ -10,9 +10,12 @@ from pathlib import Path
 from krizovkar.dictionary import CrosswordDictionary, DictionaryEntry
 from krizovkar.generator import (
     GenerationError,
+    SecretRequirement,
     fill_crossword_template,
     generate_swedish_grid,
     generate_swedish_template,
+    normalize_secret_text,
+    place_secret_in_template,
 )
 from krizovkar.layout import create_dense_swedish_layout
 from krizovkar.model import (
@@ -21,10 +24,14 @@ from krizovkar.model import (
     EmptyCell,
     LegendCell,
     LetterCell,
+    SecretCell,
+    SecretPrompt,
     TemplateEmptyCell,
     TemplateLegendCell,
     TemplateLetterCell,
     TemplateGrid,
+    TemplateSecret,
+    TemplateSecretPart,
     WordSlot,
     load_crossword_grid,
     write_crossword_grid,
@@ -47,6 +54,222 @@ TEST_DICTIONARY = _complete_dictionary(3, 4)
 
 
 class GeneratorTest(unittest.TestCase):
+    def test_normalizes_secret_words_and_discards_punctuation(self) -> None:
+        self.assertEqual(
+            ("KOMU", "SE", "NELENÍ", "TOMU", "SE", "ZELENÍ"),
+            normalize_secret_text(
+                'Komu se nelení, tomu se „Zelení!“'
+            ),
+        )
+
+    def test_secret_normalization_rejects_nonletter_content(self) -> None:
+        with self.assertRaisesRegex(GenerationError, "nepodporovaný znak '1'"):
+            normalize_secret_text("TAJENKA 1")
+
+    def test_places_secret_by_total_and_part_lengths(self) -> None:
+        template = generate_swedish_template(width=5, height=5)
+
+        single = place_secret_in_template(
+            template,
+            SecretRequirement(total_length=4),
+            seed=7,
+        )
+        multipart = place_secret_in_template(
+            template,
+            SecretRequirement(part_lengths=(4, 4)),
+            seed=7,
+        )
+
+        self.assertEqual(1, len(single.secrets[0].parts))
+        self.assertEqual(2, len(multipart.secrets[0].parts))
+        slots = {slot.identifier: slot for slot in template.slots}
+        self.assertEqual(
+            (4, 4),
+            tuple(
+                slots[part.slot_identifier].length
+                for part in multipart.secrets[0].parts
+            ),
+        )
+
+    def test_places_known_secret_with_automatic_word_split(self) -> None:
+        template = CrosswordTemplate(
+            format_name="krizovkar",
+            kind="template",
+            version=1,
+            grid=TemplateGrid(
+                width=6,
+                height=1,
+                cells=((TemplateLetterCell(),) * 6,),
+            ),
+            slots=(
+                WordSlot(
+                    identifier="h1",
+                    start=Coordinate(row=1, column=1),
+                    direction="horizontal",
+                    length=4,
+                ),
+                WordSlot(
+                    identifier="h2",
+                    start=Coordinate(row=1, column=5),
+                    direction="horizontal",
+                    length=2,
+                ),
+            ),
+        )
+
+        prepared = place_secret_in_template(
+            template,
+            SecretRequirement(words=("KOMU", "SE")),
+        )
+
+        self.assertEqual(
+            (1, 1),
+            tuple(part.word_count for part in prepared.secrets[0].parts),
+        )
+
+    def test_fills_known_secret_and_propagates_prompt(self) -> None:
+        prompt = SecretPrompt(text="Dokončete rčení")
+        template = CrosswordTemplate(
+            format_name="krizovkar",
+            kind="template",
+            version=1,
+            grid=TemplateGrid(
+                width=6,
+                height=1,
+                cells=((TemplateLetterCell(),) * 6,),
+            ),
+            slots=(
+                WordSlot(
+                    identifier="h1",
+                    start=Coordinate(row=1, column=1),
+                    direction="horizontal",
+                    length=6,
+                ),
+            ),
+            secrets=(
+                TemplateSecret(
+                    words=("ZELENÍ",),
+                    parts=(
+                        TemplateSecretPart(
+                            slot_identifier="h1",
+                            word_count=1,
+                        ),
+                    ),
+                    prompt=prompt,
+                ),
+            ),
+        )
+
+        crossword = fill_crossword_template(template, TEST_DICTIONARY)
+
+        assert crossword.grid.cells is not None
+        self.assertEqual(
+            ("Z", "E", "L", "E", "N", "Í"),
+            tuple(cell.value for cell in crossword.grid.cells[0]),
+        )
+        self.assertTrue(
+            all(isinstance(cell, SecretCell) for cell in crossword.grid.cells[0])
+        )
+        self.assertEqual((prompt,), crossword.secret_prompts)
+        self.assertEqual("Tajenka", crossword.clues[0].text)
+
+    def test_fills_secret_into_reserved_slots_at_word_seams(self) -> None:
+        template = CrosswordTemplate(
+            format_name="krizovkar",
+            kind="template",
+            version=1,
+            grid=TemplateGrid(
+                width=6,
+                height=1,
+                cells=((TemplateLetterCell(),) * 6,),
+            ),
+            slots=(
+                WordSlot("h1", Coordinate(1, 1), "horizontal", 4),
+                WordSlot("h2", Coordinate(1, 5), "horizontal", 2),
+            ),
+            secrets=(
+                TemplateSecret(
+                    parts=(
+                        TemplateSecretPart("h1"),
+                        TemplateSecretPart("h2"),
+                    )
+                ),
+            ),
+        )
+
+        crossword = fill_crossword_template(
+            template,
+            TEST_DICTIONARY,
+            secret=SecretRequirement(words=("KOMU", "SE")),
+        )
+
+        assert crossword.grid.cells is not None
+        self.assertEqual(
+            "KOMUSE",
+            "".join(cell.value for cell in crossword.grid.cells[0]),
+        )
+        self.assertEqual(
+            ("1. část tajenky", "2. část tajenky"),
+            tuple(clue.text for clue in crossword.clues),
+        )
+
+    def test_never_splits_secret_inside_word(self) -> None:
+        template = CrosswordTemplate(
+            format_name="krizovkar",
+            kind="template",
+            version=1,
+            grid=TemplateGrid(
+                width=6,
+                height=1,
+                cells=((TemplateLetterCell(),) * 6,),
+            ),
+            slots=(
+                WordSlot("h1", Coordinate(1, 1), "horizontal", 3),
+                WordSlot("h2", Coordinate(1, 4), "horizontal", 3),
+            ),
+            secrets=(
+                TemplateSecret(
+                    parts=(
+                        TemplateSecretPart("h1"),
+                        TemplateSecretPart("h2"),
+                    )
+                ),
+            ),
+        )
+
+        with self.assertRaisesRegex(GenerationError, "na hranicích slov"):
+            fill_crossword_template(
+                template,
+                TEST_DICTIONARY,
+                secret=SecretRequirement(words=("ZELENÍ",)),
+            )
+
+    def test_auto_places_secret_when_template_has_no_reservation(self) -> None:
+        template = CrosswordTemplate(
+            format_name="krizovkar",
+            kind="template",
+            version=1,
+            grid=TemplateGrid(
+                width=6,
+                height=1,
+                cells=((TemplateLetterCell(),) * 6,),
+            ),
+            slots=(
+                WordSlot("h1", Coordinate(1, 1), "horizontal", 6),
+            ),
+        )
+
+        crossword = fill_crossword_template(
+            template,
+            TEST_DICTIONARY,
+            secret=SecretRequirement(words=("ZELENÍ",)),
+        )
+
+        assert crossword.grid.cells is not None
+        self.assertTrue(
+            all(isinstance(cell, SecretCell) for cell in crossword.grid.cells[0])
+        )
+
     def test_fills_generated_template_deterministically(self) -> None:
         template = generate_swedish_template(width=5, height=5)
 

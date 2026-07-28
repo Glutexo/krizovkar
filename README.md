@@ -180,6 +180,29 @@ uv run krizovkar template \
 
 Stejné rozměry vytvoří stejnou šablonu. Generátor rozdělí plochu na písmenné obdélníky s délkami hesel 3 až 8, zapíše pozice legendových a nevyplňovaných buněk a každému vodorovnému i svislému heslu přidělí vlastní slot. Příkaz existující soubor nepřepíše bez volby `--force`.
 
+Tajenku lze při tvorbě šablony zadat čtyřmi způsoby:
+
+```shell
+# Pouze celková délka
+uv run krizovkar template --width 7 --height 6 \
+  --secret-length 6 --output build/secret-length.yaml
+
+# Předem určené délky částí
+uv run krizovkar template --width 7 --height 12 \
+  --secret-parts 5,6 --output build/secret-lengths.yaml
+
+# Konkrétní tajenka s automatickým dělením na švech slov
+uv run krizovkar template --width 7 --height 12 \
+  --secret "DÁREK RADOST" --output build/secret-auto.yaml
+
+# Konkrétní a pevně rozdělená tajenka
+uv run krizovkar template --width 7 --height 12 \
+  --secret-part DÁREK --secret-part RADOST \
+  --output build/secret-fixed.yaml
+```
+
+U konkrétního textu se velikost písmen sjednotí, mezery a interpunkce se do buněk nezapisují a seznam slov zachová všechny povolené švy. Automatické dělení nikdy nerozdělí slovo. Volitelné `--secret-prompt` doplní zadání; jeho pozici a zarovnání určují `--secret-prompt-placement` a `--secret-prompt-alignment`. Seed ovlivňuje výběr vhodných slotů.
+
 Šablonu lze později vyplnit samostatně:
 
 ```shell
@@ -189,6 +212,8 @@ uv run krizovkar fill build/template.yaml slovnik.json \
 ```
 
 Plnění funguje i pro ručně vytvořené šablony. Pro každý slot vybere heslo odpovídající délky, zachová shodná písmena na kříženích a stejnou odpověď nepoužije dvakrát. Slot s vepsanou legendovou buňkou vytvoří švédskou legendu; slot bez ní dostane číslo a vnější legendu. Stejná šablona, slovník a seed vytvoří stejnou cílovou mřížku.
+
+Známou tajenku uloženou v šabloně `fill` doplní automaticky a její sloty nevyhledává ve slovníku. Rezervuje-li šablona jen prázdné tajenkové sloty, předá se konkrétní text pomocí `--secret` nebo opakovaného `--secret-part`. Stejné volby lze použít i u šablony bez rezervace; plnění pak vhodné sloty tajenky samo vybere. Tajenková pole se ve výsledné mřížce zvýrazní a jednotlivé části dostanou legendy `1. část tajenky`, `2. část tajenky` a tak dále.
 
 ## Pokusné generování
 

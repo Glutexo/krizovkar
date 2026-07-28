@@ -68,9 +68,11 @@ Je-li znění tajenky známé, povinné `word_count` u každé části určuje p
 
 Loader navíc kontroluje rozměr matice, přesah slotů, jejich překryvy ve stejném směru a vazby na role buněk. Každá písmenná buňka musí patřit alespoň jednomu slotu a každou legendovou buňku musí používat alespoň jeden slot. Ucelený zápis je v [minimální šabloně](../examples/template-minimal.yaml).
 
-Příkaz `template` vytváří deterministickou hustou švédskou šablonu. Používá stejné rozdělení na legendové osy a písmenné bloky jako experimentální generátor vyplněné mřížky, ale nepotřebuje slovník. Vodorovné sloty dostávají identifikátory `h1`, `h2`, … v pořadí shora dolů a zleva doprava; svislé obdobně `v1`, `v2`, …
+Příkaz `template` vytváří deterministickou hustou švédskou šablonu. Používá stejné rozdělení na legendové osy a písmenné bloky jako experimentální generátor vyplněné mřížky, ale nepotřebuje slovník. Vodorovné sloty dostávají identifikátory `h1`, `h2`, … v pořadí shora dolů a zleva doprava; svislé obdobně `v1`, `v2`, … Volby tajenky mohou určit pouze celkovou délku, pevné délky částí, konkrétní seznam slov s automatickým dělením nebo konkrétní pevné části. Generátor pro ně vybírá navzájem se nepřekrývající sloty a u známého textu ukládá výsledné `word_count`.
 
-Příkaz `fill` přijímá libovolnou platnou šablonu a slovník. Pomocí zpětného prohledávání přiřadí každému slotu jiné heslo správné délky a průběžně omezuje kandidáty podle již známých písmen na kříženích. Vepsané legendy převezmou texty přiřazených hesel. Sloty bez souřadnice `legend` se převedou na číslovaná hesla s vnějšími legendami; společný začátek vodorovného a svislého slotu sdílí jedno číslo. Seed určuje pořadí kandidátů a zachovává opakovatelnost výsledku.
+Příkaz `fill` přijímá libovolnou platnou šablonu a slovník. Pomocí zpětného prohledávání přiřadí každému běžnému slotu jiné heslo správné délky a průběžně omezuje kandidáty podle již známých písmen na kříženích. Tajenkové sloty vyplní přímo, bez hledání odpovědi ve slovníku, označí je jako `type: secret` a jejich písmena použije jako pevná omezení křížících se hesel. Neznámou rezervovanou tajenku musí doplnit konkrétní text; není-li v šabloně rezervace, `fill` vhodné sloty automaticky vybere. Rozdělení je přípustné jen tehdy, pokud každá část končí na hranici slova.
+
+Vepsané legendy převezmou texty přiřazených hesel. Sloty bez souřadnice `legend` se převedou na číslovaná hesla s vnějšími legendami; společný začátek vodorovného a svislého slotu sdílí jedno číslo. Seed určuje pořadí kandidátů a zachovává opakovatelnost výsledku.
 
 ## Cílová mřížka, verze 1
 

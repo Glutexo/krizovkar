@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import random
+import unicodedata
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from krizovkar.alphabet import split_answer_letters
+from krizovkar.alphabet import SUPPORTED_SINGLE_LETTERS, split_answer_letters
 from krizovkar.dictionary import CrosswordDictionary
 from krizovkar.layout import (
     AxisSegment,
@@ -18,15 +19,21 @@ from krizovkar.model import (
     Coordinate,
     CrosswordGrid,
     CrosswordTemplate,
+    DEFAULT_SECRET_LEGEND,
+    DEFAULT_SECRET_PART_LEGEND,
     EmptyCell,
     ExternalClue,
     Grid,
     LegendCell,
     LetterCell,
+    SecretCell,
+    SecretPrompt,
     TemplateEmptyCell,
     TemplateGrid,
     TemplateLegendCell,
     TemplateLetterCell,
+    TemplateSecret,
+    TemplateSecretPart,
     WordSlot,
 )
 
@@ -50,6 +57,17 @@ class _SearchFailed(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
+class SecretRequirement:
+    """Požadovaná délka nebo známá slova jedné tajenky."""
+
+    total_length: int | None = None
+    part_lengths: tuple[int, ...] = ()
+    words: tuple[str, ...] = ()
+    part_word_counts: tuple[int, ...] = ()
+    prompt: SecretPrompt | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class _Entry:
     answer: str
     clue: str
@@ -62,10 +80,75 @@ class _BlockFill:
     vertical: tuple[_Entry, ...]
 
 
+def normalize_secret_text(text: str) -> tuple[str, ...]:
+    """Převede text tajenky na velká slova bez mezer a interpunkce."""
+
+    normalized = unicodedata.normalize("NFC", text).upper()
+    supported = frozenset(SUPPORTED_SINGLE_LETTERS)
+    words = []
+    current = []
+    for character in normalized:
+        if character in supported:
+            current.append(character)
+            continue
+        if character.isspace() or unicodedata.category(character).startswith("P"):
+            if current:
+                words.append("".join(current))
+                current = []
+            continue
+        raise GenerationError(
+            f"tajenka obsahuje nepodporovaný znak {character!r}"
+        )
+    if current:
+        words.append("".join(current))
+    if not words:
+        raise GenerationError("tajenka musí obsahovat alespoň jedno slovo")
+    return tuple(words)
+
+
+def _validate_secret_requirement(requirement: SecretRequirement) -> None:
+    modes = sum(
+        (
+            requirement.total_length is not None,
+            bool(requirement.part_lengths),
+            bool(requirement.words),
+        )
+    )
+    if modes != 1:
+        raise GenerationError(
+            "tajenka musí určit právě jednu z možností: "
+            "celkovou délku, délky částí, nebo konkrétní slova"
+        )
+    if requirement.total_length is not None and requirement.total_length < 1:
+        raise GenerationError("délka tajenky musí být kladná")
+    if requirement.part_lengths and any(
+        length < 1 for length in requirement.part_lengths
+    ):
+        raise GenerationError("délky částí tajenky musí být kladné")
+    if requirement.part_word_counts and not requirement.words:
+        raise GenerationError(
+            "počty slov částí lze uvést jen u konkrétní tajenky"
+        )
+    for word in requirement.words:
+        try:
+            split_answer_letters(word)
+        except ValueError as error:
+            raise GenerationError(str(error)) from error
+    if requirement.words and requirement.part_word_counts:
+        if any(count < 1 for count in requirement.part_word_counts):
+            raise GenerationError("každá část tajenky musí obsahovat celé slovo")
+        if sum(requirement.part_word_counts) != len(requirement.words):
+            raise GenerationError(
+                "součet počtů slov částí neodpovídá počtu slov tajenky"
+            )
+
+
 def generate_swedish_template(
     *,
     width: int = DEFAULT_GRID_WIDTH,
     height: int = DEFAULT_GRID_HEIGHT,
+    seed: int = DEFAULT_SEED,
+    secret: SecretRequirement | None = None,
 ) -> CrosswordTemplate:
     """Vytvoří nevyplněnou hustou švédskou šablonu."""
 
@@ -130,7 +213,7 @@ def generate_swedish_template(
                 )
                 vertical_number += 1
 
-    return CrosswordTemplate(
+    template = CrosswordTemplate(
         format_name="krizovkar",
         kind="template",
         version=1,
@@ -141,6 +224,9 @@ def generate_swedish_template(
         ),
         slots=tuple(slots),
     )
+    if secret is None:
+        return template
+    return place_secret_in_template(template, secret, seed=seed)
 
 
 def _usable_entries(
@@ -172,10 +258,300 @@ def _slot_coordinates(slot: WordSlot) -> tuple[GridCoordinate, ...]:
     )
 
 
+def _part_lengths_from_word_counts(
+    words: tuple[str, ...],
+    counts: tuple[int, ...],
+) -> tuple[int, ...]:
+    lengths = []
+    offset = 0
+    for count in counts:
+        part_words = words[offset : offset + count]
+        offset += count
+        lengths.append(len(split_answer_letters("".join(part_words))))
+    return tuple(lengths)
+
+
+def _word_partitions(
+    words: tuple[str, ...],
+    available_lengths: frozenset[int],
+) -> tuple[tuple[tuple[int, ...], tuple[int, ...]], ...]:
+    results: list[tuple[tuple[int, ...], tuple[int, ...]]] = []
+
+    def search(
+        word_index: int,
+        lengths: tuple[int, ...],
+        counts: tuple[int, ...],
+    ) -> None:
+        if word_index == len(words):
+            results.append((lengths, counts))
+            return
+        for following_index in range(word_index + 1, len(words) + 1):
+            part = "".join(words[word_index:following_index])
+            length = len(split_answer_letters(part))
+            if length in available_lengths:
+                search(
+                    following_index,
+                    (*lengths, length),
+                    (*counts, following_index - word_index),
+                )
+
+    search(0, (), ())
+    return tuple(sorted(results, key=lambda partition: len(partition[0])))
+
+
+def _select_slots_for_lengths(
+    slots: list[WordSlot],
+    lengths: tuple[int, ...],
+) -> tuple[WordSlot, ...] | None:
+    selected: list[WordSlot] = []
+    used_identifiers: set[str] = set()
+    used_coordinates: set[GridCoordinate] = set()
+
+    def search(part_index: int) -> bool:
+        if part_index == len(lengths):
+            return True
+        for slot in slots:
+            if (
+                slot.identifier in used_identifiers
+                or slot.length != lengths[part_index]
+            ):
+                continue
+            coordinates = set(_slot_coordinates(slot))
+            if coordinates & used_coordinates:
+                continue
+            selected.append(slot)
+            used_identifiers.add(slot.identifier)
+            used_coordinates.update(coordinates)
+            if search(part_index + 1):
+                return True
+            used_coordinates.difference_update(coordinates)
+            used_identifiers.remove(slot.identifier)
+            selected.pop()
+        return False
+
+    return tuple(selected) if search(0) else None
+
+
+def _select_slots_for_total_length(
+    slots: list[WordSlot],
+    total_length: int,
+) -> tuple[WordSlot, ...] | None:
+    minimum_length = min(slot.length for slot in slots)
+    maximum_parts = min(len(slots), total_length // minimum_length)
+    for part_count in range(1, maximum_parts + 1):
+        selected: list[WordSlot] = []
+        used_coordinates: set[GridCoordinate] = set()
+
+        def search(start_index: int, remaining: int) -> bool:
+            if len(selected) == part_count:
+                return remaining == 0
+            if remaining <= 0:
+                return False
+            for slot_index in range(start_index, len(slots)):
+                slot = slots[slot_index]
+                if slot.length > remaining:
+                    continue
+                coordinates = set(_slot_coordinates(slot))
+                if coordinates & used_coordinates:
+                    continue
+                selected.append(slot)
+                used_coordinates.update(coordinates)
+                if search(slot_index + 1, remaining - slot.length):
+                    return True
+                used_coordinates.difference_update(coordinates)
+                selected.pop()
+            return False
+
+        if search(0, total_length):
+            return tuple(selected)
+    return None
+
+
+def place_secret_in_template(
+    template: CrosswordTemplate,
+    requirement: SecretRequirement,
+    *,
+    seed: int = DEFAULT_SEED,
+) -> CrosswordTemplate:
+    """Rezervuje vhodné nepřekrývající se sloty pro jednu tajenku."""
+
+    if template.secrets:
+        raise GenerationError("šablona už obsahuje připravenou tajenku")
+    _validate_secret_requirement(requirement)
+    slots = list(template.slots)
+    random.Random(seed).shuffle(slots)
+
+    selected: tuple[WordSlot, ...] | None = None
+    word_counts: tuple[int, ...] = ()
+    if requirement.total_length is not None:
+        selected = _select_slots_for_total_length(
+            slots,
+            requirement.total_length,
+        )
+    elif requirement.part_lengths:
+        selected = _select_slots_for_lengths(slots, requirement.part_lengths)
+    elif requirement.part_word_counts:
+        lengths = _part_lengths_from_word_counts(
+            requirement.words,
+            requirement.part_word_counts,
+        )
+        selected = _select_slots_for_lengths(slots, lengths)
+        word_counts = requirement.part_word_counts
+    else:
+        available_lengths = frozenset(slot.length for slot in slots)
+        for lengths, counts in _word_partitions(
+            requirement.words,
+            available_lengths,
+        ):
+            selected = _select_slots_for_lengths(slots, lengths)
+            if selected is not None:
+                word_counts = counts
+                break
+
+    if selected is None:
+        raise GenerationError(
+            "v šabloně nelze pro požadovanou tajenku najít "
+            "vhodné nepřekrývající se sloty"
+        )
+    parts = tuple(
+        TemplateSecretPart(
+            slot_identifier=slot.identifier,
+            word_count=(word_counts[index] if word_counts else None),
+        )
+        for index, slot in enumerate(selected)
+    )
+    return replace(
+        template,
+        secrets=(
+            TemplateSecret(
+                parts=parts,
+                words=requirement.words,
+                prompt=requirement.prompt,
+            ),
+        ),
+    )
+
+
+def _word_counts_for_exact_lengths(
+    words: tuple[str, ...],
+    lengths: tuple[int, ...],
+) -> tuple[int, ...] | None:
+    for partition_lengths, counts in _word_partitions(
+        words,
+        frozenset(lengths),
+    ):
+        if partition_lengths == lengths:
+            return counts
+    return None
+
+
+def _resolve_template_secrets(
+    template: CrosswordTemplate,
+    requirement: SecretRequirement | None,
+    seed: int,
+) -> CrosswordTemplate:
+    unknown_indices = tuple(
+        index
+        for index, secret in enumerate(template.secrets)
+        if not secret.words
+    )
+    if requirement is None:
+        if unknown_indices:
+            raise GenerationError(
+                "šablona rezervuje tajenku bez známého znění; "
+                "při plnění je nutné zadat konkrétní tajenku"
+            )
+        return template
+
+    _validate_secret_requirement(requirement)
+    if not requirement.words:
+        raise GenerationError(
+            "při plnění je nutné zadat konkrétní slova tajenky"
+        )
+    if not template.secrets:
+        return place_secret_in_template(template, requirement, seed=seed)
+    if not unknown_indices:
+        raise GenerationError("šablona už obsahuje konkrétní tajenku")
+    if len(unknown_indices) > 1:
+        raise GenerationError(
+            "šablona obsahuje více neznámých tajenek; "
+            "jedním zadáním je nelze jednoznačně doplnit"
+        )
+
+    secret_index = unknown_indices[0]
+    reserved = template.secrets[secret_index]
+    slots_by_identifier = {slot.identifier: slot for slot in template.slots}
+    lengths = tuple(
+        slots_by_identifier[part.slot_identifier].length
+        for part in reserved.parts
+    )
+    if requirement.part_word_counts:
+        counts = requirement.part_word_counts
+        if _part_lengths_from_word_counts(requirement.words, counts) != lengths:
+            raise GenerationError(
+                "pevné rozdělení tajenky neodpovídá délkám "
+                "připravených slotů"
+            )
+    else:
+        counts = _word_counts_for_exact_lengths(requirement.words, lengths)
+        if counts is None:
+            raise GenerationError(
+                "tajenku nelze rozdělit na hranicích slov podle délek "
+                "připravených slotů"
+            )
+
+    secrets = list(template.secrets)
+    secrets[secret_index] = TemplateSecret(
+        parts=tuple(
+            TemplateSecretPart(
+                slot_identifier=part.slot_identifier,
+                word_count=counts[index],
+            )
+            for index, part in enumerate(reserved.parts)
+        ),
+        words=requirement.words,
+        prompt=requirement.prompt or reserved.prompt,
+    )
+    return replace(template, secrets=tuple(secrets))
+
+
+def _secret_assignments(
+    template: CrosswordTemplate,
+) -> tuple[dict[str, _Entry], frozenset[str], tuple[SecretPrompt, ...]]:
+    assignments = {}
+    secret_slot_identifiers = set()
+    prompts = []
+    for secret in template.secrets:
+        word_offset = 0
+        multipart = len(secret.parts) > 1
+        for part_index, part in enumerate(secret.parts):
+            assert part.word_count is not None
+            part_words = secret.words[
+                word_offset : word_offset + part.word_count
+            ]
+            word_offset += part.word_count
+            answer = "".join(part_words)
+            clue = (
+                DEFAULT_SECRET_PART_LEGEND.format(number=part_index + 1)
+                if multipart
+                else DEFAULT_SECRET_LEGEND
+            )
+            assignments[part.slot_identifier] = _Entry(
+                answer=answer,
+                clue=clue,
+                letters=split_answer_letters(answer),
+            )
+            secret_slot_identifiers.add(part.slot_identifier)
+        if secret.prompt is not None:
+            prompts.append(secret.prompt)
+    return assignments, frozenset(secret_slot_identifiers), tuple(prompts)
+
+
 def _fill_template_slots(
     template: CrosswordTemplate,
     entries_by_length: dict[int, tuple[_Entry, ...]],
     randomizer: random.Random,
+    fixed_assignments: dict[str, _Entry] | None = None,
 ) -> dict[str, _Entry]:
     candidates_by_length = {
         length: list(entries)
@@ -187,10 +563,23 @@ def _fill_template_slots(
     coordinates = {
         slot.identifier: _slot_coordinates(slot) for slot in template.slots
     }
-    assigned: dict[str, _Entry] = {}
+    assigned: dict[str, _Entry] = dict(fixed_assignments or {})
     letters: dict[GridCoordinate, str] = {}
-    used_answers: set[str] = set()
+    used_answers: set[str] = {
+        entry.answer for entry in assigned.values()
+    }
     search_nodes = 0
+
+    slots_by_identifier = {slot.identifier: slot for slot in template.slots}
+    for identifier, entry in assigned.items():
+        slot = slots_by_identifier[identifier]
+        if len(entry.letters) != slot.length:
+            raise _SearchFailed
+        for coordinate, letter in zip(_slot_coordinates(slot), entry.letters):
+            previous = letters.get(coordinate)
+            if previous is not None and previous != letter:
+                raise _SearchFailed
+            letters[coordinate] = letter
 
     def compatible_entries(slot: WordSlot) -> list[_Entry]:
         slot_coordinates = coordinates[slot.identifier]
@@ -259,6 +648,8 @@ def _fill_template_slots(
 def _filled_template_grid(
     template: CrosswordTemplate,
     assignments: dict[str, _Entry],
+    secret_slot_identifiers: frozenset[str] = frozenset(),
+    secret_prompts: tuple[SecretPrompt, ...] = (),
 ) -> CrosswordGrid:
     letters: dict[GridCoordinate, str] = {}
     slots_by_legend: dict[GridCoordinate, list[tuple[WordSlot, _Entry]]] = (
@@ -266,6 +657,12 @@ def _filled_template_grid(
     )
     external_slots = []
     bars: dict[GridCoordinate, set[str]] = defaultdict(set)
+    secret_coordinates = {
+        coordinate
+        for slot in template.slots
+        if slot.identifier in secret_slot_identifiers
+        for coordinate in _slot_coordinates(slot)
+    }
 
     for slot in template.slots:
         entry = assignments[slot.identifier]
@@ -340,8 +737,13 @@ def _filled_template_grid(
                 )
             else:
                 cell_bars = bars.get(coordinate, set())
+                cell_type = (
+                    SecretCell
+                    if coordinate in secret_coordinates
+                    else LetterCell
+                )
                 row.append(
-                    LetterCell(
+                    cell_type(
                         value=letters[coordinate],
                         number=numbers.get(coordinate),
                         bars=tuple(
@@ -363,6 +765,7 @@ def _filled_template_grid(
             cells=tuple(cells),
         ),
         clues=clues,
+        secret_prompts=secret_prompts,
     )
 
 
@@ -371,11 +774,20 @@ def fill_crossword_template(
     dictionary: CrosswordDictionary,
     *,
     seed: int = DEFAULT_SEED,
+    secret: SecretRequirement | None = None,
 ) -> CrosswordGrid:
     """Vyplní všechny sloty šablony různými hesly ze slovníku."""
 
+    template = _resolve_template_secrets(template, secret, seed)
+    fixed_assignments, secret_slot_identifiers, secret_prompts = (
+        _secret_assignments(template)
+    )
     entries_by_length = _usable_entries(dictionary)
-    required_lengths = {slot.length for slot in template.slots}
+    required_lengths = {
+        slot.length
+        for slot in template.slots
+        if slot.identifier not in secret_slot_identifiers
+    }
     missing_lengths = sorted(required_lengths - entries_by_length.keys())
     if missing_lengths:
         missing = ", ".join(str(length) for length in missing_lengths)
@@ -390,8 +802,14 @@ def fill_crossword_template(
                 template,
                 entries_by_length,
                 random.Random(attempt_seed),
+                fixed_assignments,
             )
-            return _filled_template_grid(template, assignments)
+            return _filled_template_grid(
+                template,
+                assignments,
+                secret_slot_identifiers,
+                secret_prompts,
+            )
         except _SearchFailed:
             continue
 
