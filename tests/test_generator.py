@@ -319,6 +319,33 @@ class GeneratorTest(unittest.TestCase):
         self.assertFalse(first.clues)
         self.assertFalse(check_crossword_grid(first).warnings)
 
+    def test_generates_complete_grid_with_fixed_secret(self) -> None:
+        prompt = SecretPrompt(text="Doplňte tajenku", placement="below")
+
+        crossword = generate_swedish_grid(
+            TEST_DICTIONARY,
+            width=5,
+            height=5,
+            seed=42,
+            secret=SecretRequirement(
+                words=("ABCD",),
+                part_word_counts=(1,),
+                prompt=prompt,
+            ),
+        )
+
+        assert crossword.grid.cells is not None
+        secret_cells = tuple(
+            cell
+            for row in crossword.grid.cells
+            for cell in row
+            if isinstance(cell, SecretCell)
+        )
+        self.assertEqual(4, len(secret_cells))
+        self.assertEqual("ABCD", "".join(cell.value for cell in secret_cells))
+        self.assertEqual((prompt,), crossword.secret_prompts)
+        self.assertFalse(check_crossword_grid(crossword).warnings)
+
     def test_fills_external_slots_with_numbers_clues_and_bar(self) -> None:
         template = CrosswordTemplate(
             format_name="krizovkar",
@@ -506,8 +533,14 @@ class GeneratorTest(unittest.TestCase):
     def test_generates_deterministic_dense_grid(self) -> None:
         first = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=42)
         second = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=42)
+        composed = fill_crossword_template(
+            generate_swedish_template(width=9, height=9),
+            TEST_DICTIONARY,
+            seed=42,
+        )
 
         self.assertEqual(first, second)
+        self.assertEqual(first, composed)
         self.assertEqual(9, first.grid.width)
         self.assertEqual(9, first.grid.height)
         assert first.grid.cells is not None

@@ -1279,6 +1279,54 @@ class ModelTest(unittest.TestCase):
 
 
 class CommandTest(unittest.TestCase):
+    def test_generate_creates_complete_grid_with_secret(self) -> None:
+        answers = tuple(
+            "".join(letters) for letters in product("ABCD", repeat=4)
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            dictionary = Path(directory) / "dictionary.json"
+            output = Path(directory) / "grid.yaml"
+            dictionary.write_text(
+                json.dumps(
+                    {
+                        answer: [f"Legenda {answer}"]
+                        for answer in answers
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(io.StringIO()):
+                result = main(
+                    [
+                        "generate",
+                        str(dictionary),
+                        "--output",
+                        str(output),
+                        "--width",
+                        "5",
+                        "--height",
+                        "5",
+                        "--secret",
+                        "ABCD",
+                        "--secret-prompt",
+                        "Doplňte tajenku",
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            crossword = load_crossword_grid(output)
+            assert crossword.grid.cells is not None
+            self.assertEqual(
+                4,
+                sum(
+                    isinstance(cell, SecretCell)
+                    for row in crossword.grid.cells
+                    for cell in row
+                ),
+            )
+            self.assertEqual("Doplňte tajenku", crossword.secret_prompts[0].text)
+
     def test_template_reserves_known_secret_and_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "template.yaml"

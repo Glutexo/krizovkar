@@ -127,10 +127,11 @@ def _parser() -> argparse.ArgumentParser:
 
     generate = commands.add_parser(
         "generate",
-        help="pokusně vytvoří švédskou mřížku z JSON slovníku",
+        help="vytvoří vyplněnou švédskou mřížku z JSON slovníku",
         description=(
-            "Vybere a propojí hesla z JSON slovníku a zapíše cílovou mřížku "
-            "ve formátu YAML."
+            "Vytvoří šablonu, volitelně do ní umístí konkrétní tajenku, "
+            "vybere křížící se hesla z JSON slovníku a zapíše cílovou "
+            "mřížku ve formátu YAML."
         ),
     )
     generate.add_argument("source", type=Path, metavar="SLOVNÍK.json")
@@ -163,6 +164,7 @@ def _parser() -> argparse.ArgumentParser:
         metavar="ČÍSLO",
         help=f"seed náhodných voleb; výchozí je {DEFAULT_SEED}",
     )
+    _add_secret_arguments(generate, allow_lengths=False)
     generate.add_argument(
         "--force",
         action="store_true",
@@ -393,12 +395,14 @@ def _fill(arguments: argparse.Namespace) -> int:
 
 def _generate(arguments: argparse.Namespace) -> int:
     try:
+        secret = _secret_requirement(arguments)
         dictionary = load_dictionary(arguments.source)
         crossword = generate_swedish_grid(
             dictionary,
             width=arguments.width,
             height=arguments.height,
             seed=arguments.seed,
+            secret=secret,
         )
         write_crossword_grid(
             crossword,

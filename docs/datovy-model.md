@@ -74,6 +74,8 @@ Příkaz `fill` přijímá libovolnou platnou šablonu a slovník. Pomocí zpět
 
 Vepsané legendy převezmou texty přiřazených hesel. Sloty bez souřadnice `legend` se převedou na číslovaná hesla s vnějšími legendami; společný začátek vodorovného a svislého slotu sdílí jedno číslo. Seed určuje pořadí kandidátů a zachovává opakovatelnost výsledku.
 
+Příkaz `generate` je zkratka nad stejnými dvěma kroky: nejprve vytvoří hustou švédskou šablonu a potom ji naplní zadaným slovníkem. Přijímá konkrétní tajenku s automatickým nebo pevným dělením; požadavek obsahující jen délku lze uchovat pouze v šabloně, protože k vytvoření cílové mřížky chybějí písmena.
+
 ## Cílová mřížka, verze 1
 
 Cílová mřížka popisuje obdélníkový rozměr a případný obsah buněk:

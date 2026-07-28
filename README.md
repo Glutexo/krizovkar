@@ -29,7 +29,7 @@ Křížovkář rozlišuje tři samostatné druhy YAML dokumentů:
 ```text
 specification → návrh rozložení (budoucí) → template
 template + slovník → fill → grid → render → PDF
-slovník → experimentální generátor → grid → render → PDF
+požadavky + slovník → generate (= template + fill) → grid
 ```
 
 Nejmenší platná cílová mřížka zatím určuje pouze rozměr:
@@ -226,7 +226,7 @@ Generátor přijímá slovník jako JSON objekt. Klíčem je heslo složené z p
 }
 ```
 
-Pokusnou mřížku lze vytvořit a následně vykreslit:
+Vyplněnou mřížku lze vytvořit jedním příkazem a následně vykreslit:
 
 ```shell
 uv run krizovkar generate slovnik.json \
@@ -238,11 +238,24 @@ uv run krizovkar render build/generated-grid.yaml \
   --output build/generated-grid.pdf
 ```
 
+`generate` skládá stejné operace jako samostatné `template` a `fill`. Konkrétní tajenku může vložit rovnou; samotná délka bez odpovědi je určená jen pro uložení šablony:
+
+```shell
+uv run krizovkar generate slovnik.json \
+  --width 15 \
+  --height 10 \
+  --secret ZELENÍ \
+  --secret-prompt 'Lidové rčení: „Komu se nelení, tomu se …“' \
+  --output build/generated-secret-grid.yaml
+```
+
+Automatické dělení víceslovné tajenky používá `--secret`; pevné rozdělení vznikne opakováním `--secret-part`.
+
 Stejný slovník, rozměr a seed vytvoří stejnou mřížku. Generátor rozdělí plochu legendovými řádky a sloupci na písmenné obdélníky a všechny je vyplní platnými křížícími se hesly. Každá písmenná buňka proto patří jednomu vodorovnému i jednomu svislému výrazu; prázdné zůstávají pouze průsečíky legendových řádků a sloupců.
 
-Současný experiment vyplňuje každý takový obdélník samostatně. Pokud jich vznikne více, kvalitativní validace upozorní, že výsledná slova tvoří oddělené ostrovy; propojení bloků bude úkolem další verze generátoru.
+Pokud maska obsahuje více písmenných obdélníků oddělených legendovými osami, jejich hesla se navzájem nekříží. Kvalitativní validace proto upozorní, že výsledná slova tvoří oddělené ostrovy; propojení bloků bude úkolem další verze generátoru.
 
-Legendy pokrývají horní a levou stranu každého písmenného bloku. Na horním okraji chybí legenda jen ve sloupci s dalšími vnitřními legendami a na levém okraji jen v řádku s dalšími vnitřními legendami. Každá legenda má jediný text a právě jeden možný směr navazujícího hesla, takže nepotřebuje šipku. První experimentální verze zatím nevytváří tajenku ani pomůcku a nehodnotí jazykovou kvalitu hesel. Zdrojový slovník není součástí projektu; uživatel musí mít právo jeho obsah použít.
+Legendy pokrývají horní a levou stranu každého písmenného bloku. Na horním okraji chybí legenda jen ve sloupci s dalšími vnitřními legendami a na levém okraji jen v řádku s dalšími vnitřními legendami. Každá legenda má jediný text a právě jeden možný směr navazujícího hesla, takže nepotřebuje šipku. První experimentální verze zatím nevytváří pomůcku a nehodnotí jazykovou kvalitu hesel. Zdrojový slovník není součástí projektu; uživatel musí mít právo jeho obsah použít.
 
 ## Validace
 
