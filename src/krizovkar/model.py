@@ -291,6 +291,7 @@ class SecretParts:
 
 
 SecretDefinition = SecretPart | SecretParts
+YamlSource = str | Path | TextIO
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,31 +315,50 @@ def _validator(schema_name: str) -> Draft202012Validator:
     return Draft202012Validator(schema)
 
 
-def _yaml_data(source: Path) -> Any:
+def _source_description(source: YamlSource) -> str:
+    if isinstance(source, (str, Path)):
+        return str(Path(source))
+    return "standardní vstup"
+
+
+def _yaml_data(source: YamlSource) -> Any:
     yaml = YAML(typ="safe", pure=True)
     yaml.version = (1, 2)
     yaml.allow_duplicate_keys = False
+    description = _source_description(source)
+    is_file = isinstance(source, (str, Path))
 
     try:
-        with source.open(encoding="utf-8") as stream:
-            return yaml.load(stream)
+        if isinstance(source, (str, Path)):
+            with Path(source).open(encoding="utf-8") as stream:
+                return yaml.load(stream)
+        return yaml.load(source)
     except OSError as error:
+        subject = (
+            f"vstupní soubor ({description})"
+            if is_file
+            else "standardní vstup"
+        )
         raise ModelError(
-            f"vstupní soubor nelze načíst ({source}): "
-            f"{system_error_message(error)}"
+            f"{subject} nelze načíst: {system_error_message(error)}"
         ) from error
     except UnicodeError as error:
+        subject = (
+            f"vstupní soubor ({description})"
+            if is_file
+            else "standardní vstup"
+        )
         raise ModelError(
-            f"vstupní soubor není platný text v UTF-8 ({source})"
+            f"{subject} není platný text v UTF-8"
         ) from error
     except DuplicateKeyError as error:
         raise ModelError(
-            f"neplatný YAML ({source}{_yaml_error_location(error)}): "
+            f"neplatný YAML ({description}{_yaml_error_location(error)}): "
             "duplicitní klíč"
         ) from error
     except YAMLError as error:
         raise ModelError(
-            f"neplatný YAML ({source}{_yaml_error_location(error)}): "
+            f"neplatný YAML ({description}{_yaml_error_location(error)}): "
             "syntaktická chyba"
         ) from error
 
@@ -450,7 +470,10 @@ def _schema_validation_message(error: ValidationError) -> str:
     return f"hodnota neodpovídá pravidlu {validator!r}"
 
 
-def _validated_data(source: Path, schema_name: str) -> dict[str, Any]:
+def _validated_data(
+    source: YamlSource,
+    schema_name: str,
+) -> dict[str, Any]:
     data = _yaml_data(source)
     errors = sorted(
         _validator(schema_name).iter_errors(data),
@@ -533,11 +556,10 @@ def _optional_secret_prompt(data: dict[str, Any]) -> SecretPrompt | None:
     return _secret_prompt(raw_prompt) if raw_prompt is not None else None
 
 
-def load_crossword_grid(source: str | Path) -> CrosswordGrid:
-    """Načte a ověří YAML s cílovou křížovkovou mřížkou."""
+def load_crossword_grid(source: YamlSource) -> CrosswordGrid:
+    """Načte a ověří cílovou mřížku ze souboru nebo proudu YAML."""
 
-    source_path = Path(source)
-    data = _validated_data(source_path, "grid-v1.schema.json")
+    data = _validated_data(source, "grid-v1.schema.json")
     raw_grid = data["grid"]
     grid = Grid(
         width=raw_grid["width"],
@@ -566,11 +588,10 @@ def load_crossword_grid(source: str | Path) -> CrosswordGrid:
     )
 
 
-def load_crossword_document_kind(source: str | Path) -> str:
-    """Načte kořenový klíč ``kind`` pro volbu správného loaderu."""
+def load_crossword_document_kind(source: YamlSource) -> str:
+    """Načte kořenový klíč ``kind`` ze souboru nebo proudu YAML."""
 
-    source_path = Path(source)
-    data = _yaml_data(source_path)
+    data = _yaml_data(source)
     if not isinstance(data, dict):
         raise ModelError("neplatný datový model: $: očekává se objekt")
     if "kind" not in data:
@@ -616,11 +637,10 @@ def _template_cells(
     return tuple(rows)
 
 
-def load_crossword_template(source: str | Path) -> CrosswordTemplate:
-    """Načte a ověří YAML se strukturální šablonou křížovky."""
+def load_crossword_template(source: YamlSource) -> CrosswordTemplate:
+    """Načte a ověří šablonu křížovky ze souboru nebo proudu YAML."""
 
-    source_path = Path(source)
-    data = _validated_data(source_path, "template-v1.schema.json")
+    data = _validated_data(source, "template-v1.schema.json")
     raw_grid = data["grid"]
     template = CrosswordTemplate(
         format_name=data["format"],
@@ -953,12 +973,11 @@ def _validate_grid_annotations(
 
 
 def load_crossword_specification(
-    source: str | Path,
+    source: YamlSource,
 ) -> CrosswordSpecification:
-    """Načte a ověří YAML se zadáním křížovky."""
+    """Načte a ověří zadání křížovky ze souboru nebo proudu YAML."""
 
-    source_path = Path(source)
-    data = _validated_data(source_path, "specification-v1.schema.json")
+    data = _validated_data(source, "specification-v1.schema.json")
     raw_grid = data.get("grid")
     if raw_grid is None:
         return CrosswordSpecification(

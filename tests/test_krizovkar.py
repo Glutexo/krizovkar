@@ -9,6 +9,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from itertools import product
 from pathlib import Path
+from unittest.mock import patch
 
 from reportlab.lib.pagesizes import A5
 
@@ -1440,6 +1441,22 @@ class CommandTest(unittest.TestCase):
         self.assertIn("soubor nebo adresář neexistuje", error_text)
         self.assertNotIn("No such file or directory", error_text)
 
+    def test_validate_reads_grid_from_stdin(self) -> None:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        grid_yaml = GRID_MINIMAL_EXAMPLE.read_text(encoding="utf-8")
+
+        with (
+            patch("sys.stdin", io.StringIO(grid_yaml)),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            result = main(["validate", "-"])
+
+        self.assertEqual(0, result)
+        self.assertIn("standardní vstup", stdout.getvalue())
+        self.assertIn("varování [grid.unfinished]", stderr.getvalue())
+
     def test_template_writes_yaml_to_stdout_without_output(self) -> None:
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -1494,6 +1511,96 @@ class CommandTest(unittest.TestCase):
         )
         self.assertEqual(1, crossword.grid.cells[0][0].number)
         self.assertEqual(1, len(crossword.secret_prompts))
+
+    def test_pipes_template_through_grid_to_pdf(self) -> None:
+        template_stdout = io.StringIO()
+        template_stderr = io.StringIO()
+        with redirect_stdout(template_stdout), redirect_stderr(template_stderr):
+            template_result = main(
+                ["template", "--width", "5", "--height", "5"]
+            )
+
+        grid_stdout = io.StringIO()
+        grid_stderr = io.StringIO()
+        with (
+            patch("sys.stdin", io.StringIO(template_stdout.getvalue())),
+            redirect_stdout(grid_stdout),
+            redirect_stderr(grid_stderr),
+        ):
+            grid_result = main(["grid", "-"])
+
+        pdf_stdout = _BinaryStdout()
+        render_stderr = io.StringIO()
+        with (
+            patch("sys.stdin", io.StringIO(grid_stdout.getvalue())),
+            redirect_stdout(pdf_stdout),
+            redirect_stderr(render_stderr),
+        ):
+            render_result = main(["render", "-"])
+
+        self.assertEqual(0, template_result)
+        self.assertEqual(0, grid_result)
+        self.assertEqual(0, render_result)
+        self.assertTrue(pdf_stdout.buffer.getvalue().startswith(b"%PDF-"))
+        self.assertIn("standardní výstup", template_stderr.getvalue())
+        self.assertIn("standardní výstup", grid_stderr.getvalue())
+        self.assertIn("standardní výstup", render_stderr.getvalue())
+
+    def test_render_reads_template_directly_from_stdin(self) -> None:
+        stdout = _BinaryStdout()
+        stderr = io.StringIO()
+        template_yaml = TEMPLATE_SECRET_EXAMPLE.read_text(encoding="utf-8")
+
+        with (
+            patch("sys.stdin", io.StringIO(template_yaml)),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            result = main(["render", "-"])
+
+        self.assertEqual(0, result)
+        self.assertTrue(stdout.buffer.getvalue().startswith(b"%PDF-"))
+        self.assertIn("PDF vytvořeno: standardní výstup", stderr.getvalue())
+
+    def test_fill_accepts_stdin_for_either_input(self) -> None:
+        template_yaml = TEMPLATE_SECRET_EXAMPLE.read_text(encoding="utf-8")
+        dictionary_json = json.dumps(
+            {"LES": ["Porost stromů"]},
+            ensure_ascii=False,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            dictionary = Path(directory) / "dictionary.json"
+            dictionary.write_text(dictionary_json, encoding="utf-8")
+            cases = (
+                (["fill", "-", str(dictionary)], template_yaml),
+                (["fill", str(TEMPLATE_SECRET_EXAMPLE), "-"], dictionary_json),
+            )
+            for arguments, standard_input in cases:
+                with self.subTest(arguments=arguments):
+                    stdout = io.StringIO()
+                    stderr = io.StringIO()
+                    with (
+                        patch("sys.stdin", io.StringIO(standard_input)),
+                        redirect_stdout(stdout),
+                        redirect_stderr(stderr),
+                    ):
+                        result = main(arguments)
+
+                    self.assertEqual(0, result)
+                    self.assertTrue(
+                        stdout.getvalue().startswith("format: krizovkar\n")
+                    )
+
+    def test_fill_rejects_stdin_for_both_inputs(self) -> None:
+        stderr = io.StringIO()
+        with (
+            patch("sys.stdin", io.StringIO()),
+            redirect_stderr(stderr),
+        ):
+            result = main(["fill", "-", "-"])
+
+        self.assertEqual(2, result)
+        self.assertIn("zároveň pro šablonu i slovník", stderr.getvalue())
 
     def test_fill_writes_yaml_to_stdout_without_output(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1569,6 +1676,28 @@ class CommandTest(unittest.TestCase):
             crossword = load_crossword_grid(source)
             self.assertEqual(5, crossword.grid.width)
             self.assertEqual(5, crossword.grid.height)
+
+    def test_generate_reads_dictionary_from_stdin(self) -> None:
+        answers = tuple(
+            "".join(letters) for letters in product("ABCD", repeat=4)
+        )
+        dictionary_json = json.dumps(
+            {answer: [f"Legenda {answer}"] for answer in answers}
+        )
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with (
+            patch("sys.stdin", io.StringIO(dictionary_json)),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            result = main(
+                ["generate", "-", "--width", "5", "--height", "5"]
+            )
+
+        self.assertEqual(0, result)
+        self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
 
     def test_generate_creates_complete_grid_with_secret(self) -> None:
         answers = tuple(

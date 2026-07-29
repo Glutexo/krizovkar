@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TextIO
 
 from krizovkar.model import (
     CrosswordGrid,
@@ -270,8 +270,10 @@ def check_crossword_grid(crossword: CrosswordGrid) -> ValidationReport:
     return ValidationReport(tuple(issues))
 
 
-def validate_crossword_grid_file(source: str | Path) -> ValidationReport:
-    """Ověří datový model souboru a poté neblokujícím způsobem jeho kvalitu."""
+def validate_crossword_grid_file(
+    source: str | Path | TextIO,
+) -> ValidationReport:
+    """Ověří datový model ze souboru nebo proudu a posoudí jeho kvalitu."""
 
     try:
         crossword = load_crossword_grid(source)
@@ -295,7 +297,9 @@ def check_dense_swedish_grid(crossword: CrosswordGrid) -> ValidationReport:
     return check_crossword_grid(crossword)
 
 
-def validate_dense_swedish_grid_file(source: str | Path) -> ValidationReport:
+def validate_dense_swedish_grid_file(
+    source: str | Path | TextIO,
+) -> ValidationReport:
     """Zachová původní veřejný název obecné kontroly souboru."""
 
     return validate_crossword_grid_file(source)

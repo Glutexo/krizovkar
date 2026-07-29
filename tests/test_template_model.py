@@ -50,6 +50,20 @@ class TemplateModelTest(unittest.TestCase):
             write_crossword_template(template, output)
             self.assertEqual(template, load_crossword_template(output))
 
+    def test_loads_template_from_text_stream(self) -> None:
+        template = load_crossword_template(
+            StringIO(TEMPLATE_MINIMAL_EXAMPLE.read_text(encoding="utf-8"))
+        )
+
+        self.assertEqual("template", template.kind)
+        self.assertEqual(3, template.grid.width)
+
+    def test_stream_error_names_standard_input(self) -> None:
+        with self.assertRaises(ModelError) as caught:
+            load_crossword_template(StringIO("{"))
+
+        self.assertIn("standardní vstup", str(caught.exception))
+
     def test_dumps_template_to_text_stream(self) -> None:
         template = load_crossword_template(TEMPLATE_MINIMAL_EXAMPLE)
         output = StringIO()

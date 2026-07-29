@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from io import StringIO
 from pathlib import Path
 
 from krizovkar.dictionary import DictionaryError, load_dictionary
@@ -30,6 +31,18 @@ class DictionaryTest(unittest.TestCase):
             tuple(entry.answer for entry in dictionary.entries),
         )
         self.assertEqual(("Vodní tok", "Říčka"), dictionary.entries[1].clues)
+
+    def test_loads_dictionary_from_text_stream(self) -> None:
+        dictionary = load_dictionary(StringIO('{"LES": ["Porost stromů"]}'))
+
+        self.assertEqual(1, len(dictionary))
+        self.assertEqual("LES", dictionary.entries[0].answer)
+
+    def test_stream_error_names_standard_input(self) -> None:
+        with self.assertRaises(DictionaryError) as caught:
+            load_dictionary(StringIO("{"))
+
+        self.assertIn("standardní vstup", str(caught.exception))
 
     def test_rejects_invalid_json(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

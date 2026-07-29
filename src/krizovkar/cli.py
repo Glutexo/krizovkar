@@ -6,8 +6,9 @@ import argparse
 import re
 import sys
 from collections.abc import Sequence
+from io import StringIO
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, TextIO
 
 from krizovkar.dictionary import DictionaryError, load_dictionary
 from krizovkar.generator import (
@@ -24,6 +25,7 @@ from krizovkar.generator import (
     generate_swedish_template,
     normalize_secret_text,
 )
+from krizovkar.localization import system_error_message
 from krizovkar.model import (
     LegendCell,
     ModelError,
@@ -48,6 +50,7 @@ from krizovkar.validation import validate_crossword_grid_file
 
 LAYOUT_CHOICES = ("swedish", "numbered")
 DEFAULT_LAYOUT = "swedish"
+STANDARD_INPUT_PATH = Path("-")
 
 
 class _CzechHelpFormatter(argparse.HelpFormatter):
@@ -210,7 +213,7 @@ def _parser() -> argparse.ArgumentParser:
         "template",
         type=Path,
         metavar="ŠABLONA.yaml",
-        help="vstupní YAML šablona křížovky",
+        help="vstupní YAML šablona křížovky; - znamená standardní vstup",
     )
     grid.add_argument(
         "-o",
@@ -238,13 +241,13 @@ def _parser() -> argparse.ArgumentParser:
         "template",
         type=Path,
         metavar="ŠABLONA.yaml",
-        help="vstupní YAML šablona křížovky",
+        help="vstupní YAML šablona křížovky; - znamená standardní vstup",
     )
     fill.add_argument(
         "dictionary",
         type=Path,
         metavar="SLOVNÍK.json",
-        help="vstupní JSON slovník hesel a legend",
+        help="vstupní JSON slovník; - znamená standardní vstup",
     )
     fill.add_argument(
         "-o",
@@ -281,7 +284,7 @@ def _parser() -> argparse.ArgumentParser:
         "source",
         type=Path,
         metavar="SLOVNÍK.json",
-        help="vstupní JSON slovník hesel a legend",
+        help="vstupní JSON slovník; - znamená standardní vstup",
     )
     generate.add_argument(
         "-o",
@@ -332,7 +335,7 @@ def _parser() -> argparse.ArgumentParser:
         "source",
         type=Path,
         metavar="MŘÍŽKA.yaml",
-        help="vstupní YAML cílové mřížky",
+        help="vstupní YAML cílové mřížky; - znamená standardní vstup",
     )
     validate.set_defaults(handler=_validate)
 
@@ -348,7 +351,10 @@ def _parser() -> argparse.ArgumentParser:
         "source",
         type=Path,
         metavar="VSTUP.yaml",
-        help="vstupní YAML cílové mřížky nebo šablony",
+        help=(
+            "vstupní YAML cílové mřížky nebo šablony; "
+            "- znamená standardní vstup"
+        ),
     )
     render.add_argument(
         "-o",
@@ -518,6 +524,34 @@ def _output_description(output: Path | None) -> str:
     return str(output) if output is not None else "standardní výstup"
 
 
+def _input_source(source: Path) -> Path | TextIO:
+    if source == STANDARD_INPUT_PATH:
+        return sys.stdin
+    return source
+
+
+def _reusable_input_source(source: Path) -> Path | StringIO:
+    if source != STANDARD_INPUT_PATH:
+        return source
+    try:
+        return StringIO(sys.stdin.read())
+    except OSError as error:
+        raise ModelError(
+            "standardní vstup nelze načíst: "
+            f"{system_error_message(error)}"
+        ) from error
+    except UnicodeError as error:
+        raise ModelError(
+            "standardní vstup není platný text v UTF-8"
+        ) from error
+
+
+def _input_description(source: Path) -> str:
+    if source == STANDARD_INPUT_PATH:
+        return "standardní vstup"
+    return str(source)
+
+
 def _czech_count(
     count: int,
     singular: str,
@@ -582,7 +616,7 @@ def _template(arguments: argparse.Namespace) -> int:
 
 def _grid(arguments: argparse.Namespace) -> int:
     try:
-        template = load_crossword_template(arguments.template)
+        template = load_crossword_template(_input_source(arguments.template))
         crossword = create_grid_from_template(template)
         if arguments.output is None:
             dump_crossword_grid(crossword, sys.stdout)
@@ -608,9 +642,17 @@ def _grid(arguments: argparse.Namespace) -> int:
 
 def _fill(arguments: argparse.Namespace) -> int:
     try:
+        if (
+            arguments.template == STANDARD_INPUT_PATH
+            and arguments.dictionary == STANDARD_INPUT_PATH
+        ):
+            raise ModelError(
+                "standardní vstup nelze u příkazu fill použít zároveň "
+                "pro šablonu i slovník"
+            )
         secret = _secret_requirement(arguments)
-        template = load_crossword_template(arguments.template)
-        dictionary = load_dictionary(arguments.dictionary)
+        template = load_crossword_template(_input_source(arguments.template))
+        dictionary = load_dictionary(_input_source(arguments.dictionary))
         crossword = fill_crossword_template(
             template,
             dictionary,
@@ -641,7 +683,7 @@ def _fill(arguments: argparse.Namespace) -> int:
 def _generate(arguments: argparse.Namespace) -> int:
     try:
         secret = _secret_requirement(arguments)
-        dictionary = load_dictionary(arguments.source)
+        dictionary = load_dictionary(_input_source(arguments.source))
         generate_grid = (
             generate_numbered_grid
             if arguments.layout == "numbered"
@@ -684,11 +726,14 @@ def _generate(arguments: argparse.Namespace) -> int:
 
 def _render(arguments: argparse.Namespace) -> int:
     try:
-        document_kind = load_crossword_document_kind(arguments.source)
+        source = _reusable_input_source(arguments.source)
+        document_kind = load_crossword_document_kind(source)
+        if isinstance(source, StringIO):
+            source.seek(0)
         if document_kind == "grid":
-            crossword = load_crossword_grid(arguments.source)
+            crossword = load_crossword_grid(source)
         elif document_kind == "template":
-            template = load_crossword_template(arguments.source)
+            template = load_crossword_template(source)
             crossword = create_grid_from_template(template)
         else:
             raise ModelError(
@@ -722,7 +767,7 @@ def _render(arguments: argparse.Namespace) -> int:
 
 
 def _validate(arguments: argparse.Namespace) -> int:
-    report = validate_crossword_grid_file(arguments.source)
+    report = validate_crossword_grid_file(_input_source(arguments.source))
     for issue in report.issues:
         label = "chyba" if issue.severity == "error" else "varování"
         print(
@@ -735,11 +780,15 @@ def _validate(arguments: argparse.Namespace) -> int:
 
     if report.warnings:
         print(
-            f"Mřížka je formálně platná: {arguments.source} "
+            f"Mřížka je formálně platná: "
+            f"{_input_description(arguments.source)} "
             f"({len(report.warnings)} varování kvality)"
         )
     else:
-        print(f"Mřížka je platná a bez varování: {arguments.source}")
+        print(
+            "Mřížka je platná a bez varování: "
+            f"{_input_description(arguments.source)}"
+        )
     return 0
 
 

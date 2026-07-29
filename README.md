@@ -181,7 +181,7 @@ V PDF renderer doplní tučný nadpis „Pomůcka:“ a položky vypíše za ní
 
 Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-letters.yaml) obsahuje 15 × 10 běžných buněk. Minimální soubory jsou v příkladech [mřížky](examples/grid-minimal.yaml) a [zadání](examples/specification-minimal.yaml).
 
-## Výstup příkazů
+## Vstup a výstup příkazů
 
 Volba `-o` neboli `--output` je u příkazů `template`, `grid`, `fill`, `generate`
 a `render` nepovinná. Bez ní příkaz zapíše výsledný YAML nebo binární PDF na
@@ -195,6 +195,24 @@ uv run krizovkar render build/grid.yaml > build/grid.pdf
 ```
 
 Stavová hláška jde v tomto režimu na standardní chybový výstup a výsledná data neznečistí. Při zadaném `--output` se dál zapisuje atomicky do souboru, existující soubor se bez `--force` nepřepíše a stavová hláška se vypíše na standardní výstup.
+
+Místo vstupního souboru přijímají příkazy `grid`, `fill`, `generate`, `validate`
+a `render` také `-`, které znamená standardní vstup. U příkazu `fill` lze tímto
+způsobem načíst šablonu nebo slovník, ale ne oba vstupy současně. Výstupy lze
+díky tomu spojovat přímo rourou. Šablona se může vykreslit bez mezikroku:
+
+```shell
+uv run krizovkar template --width 15 --height 10 \
+  | uv run krizovkar render - > build/template.pdf
+```
+
+Nebo lze v rouře zachovat i samostatný převod na cílovou mřížku:
+
+```shell
+uv run krizovkar template --width 15 --height 10 \
+  | uv run krizovkar grid - \
+  | uv run krizovkar render - > build/unfilled-grid.pdf
+```
 
 ## Vytvoření šablony
 

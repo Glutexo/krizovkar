@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from krizovkar.alphabet import ANSWER_PATTERN
 from krizovkar.localization import system_error_message
@@ -42,30 +42,42 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def _json_data(source: Path) -> Any:
+DictionarySource = str | Path | TextIO
+
+
+def _source_description(source: DictionarySource) -> str:
+    if isinstance(source, (str, Path)):
+        return str(Path(source))
+    return "standardní vstup"
+
+
+def _json_data(source: DictionarySource) -> Any:
+    description = _source_description(source)
     try:
-        with source.open(encoding="utf-8") as stream:
-            return json.load(stream, object_pairs_hook=_unique_object)
+        if isinstance(source, (str, Path)):
+            with Path(source).open(encoding="utf-8") as stream:
+                return json.load(stream, object_pairs_hook=_unique_object)
+        return json.load(source, object_pairs_hook=_unique_object)
     except OSError as error:
         raise DictionaryError(
-            f"slovník nelze načíst ({source}): {system_error_message(error)}"
+            f"slovník nelze načíst ({description}): "
+            f"{system_error_message(error)}"
         ) from error
     except UnicodeError as error:
         raise DictionaryError(
-            f"slovník není platný text v UTF-8 ({source})"
+            f"slovník není platný text v UTF-8 ({description})"
         ) from error
     except json.JSONDecodeError as error:
         raise DictionaryError(
-            f"slovník není platný JSON ({source}, řádek {error.lineno}, "
+            f"slovník není platný JSON ({description}, řádek {error.lineno}, "
             f"sloupec {error.colno})"
         ) from error
 
 
-def load_dictionary(source: str | Path) -> CrosswordDictionary:
-    """Načte JSON objekt ``heslo → seznam legend`` a ověří jeho obsah."""
+def load_dictionary(source: DictionarySource) -> CrosswordDictionary:
+    """Načte JSON objekt ze souboru nebo proudu a ověří jeho obsah."""
 
-    source_path = Path(source)
-    data = _json_data(source_path)
+    data = _json_data(source)
     if not isinstance(data, dict):
         raise DictionaryError("slovník musí být JSON objekt")
     if not data:
