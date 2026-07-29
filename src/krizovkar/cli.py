@@ -674,7 +674,8 @@ def _fill(arguments: argparse.Namespace) -> int:
     _print_success(
         f"Mřížka vytvořena: {_output_description(arguments.output)} "
         f"({template.grid.width} × {template.grid.height}, "
-        f"{len(template.slots)} hesel, seed {arguments.seed})",
+        f"{_czech_count(len(template.slots), 'heslo', 'hesla', 'hesel')}, "
+        f"seed {arguments.seed})",
         arguments.output,
     )
     return 0
@@ -717,7 +718,8 @@ def _generate(arguments: argparse.Namespace) -> int:
     )
     _print_success(
         f"Mřížka vytvořena: {_output_description(arguments.output)} "
-        f"({arguments.width} × {arguments.height}, {word_count} hesel, "
+        f"({arguments.width} × {arguments.height}, "
+        f"{_czech_count(word_count, 'heslo', 'hesla', 'hesel')}, "
         f"seed {arguments.seed})",
         arguments.output,
     )

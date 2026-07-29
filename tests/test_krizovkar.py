@@ -1624,7 +1624,11 @@ class CommandTest(unittest.TestCase):
             self.assertEqual(0, result)
             self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
             self.assertNotIn("Mřížka vytvořena", stdout.getvalue())
-            self.assertIn("Mřížka vytvořena: standardní výstup", stderr.getvalue())
+            self.assertIn(
+                "Mřížka vytvořena: standardní výstup "
+                "(6 × 1, 1 heslo, seed 0)",
+                stderr.getvalue(),
+            )
             source = Path(directory) / "grid.yaml"
             source.write_text(stdout.getvalue(), encoding="utf-8")
             crossword = load_crossword_grid(source)
@@ -1668,7 +1672,8 @@ class CommandTest(unittest.TestCase):
             self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
             self.assertNotIn("Mřížka vytvořena", stdout.getvalue())
             self.assertIn(
-                "Mřížka vytvořena: standardní výstup",
+                "Mřížka vytvořena: standardní výstup "
+                "(5 × 5, 8 hesel, seed 0)",
                 stderr.getvalue(),
             )
             source = Path(directory) / "grid.yaml"
