@@ -4,7 +4,28 @@ Křížovkář je připravovaný otevřený nástroj pro tvorbu švédských, kl
 
 ## Stav projektu
 
-Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu, experimentální generátory švédské a číslované mřížky z JSON slovníku a vykreslení výsledku do PDF. Podoba editoru bude navržena v dalších změnách.
+Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu,
+experimentální generátory švédské a číslované mřížky z JSON slovníku,
+vykreslení výsledku do PDF a první krok grafického rozhraní. Podoba
+navazujících kroků editoru bude navržena v dalších změnách.
+
+## Grafické rozhraní
+
+První obrazovka zpřístupňuje začátek současného automatického postupu:
+vytvoření nevyplněné šablony. Spustí se samostatným příkazem:
+
+```shell
+uv run krizovkar-gui
+```
+
+V okně lze zvolit švédské nebo číslované rozvržení, zadat rozměr,
+zkontrolovat náhled rolí buněk a uložit šablonu do YAML. Uložený soubor používá
+stejný datový model jako CLI a lze jej rovnou předat příkazům `grid`, `fill` nebo
+`render`.
+
+GUI vyžaduje Python s podporou Tk 8.6 nebo novější. Modul `tkinter` je součástí
+standardní knihovny Pythonu, některé systémové distribuce jej ale instalují jako
+samostatný balíček.
 
 ## Zaměření
 

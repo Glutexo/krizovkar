@@ -19,6 +19,7 @@ dependencies = [
 
 [project.scripts]
 krizovkar = "krizovkar.cli:main"
+krizovkar-gui = "krizovkar.gui:main"
 
 [project.urls]
 Repository = "https://github.com/Glutexo/krizovkar"
