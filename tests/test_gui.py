@@ -11,21 +11,20 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from krizovkar.generator import GenerationError
 from krizovkar.gui import (
     GuiInputError,
-    TemplateSettings,
+    SpecificationSettings,
     _configure_tk_runtime,
-    create_template,
+    create_specification,
     main,
-    parse_template_settings,
+    parse_specification_settings,
+    parse_word_placement,
 )
 from krizovkar.model import (
-    TemplateEmptyCell,
-    TemplateLegendCell,
-    TemplateLetterCell,
-    load_crossword_template,
-    write_crossword_template,
+    Coordinate,
+    WordPlacement,
+    load_crossword_specification,
+    write_crossword_specification,
 )
 
 
@@ -46,61 +45,132 @@ class GuiTest(unittest.TestCase):
                 self.assertEqual(str(tcl_library), os.environ["TCL_LIBRARY"])
                 self.assertEqual(str(tk_library), os.environ["TK_LIBRARY"])
 
-    def test_parses_template_settings(self) -> None:
+    def test_parses_specification_settings(self) -> None:
         self.assertEqual(
-            TemplateSettings(layout="swedish", width=15, height=10),
-            parse_template_settings("swedish", " 15 ", "10"),
+            SpecificationSettings(width=15, height=10),
+            parse_specification_settings(" 15 ", "10"),
         )
-
-    def test_rejects_unknown_layout(self) -> None:
-        with self.assertRaisesRegex(GuiInputError, "Vyberte způsob rozvržení"):
-            parse_template_settings("", "15", "10")
 
     def test_rejects_non_integer_dimension(self) -> None:
         with self.assertRaisesRegex(GuiInputError, "Počet sloupců musí být celé"):
-            parse_template_settings("swedish", "patnáct", "10")
+            parse_specification_settings("patnáct", "10")
 
     def test_rejects_non_positive_dimension(self) -> None:
         with self.assertRaisesRegex(GuiInputError, "Počet řádků musí být kladný"):
-            parse_template_settings("swedish", "15", "0")
+            parse_specification_settings("15", "0")
 
-    def test_creates_swedish_template(self) -> None:
-        template = create_template(
-            TemplateSettings(layout="swedish", width=5, height=5)
+    def test_parses_and_normalizes_word(self) -> None:
+        self.assertEqual(
+            WordPlacement(
+                answer="CHATA",
+                start=Coordinate(row=2, column=3),
+                direction="vertical",
+                legend="Stavení",
+                in_help=True,
+            ),
+            parse_word_placement(
+                " chata ",
+                " Stavení ",
+                "2",
+                "3",
+                "vertical",
+                True,
+            ),
         )
-        cells = tuple(cell for row in template.grid.cells for cell in row)
 
-        self.assertTrue(any(isinstance(cell, TemplateLegendCell) for cell in cells))
-        self.assertTrue(any(isinstance(cell, TemplateEmptyCell) for cell in cells))
-        self.assertTrue(any(isinstance(cell, TemplateLetterCell) for cell in cells))
+    def test_rejects_empty_word_legend(self) -> None:
+        with self.assertRaisesRegex(GuiInputError, "Vyplňte legendu"):
+            parse_word_placement("LABE", "  ", "1", "1", "horizontal", False)
 
-    def test_creates_numbered_template(self) -> None:
-        template = create_template(
-            TemplateSettings(layout="numbered", width=5, height=5)
+    def test_creates_specification_from_placed_words(self) -> None:
+        word = parse_word_placement(
+            "LABE",
+            "Česká řeka",
+            "2",
+            "2",
+            "horizontal",
+            False,
         )
 
-        self.assertTrue(
-            all(
-                isinstance(cell, TemplateLetterCell)
-                for row in template.grid.cells
-                for cell in row
+        specification = create_specification(
+            SpecificationSettings(width=7, height=6),
+            (word,),
+        )
+
+        self.assertEqual("specification", specification.kind)
+        self.assertEqual((word,), specification.words)
+        self.assertEqual(7, specification.grid.width)
+        self.assertEqual(6, specification.grid.height)
+
+    def test_refuses_specification_without_words(self) -> None:
+        with self.assertRaisesRegex(GuiInputError, "alespoň jedno heslo"):
+            create_specification(
+                SpecificationSettings(width=15, height=10),
+                (),
             )
+
+    def test_refuses_word_outside_grid(self) -> None:
+        word = parse_word_placement(
+            "LABE",
+            "Česká řeka",
+            "3",
+            "2",
+            "horizontal",
+            False,
         )
 
-    def test_saves_created_template_in_project_format(self) -> None:
-        template = create_template(
-            TemplateSettings(layout="swedish", width=5, height=5)
+        with self.assertRaisesRegex(GuiInputError, "přesahuje mřížku"):
+            create_specification(
+                SpecificationSettings(width=3, height=3),
+                (word,),
+            )
+
+    def test_refuses_conflicting_intersection(self) -> None:
+        horizontal = parse_word_placement(
+            "ABC",
+            "Abeceda",
+            "2",
+            "1",
+            "horizontal",
+            False,
+        )
+        vertical = parse_word_placement(
+            "AX",
+            "Zkratka",
+            "1",
+            "2",
+            "vertical",
+            False,
+        )
+
+        with self.assertRaisesRegex(GuiInputError, "v rozporu"):
+            create_specification(
+                SpecificationSettings(width=3, height=3),
+                (horizontal, vertical),
+            )
+
+    def test_saves_created_specification_in_project_format(self) -> None:
+        word = parse_word_placement(
+            "LABE",
+            "Česká řeka",
+            "2",
+            "2",
+            "horizontal",
+            False,
+        )
+        specification = create_specification(
+            SpecificationSettings(width=7, height=6),
+            (word,),
         )
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "sablona.yaml"
+            output = Path(directory) / "zadani.yaml"
 
-            write_crossword_template(template, output)
+            write_crossword_specification(specification, output)
 
-            self.assertEqual(template, load_crossword_template(output))
-
-    def test_reports_unsupported_template_size(self) -> None:
-        with self.assertRaises(GenerationError):
-            create_template(TemplateSettings(layout="swedish", width=3, height=3))
+            self.assertEqual(
+                specification,
+                load_crossword_specification(output),
+            )
 
     def test_main_reports_unavailable_tk(self) -> None:
         error_output = StringIO()

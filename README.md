@@ -11,17 +11,22 @@ navazujících kroků editoru bude navržena v dalších změnách.
 
 ## Grafické rozhraní
 
-První obrazovka zpřístupňuje začátek současného automatického postupu:
-vytvoření nevyplněné šablony. Spustí se samostatným příkazem:
+První obrazovka zpřístupňuje skutečný začátek celého postupu: vytvoření
+vstupního zadání `kind: specification`. Spustí se samostatným příkazem:
 
 ```shell
 uv run krizovkar-gui
 ```
 
-V okně lze zvolit švédské nebo číslované rozvržení, zadat rozměr,
-zkontrolovat náhled rolí buněk a uložit šablonu do YAML. Uložený soubor používá
-stejný datový model jako CLI a lze jej rovnou předat příkazům `grid`, `fill` nebo
-`render`.
+V okně lze zadat rozměr a přidávat, upravovat či odebírat umístěná hesla s
+legendou, počáteční souřadnicí, směrem a volitelným zařazením do pomůcky.
+Náhled zobrazuje písmena i jejich křížení. První verze editoru zatím
+nezadává tajenky ani vlastní polohu pomůcky.
+
+Uložený YAML používá společný datový model zadání pro všechny druhy
+křížovek; způsob budoucího rozvržení se proto na této obrazovce nevybírá.
+Automatický převod `specification → template` zůstává navazujícím, dosud
+neimplementovaným krokem.
 
 GUI vyžaduje Python s podporou Tk 8.6 nebo novější. Modul `tkinter` je součástí
 standardní knihovny Pythonu, některé systémové distribuce jej ale instalují jako
