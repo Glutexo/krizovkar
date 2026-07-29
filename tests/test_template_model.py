@@ -10,7 +10,9 @@ from pathlib import Path
 from krizovkar.model import (
     ModelError,
     SecretPrompt,
+    TemplateHelpCell,
     TemplateLetterCell,
+    TemplateSecretCellsPart,
     dump_crossword_template,
     load_crossword_template,
     write_crossword_template,
@@ -20,6 +22,9 @@ from krizovkar.model import (
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "template-minimal.yaml"
 TEMPLATE_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "template-secret.yaml"
+TEMPLATE_FROM_SPECIFICATION_EXAMPLE = (
+    PROJECT_ROOT / "examples" / "template-from-specification.yaml"
+)
 
 
 class TemplateModelTest(unittest.TestCase):
@@ -49,6 +54,70 @@ class TemplateModelTest(unittest.TestCase):
             output = Path(directory) / "written.yaml"
             write_crossword_template(template, output)
             self.assertEqual(template, load_crossword_template(output))
+
+    def test_loads_fixed_template_created_from_specification(self) -> None:
+        template = load_crossword_template(
+            TEMPLATE_FROM_SPECIFICATION_EXAMPLE
+        )
+
+        self.assertIsInstance(template.grid.cells[0][0], TemplateHelpCell)
+        self.assertEqual(
+            ("LABE", "LES", "EMU"),
+            tuple(slot.answer for slot in template.slots),
+        )
+        self.assertEqual(
+            (False, True, True),
+            tuple(slot.in_help for slot in template.slots),
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "written.yaml"
+            write_crossword_template(template, output)
+            self.assertEqual(template, load_crossword_template(output))
+
+    def test_loads_cell_based_secret_part(self) -> None:
+        template = self._load(
+            "format: krizovkar\n"
+            "kind: template\n"
+            "version: 1\n"
+            "grid:\n"
+            "  width: 2\n"
+            "  height: 1\n"
+            "  cells:\n"
+            "    - [{type: letter}, {type: letter}]\n"
+            "slots:\n"
+            "  - {id: h1, start: {row: 1, column: 1}, direction: horizontal, length: 2}\n"
+            "secrets:\n"
+            "  - parts:\n"
+            "      - cells: [{row: 1, column: 1}, {row: 1, column: 2}]\n"
+            "        arrows: true\n"
+        )
+
+        part = template.secrets[0].parts[0]
+        self.assertIsInstance(part, TemplateSecretCellsPart)
+        assert isinstance(part, TemplateSecretCellsPart)
+        self.assertTrue(part.arrows)
+        self.assertEqual(2, len(part.cells))
+
+    def test_accepts_explicit_false_in_help_without_fixed_answer(self) -> None:
+        template = self._load(
+            "format: krizovkar\n"
+            "kind: template\n"
+            "version: 1\n"
+            "grid:\n"
+            "  width: 1\n"
+            "  height: 1\n"
+            "  cells:\n"
+            "    - [{type: letter}]\n"
+            "slots:\n"
+            "  - id: h1\n"
+            "    start: {row: 1, column: 1}\n"
+            "    direction: horizontal\n"
+            "    length: 1\n"
+            "    in_help: false\n"
+        )
+
+        self.assertFalse(template.slots[0].in_help)
 
     def test_loads_template_from_text_stream(self) -> None:
         template = load_crossword_template(

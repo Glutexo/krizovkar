@@ -1483,6 +1483,69 @@ class CommandTest(unittest.TestCase):
             self.assertEqual(5, template.grid.width)
             self.assertEqual(5, template.grid.height)
 
+    def test_template_converts_swedish_specification(self) -> None:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            result = main(
+                [
+                    "template",
+                    str(SPECIFICATION_PLACED_WORDS_EXAMPLE),
+                    "--layout",
+                    "swedish",
+                ]
+            )
+
+        self.assertEqual(0, result)
+        template = load_crossword_template(io.StringIO(stdout.getvalue()))
+        self.assertEqual(("LABE", "LES", "EMU"), tuple(
+            slot.answer for slot in template.slots
+        ))
+        self.assertTrue(
+            all(slot.legend_position is not None for slot in template.slots)
+        )
+        self.assertIn("(7 × 6, 3 sloty)", stderr.getvalue())
+
+    def test_template_reads_numbered_specification_from_stdin(self) -> None:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        specification_yaml = SPECIFICATION_SECRET_PROMPT_EXAMPLE.read_text(
+            encoding="utf-8"
+        )
+
+        with (
+            patch("sys.stdin", io.StringIO(specification_yaml)),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            result = main(["template", "-", "--layout", "numbered"])
+
+        self.assertEqual(0, result)
+        template = load_crossword_template(io.StringIO(stdout.getvalue()))
+        self.assertEqual("ZELENÍ", template.slots[0].answer)
+        self.assertIsNone(template.slots[0].legend_position)
+        self.assertIn("standardní výstup", stderr.getvalue())
+
+    def test_template_rejects_dense_options_with_specification(self) -> None:
+        stderr = io.StringIO()
+
+        with redirect_stderr(stderr):
+            result = main(
+                [
+                    "template",
+                    str(SPECIFICATION_PLACED_WORDS_EXAMPLE),
+                    "--width",
+                    "7",
+                ]
+            )
+
+        self.assertEqual(2, result)
+        self.assertIn(
+            "při převodu zadání nelze použít",
+            stderr.getvalue(),
+        )
+
     def test_grid_writes_unfilled_yaml_to_stdout(self) -> None:
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -1492,9 +1555,9 @@ class CommandTest(unittest.TestCase):
 
         self.assertEqual(0, result)
         self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
-        self.assertNotIn("Nevyplněná mřížka vytvořena", stdout.getvalue())
+        self.assertNotIn("Mřížka ze šablony vytvořena", stdout.getvalue())
         self.assertIn(
-            "Nevyplněná mřížka vytvořena: standardní výstup",
+            "Mřížka ze šablony vytvořena: standardní výstup",
             stderr.getvalue(),
         )
         with tempfile.TemporaryDirectory() as directory:

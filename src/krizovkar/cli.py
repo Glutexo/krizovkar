@@ -18,6 +18,7 @@ from krizovkar.generator import (
     GenerationError,
     SecretRequirement,
     create_grid_from_template,
+    create_template_from_specification,
     fill_crossword_template,
     generate_numbered_grid,
     generate_numbered_template,
@@ -34,6 +35,7 @@ from krizovkar.model import (
     dump_crossword_template,
     load_crossword_document_kind,
     load_crossword_grid,
+    load_crossword_specification,
     load_crossword_template,
     write_crossword_grid,
     write_crossword_template,
@@ -155,11 +157,19 @@ def _parser() -> argparse.ArgumentParser:
 
     template = commands.add_parser(
         "template",
-        help="vytvoří nevyplněnou hustou šablonu",
+        help="vytvoří šablonu ze zadání nebo bez něj",
         description=(
-            "Vytvoří švédské nebo číslované rozvržení a zapíše sloty "
-            "budoucích hesel bez použití slovníku."
+            "Převede vstupní zadání na švédskou nebo číslovanou "
+            "šablonu. Bez vstupního zadání vytvoří hustou nevyplněnou "
+            "šablonu z rozměru, aniž použije slovník."
         ),
+    )
+    template.add_argument(
+        "specification",
+        nargs="?",
+        type=Path,
+        metavar="ZADÁNÍ.yaml",
+        help="volitelné vstupní YAML zadání; - znamená standardní vstup",
     )
     template.add_argument(
         "-o",
@@ -171,14 +181,14 @@ def _parser() -> argparse.ArgumentParser:
     template.add_argument(
         "--width",
         type=int,
-        default=DEFAULT_GRID_WIDTH,
+        default=None,
         metavar="POČET",
         help=f"počet sloupců; výchozí je {DEFAULT_GRID_WIDTH}",
     )
     template.add_argument(
         "--height",
         type=int,
-        default=DEFAULT_GRID_HEIGHT,
+        default=None,
         metavar="POČET",
         help=f"počet řádků; výchozí je {DEFAULT_GRID_HEIGHT}",
     )
@@ -186,7 +196,7 @@ def _parser() -> argparse.ArgumentParser:
     template.add_argument(
         "--seed",
         type=int,
-        default=DEFAULT_SEED,
+        default=None,
         metavar="ČÍSLO",
         help=(
             "počáteční hodnota výběru tajenkových slotů; "
@@ -203,10 +213,10 @@ def _parser() -> argparse.ArgumentParser:
 
     grid = commands.add_parser(
         "grid",
-        help="vytvoří nevyplněnou cílovou mřížku ze šablony",
+        help="vytvoří cílovou mřížku ze šablony",
         description=(
-            "Převede role buněk a sloty šablony na nevyplněnou cílovou "
-            "mřížku bez použití slovníku."
+            "Převede role buněk a sloty šablony na cílovou mřížku bez "
+            "použití slovníku. Případný pevný obsah slotů zachová."
         ),
     )
     grid.add_argument(
@@ -574,18 +584,56 @@ def _binary_standard_output() -> BinaryIO:
 
 def _template(arguments: argparse.Namespace) -> int:
     try:
-        secret = _secret_requirement(arguments)
-        generate_template = (
-            generate_numbered_template
-            if arguments.layout == "numbered"
-            else generate_swedish_template
-        )
-        template = generate_template(
-            width=arguments.width,
-            height=arguments.height,
-            seed=arguments.seed,
-            secret=secret,
-        )
+        if arguments.specification is not None:
+            dense_options = (
+                arguments.width,
+                arguments.height,
+                arguments.seed,
+                arguments.secret_length,
+                arguments.secret_parts,
+                arguments.secret,
+                arguments.secret_part,
+                arguments.secret_prompt,
+                arguments.secret_prompt_placement,
+                arguments.secret_prompt_alignment,
+            )
+            if any(value is not None for value in dense_options):
+                raise GenerationError(
+                    "při převodu zadání nelze použít --width, --height, "
+                    "--seed ani volby tajenky"
+                )
+            specification = load_crossword_specification(
+                _input_source(arguments.specification)
+            )
+            template = create_template_from_specification(
+                specification,
+                layout=arguments.layout,
+            )
+        else:
+            secret = _secret_requirement(arguments)
+            generate_template = (
+                generate_numbered_template
+                if arguments.layout == "numbered"
+                else generate_swedish_template
+            )
+            template = generate_template(
+                width=(
+                    arguments.width
+                    if arguments.width is not None
+                    else DEFAULT_GRID_WIDTH
+                ),
+                height=(
+                    arguments.height
+                    if arguments.height is not None
+                    else DEFAULT_GRID_HEIGHT
+                ),
+                seed=(
+                    arguments.seed
+                    if arguments.seed is not None
+                    else DEFAULT_SEED
+                ),
+                secret=secret,
+            )
         if arguments.output is None:
             dump_crossword_template(template, sys.stdout)
         else:
@@ -600,7 +648,7 @@ def _template(arguments: argparse.Namespace) -> int:
 
     _print_success(
         f"Šablona vytvořena: {_output_description(arguments.output)} "
-        f"({arguments.width} × {arguments.height}, "
+        f"({template.grid.width} × {template.grid.height}, "
         f"{_localized_count(len(template.slots), 'slot', 'slotů')})",
         arguments.output,
     )
@@ -624,7 +672,7 @@ def _grid(arguments: argparse.Namespace) -> int:
         return 2
 
     _print_success(
-        f"Nevyplněná mřížka vytvořena: "
+        f"Mřížka ze šablony vytvořena: "
         f"{_output_description(arguments.output)} "
         f"({template.grid.width} × {template.grid.height}, "
         f"{_localized_count(len(template.slots), 'slot', 'slotů')})",

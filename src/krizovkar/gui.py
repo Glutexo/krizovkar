@@ -12,17 +12,25 @@ from tkinter import filedialog, messagebox, ttk
 from typing import cast
 
 from krizovkar.alphabet import split_answer_letters
-from krizovkar.generator import DEFAULT_GRID_HEIGHT, DEFAULT_GRID_WIDTH
+from krizovkar.generator import (
+    DEFAULT_GRID_HEIGHT,
+    DEFAULT_GRID_WIDTH,
+    GenerationError,
+    SpecificationLayout,
+    create_template_from_specification,
+)
 from krizovkar.localization import ngettext
 from krizovkar.model import (
     Coordinate,
     CrosswordSpecification,
+    CrosswordTemplate,
     GridDimensions,
     ModelError,
     WordDirection,
     WordPlacement,
     dump_crossword_specification,
     write_crossword_specification,
+    write_crossword_template,
 )
 
 _DIRECTIONS = frozenset(("horizontal", "vertical"))
@@ -122,6 +130,21 @@ def create_specification(
     except ModelError as error:
         raise GuiInputError(str(error)) from error
     return specification
+
+
+def create_template(
+    specification: CrosswordSpecification,
+    layout: SpecificationLayout,
+) -> CrosswordTemplate:
+    """Převede platné zadání z editoru na zvolenou šablonu."""
+
+    try:
+        return create_template_from_specification(
+            specification,
+            layout=layout,
+        )
+    except GenerationError as error:
+        raise GuiInputError(str(error)) from error
 
 
 def _word_count_text(count: int) -> str:
@@ -303,7 +326,7 @@ class SpecificationPreview(tk.Canvas):
 
 
 class CrosswordApplication(ttk.Frame):
-    """Hlavní okno s editorem prvního kroku tvorby křížovky."""
+    """Hlavní okno s editorem zadání a vytvořením šablony."""
 
     def __init__(self, root: tk.Tk) -> None:
         super().__init__(root, padding=(24, 20))
@@ -320,6 +343,7 @@ class CrosswordApplication(ttk.Frame):
         self.column_value = tk.StringVar(value="1")
         self.direction_value = tk.StringVar(value="horizontal")
         self.in_help_value = tk.BooleanVar(value=False)
+        self.layout_value = tk.StringVar(value="swedish")
         self.status_value = tk.StringVar(value="Připravuji prázdné zadání…")
 
         self._configure_window()
@@ -362,6 +386,10 @@ class CrosswordApplication(ttk.Frame):
             accelerator="Ctrl+S",
             command=self.save_specification,
         )
+        file_menu.add_command(
+            label="Vytvořit šablonu…",
+            command=self.save_template,
+        )
         file_menu.add_separator()
         file_menu.add_command(label="Konec", command=self.root.destroy)
         menu.add_cascade(label="Soubor", menu=file_menu)
@@ -385,7 +413,7 @@ class CrosswordApplication(ttk.Frame):
         ttk.Label(
             self,
             text=(
-                "Určete obsah křížovky nezávisle na budoucím švédském "
+                "Určete obsah křížovky nezávisle na navazujícím švédském "
                 "nebo číslovaném rozvržení."
             ),
             style="Muted.TLabel",
@@ -511,13 +539,39 @@ class CrosswordApplication(ttk.Frame):
             wraplength=280,
         ).grid(row=6, column=0, sticky="w", pady=(18, 0))
 
+        template_options = ttk.LabelFrame(
+            editor,
+            text="Navazující šablona",
+            padding=(10, 8),
+        )
+        template_options.grid(row=7, column=0, sticky="ew", pady=(14, 0))
+        ttk.Radiobutton(
+            template_options,
+            text="Švédská s vepsanými legendami",
+            variable=self.layout_value,
+            value="swedish",
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Radiobutton(
+            template_options,
+            text="Číslovaná s vnějšími legendami",
+            variable=self.layout_value,
+            value="numbered",
+        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+
         self.save_button = ttk.Button(
             editor,
             text="Uložit zadání…",
             command=self.save_specification,
             state="disabled",
         )
-        self.save_button.grid(row=7, column=0, sticky="ew", pady=(18, 0))
+        self.save_button.grid(row=8, column=0, sticky="ew", pady=(14, 0))
+        self.template_button = ttk.Button(
+            editor,
+            text="Vytvořit šablonu…",
+            command=self.save_template,
+            state="disabled",
+        )
+        self.template_button.grid(row=9, column=0, sticky="ew", pady=(7, 0))
 
         workspace = ttk.Frame(self)
         workspace.grid(row=3, column=1, sticky="nsew")
@@ -625,6 +679,7 @@ class CrosswordApplication(ttk.Frame):
         except GuiInputError as error:
             self._specification = None
             self.save_button.configure(state="disabled")
+            self.template_button.configure(state="disabled")
             self.preview.clear_preview("Zadejte platný rozměr mřížky.")
             self._set_status(str(error), error=True)
             return False
@@ -638,6 +693,7 @@ class CrosswordApplication(ttk.Frame):
         if not words:
             self._specification = None
             self.save_button.configure(state="disabled")
+            self.template_button.configure(state="disabled")
             self._set_status(
                 f"Mřížka {settings.width} × {settings.height} je připravena. "
                 "Přidejte první heslo."
@@ -649,11 +705,13 @@ class CrosswordApplication(ttk.Frame):
         except GuiInputError as error:
             self._specification = None
             self.save_button.configure(state="disabled")
+            self.template_button.configure(state="disabled")
             self._set_status(f"Zadání není platné: {error}", error=True)
             return False
 
         self._specification = specification
         self.save_button.configure(state="normal")
+        self.template_button.configure(state="normal")
         self._set_status(
             f"Zadání je připravené: {settings.width} × {settings.height}, "
             f"{_word_count_text(len(words))}."
@@ -797,6 +855,57 @@ class CrosswordApplication(ttk.Frame):
             return
 
         self._set_status(f"Zadání uloženo: {output}", success=True)
+
+    def save_template(self) -> None:
+        if not self.refresh_specification():
+            message = (
+                "Přidejte alespoň jedno heslo."
+                if not self._words
+                else self.status_value.get()
+            )
+            self._show_action_error("Šablonu nelze vytvořit", message)
+            return
+        assert self._specification is not None
+        layout = cast(SpecificationLayout, self.layout_value.get())
+        try:
+            template = create_template(self._specification, layout)
+        except GuiInputError as error:
+            self._show_action_error("Šablonu nelze vytvořit", str(error))
+            return
+
+        filename = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Uložit šablonu křížovky",
+            initialfile="sablona.yaml",
+            defaultextension=".yaml",
+            filetypes=(
+                ("YAML soubory", "*.yaml *.yml"),
+                ("Všechny soubory", "*"),
+            ),
+            confirmoverwrite=False,
+        )
+        if not filename:
+            return
+
+        output = Path(filename)
+        overwrite = output.exists()
+        if overwrite and not messagebox.askyesno(
+            "Přepsat šablonu?",
+            f"Soubor {output.name} už existuje. Chcete jej přepsat?",
+            parent=self.root,
+        ):
+            return
+        try:
+            write_crossword_template(
+                template,
+                output,
+                overwrite=overwrite,
+            )
+        except ModelError as error:
+            self._show_action_error("Šablonu nelze uložit", str(error))
+            return
+
+        self._set_status(f"Šablona uložena: {output}", success=True)
 
     def _show_action_error(self, title: str, message: str) -> None:
         self._set_status(message, error=True)

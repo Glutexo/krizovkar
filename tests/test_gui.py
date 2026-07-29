@@ -16,6 +16,7 @@ from krizovkar.gui import (
     SpecificationSettings,
     _configure_tk_runtime,
     create_specification,
+    create_template,
     main,
     parse_specification_settings,
     parse_word_placement,
@@ -171,6 +172,42 @@ class GuiTest(unittest.TestCase):
                 specification,
                 load_crossword_specification(output),
             )
+
+    def test_creates_selected_template_from_gui_specification(self) -> None:
+        word = parse_word_placement(
+            "LABE",
+            "Česká řeka",
+            "2",
+            "2",
+            "horizontal",
+            False,
+        )
+        specification = create_specification(
+            SpecificationSettings(width=7, height=6),
+            (word,),
+        )
+
+        template = create_template(specification, "swedish")
+
+        self.assertEqual("LABE", template.slots[0].answer)
+        self.assertIsNotNone(template.slots[0].legend_position)
+
+    def test_reports_template_layout_error_as_gui_input_error(self) -> None:
+        word = parse_word_placement(
+            "LABE",
+            "Česká řeka",
+            "1",
+            "1",
+            "horizontal",
+            False,
+        )
+        specification = create_specification(
+            SpecificationSettings(width=7, height=6),
+            (word,),
+        )
+
+        with self.assertRaisesRegex(GuiInputError, "vepsaná legenda"):
+            create_template(specification, "swedish")
 
     def test_main_reports_unavailable_tk(self) -> None:
         error_output = StringIO()

@@ -6,6 +6,8 @@ import random
 import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass, replace
+from itertools import pairwise
+from typing import Literal
 
 from krizovkar.alphabet import SUPPORTED_SINGLE_LETTERS, split_answer_letters
 from krizovkar.dictionary import CrosswordDictionary
@@ -23,23 +25,34 @@ from krizovkar.layout import (
 from krizovkar.model import (
     Coordinate,
     CrosswordGrid,
+    CrosswordSpecification,
     CrosswordTemplate,
     DEFAULT_SECRET_LEGEND,
     DEFAULT_SECRET_PART_LEGEND,
     EmptyCell,
     ExternalClue,
     Grid,
+    HelpCell,
     LegendCell,
     LetterCell,
+    SecretArrow,
     SecretCell,
+    SecretCells,
+    SecretPart,
+    SecretParts,
     SecretPrompt,
+    SecretWord,
     TemplateEmptyCell,
     TemplateGrid,
+    TemplateHelpCell,
     TemplateLegendCell,
     TemplateLetterCell,
     TemplateSecret,
+    TemplateSecretCellsPart,
     TemplateSecretPart,
+    WordDirection,
     WordSlot,
+    secret_path_arrows,
 )
 
 
@@ -52,10 +65,11 @@ MAX_SEARCH_NODES = 250_000
 PREFERRED_SECRET_PART_LENGTH = 4
 
 GridCoordinate = tuple[int, int]
+SpecificationLayout = Literal["swedish", "numbered"]
 
 
 class GenerationError(RuntimeError):
-    """Ze zadaného slovníku a rozměru se nepodařilo vytvořit mřížku."""
+    """Požadovanou šablonu nebo mřížku se nepodařilo vytvořit."""
 
 
 class _SearchFailed(RuntimeError):
@@ -78,6 +92,19 @@ class _Entry:
     answer: str
     clue: str
     letters: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _SpecificationSlot:
+    """Pevné heslo zadání převáděné na slot šablony."""
+
+    token: tuple[str, int, int]
+    answer: str
+    start: Coordinate
+    direction: WordDirection
+    clue: str
+    in_help: bool
+    order: int
 
 
 def normalize_secret_text(text: str) -> tuple[str, ...]:
@@ -141,6 +168,272 @@ def _validate_secret_requirement(requirement: SecretRequirement) -> None:
             raise GenerationError(
                 "součet počtů slov částí neodpovídá počtu slov tajenky"
             )
+
+
+def _specification_secret_parts(
+    secret: SecretPart | SecretParts,
+) -> tuple[tuple[SecretPart, ...], SecretPrompt | None]:
+    if isinstance(secret, SecretParts):
+        return secret.parts, secret.prompt
+    return (secret,), secret.prompt
+
+
+def _specified_slot_coordinates(
+    slot: _SpecificationSlot,
+) -> tuple[GridCoordinate, ...]:
+    row_step = 1 if slot.direction == "vertical" else 0
+    column_step = 1 if slot.direction == "horizontal" else 0
+    return tuple(
+        (
+            slot.start.row - 1 + offset * row_step,
+            slot.start.column - 1 + offset * column_step,
+        )
+        for offset in range(len(split_answer_letters(slot.answer)))
+    )
+
+
+def create_template_from_specification(
+    specification: CrosswordSpecification,
+    *,
+    layout: SpecificationLayout = "swedish",
+) -> CrosswordTemplate:
+    """Rozvrhne umístěné zadání do samostatné šablony."""
+
+    if layout not in {"swedish", "numbered"}:
+        raise GenerationError(f"nepodporované rozvržení {layout!r}")
+    if specification.grid is None:
+        raise GenerationError("zadání neobsahuje rozměr mřížky")
+    width = specification.grid.width
+    height = specification.grid.height
+    if width < 1 or height < 1:
+        raise GenerationError("rozměry mřížky musí být kladné")
+
+    specified_slots: list[_SpecificationSlot] = []
+    order = 0
+    for word_index, word in enumerate(specification.words):
+        specified_slots.append(
+            _SpecificationSlot(
+                token=("word", word_index, 0),
+                answer=word.answer,
+                start=word.start,
+                direction=word.direction,
+                clue=word.legend,
+                in_help=word.in_help,
+                order=order,
+            )
+        )
+        order += 1
+
+    for secret_index, secret in enumerate(specification.secrets):
+        parts, _ = _specification_secret_parts(secret)
+        for part_index, part in enumerate(parts):
+            if not isinstance(part, SecretWord):
+                continue
+            specified_slots.append(
+                _SpecificationSlot(
+                    token=("secret", secret_index, part_index),
+                    answer=part.answer,
+                    start=part.start,
+                    direction=part.direction,
+                    clue=part.legend,
+                    in_help=False,
+                    order=order,
+                )
+            )
+            order += 1
+
+    if not specified_slots:
+        raise GenerationError("zadání neobsahuje žádné umístěné heslo")
+
+    letter_values: dict[GridCoordinate, tuple[str, str]] = {}
+    occupied_directions: dict[
+        tuple[GridCoordinate, WordDirection], str
+    ] = {}
+    for slot in specified_slots:
+        try:
+            letters = split_answer_letters(slot.answer)
+        except ValueError as error:
+            raise GenerationError(str(error)) from error
+        coordinates = _specified_slot_coordinates(slot)
+        for coordinate, letter in zip(coordinates, letters):
+            row, column = coordinate
+            if row < 0 or column < 0 or row >= height or column >= width:
+                raise GenerationError(
+                    f"heslo {slot.answer!r} přesahuje mřížku "
+                    f"{width} × {height}"
+                )
+            direction_key = (coordinate, slot.direction)
+            previous_slot = occupied_directions.get(direction_key)
+            if previous_slot is not None:
+                raise GenerationError(
+                    f"heslo {slot.answer!r} se ve stejném směru překrývá "
+                    f"s heslem {previous_slot!r}"
+                )
+            occupied_directions[direction_key] = slot.answer
+
+            previous_letter = letter_values.get(coordinate)
+            if previous_letter is not None and previous_letter[0] != letter:
+                raise GenerationError(
+                    f"písmeno {letter!r} hesla {slot.answer!r} je v rozporu "
+                    f"s písmenem {previous_letter[0]!r} hesla "
+                    f"{previous_letter[1]!r}"
+                )
+            letter_values.setdefault(coordinate, (letter, slot.answer))
+
+    direction_order = {"horizontal": 0, "vertical": 1}
+    ordered_slots = sorted(
+        specified_slots,
+        key=lambda slot: (
+            direction_order[slot.direction],
+            slot.start.row,
+            slot.start.column,
+            slot.order,
+        ),
+    )
+    identifiers: dict[tuple[str, int, int], str] = {}
+    direction_counts: dict[WordDirection, int] = {
+        "horizontal": 0,
+        "vertical": 0,
+    }
+    for slot in ordered_slots:
+        direction_counts[slot.direction] += 1
+        prefix = "h" if slot.direction == "horizontal" else "v"
+        identifiers[slot.token] = f"{prefix}{direction_counts[slot.direction]}"
+
+    legend_coordinates: set[GridCoordinate] = set()
+    legend_by_token: dict[tuple[str, int, int], Coordinate | None] = {}
+    if layout == "swedish":
+        for slot in specified_slots:
+            legend = (
+                Coordinate(
+                    row=slot.start.row,
+                    column=slot.start.column - 1,
+                )
+                if slot.direction == "horizontal"
+                else Coordinate(
+                    row=slot.start.row - 1,
+                    column=slot.start.column,
+                )
+            )
+            legend_coordinate = (legend.row - 1, legend.column - 1)
+            if legend.row < 1 or legend.column < 1:
+                raise GenerationError(
+                    f"před heslo {slot.answer!r} se do mřížky nevejde "
+                    "vepsaná legenda"
+                )
+            if legend_coordinate in letter_values:
+                raise GenerationError(
+                    f"vepsaná legenda hesla {slot.answer!r} by překryla "
+                    "písmennou buňku"
+                )
+            legend_coordinates.add(legend_coordinate)
+            legend_by_token[slot.token] = legend
+    else:
+        legend_by_token = {slot.token: None for slot in specified_slots}
+
+    help_coordinate: GridCoordinate | None = None
+    if any(slot.in_help for slot in specified_slots):
+        unavailable = set(letter_values) | legend_coordinates
+        if specification.help_position is not None:
+            help_coordinate = (
+                specification.help_position.row - 1,
+                specification.help_position.column - 1,
+            )
+            row, column = help_coordinate
+            if row < 0 or column < 0 or row >= height or column >= width:
+                raise GenerationError("poloha pomůcky leží mimo mřížku")
+            if help_coordinate in unavailable:
+                raise GenerationError(
+                    "zadaná poloha pomůcky koliduje s písmenem nebo legendou"
+                )
+        else:
+            help_coordinate = next(
+                (
+                    (row, column)
+                    for row in range(height)
+                    for column in range(width)
+                    if (row, column) not in unavailable
+                ),
+                None,
+            )
+            if help_coordinate is None:
+                raise GenerationError(
+                    "pomůcku nelze umístit, protože rozvržení nemá volnou "
+                    "buňku"
+                )
+
+    cells = []
+    for row in range(height):
+        cell_row = []
+        for column in range(width):
+            coordinate = (row, column)
+            if coordinate in letter_values:
+                cell_row.append(TemplateLetterCell())
+            elif coordinate in legend_coordinates:
+                cell_row.append(TemplateLegendCell())
+            elif coordinate == help_coordinate:
+                cell_row.append(TemplateHelpCell())
+            else:
+                cell_row.append(TemplateEmptyCell())
+        cells.append(tuple(cell_row))
+
+    slots = tuple(
+        WordSlot(
+            identifier=identifiers[slot.token],
+            start=slot.start,
+            direction=slot.direction,
+            length=len(split_answer_letters(slot.answer)),
+            legend_position=legend_by_token[slot.token],
+            answer=slot.answer,
+            clue=slot.clue,
+            in_help=slot.in_help,
+        )
+        for slot in specified_slots
+    )
+
+    template_secrets = []
+    for secret_index, secret in enumerate(specification.secrets):
+        secret_parts, prompt = _specification_secret_parts(secret)
+        parts: list[TemplateSecretPart | TemplateSecretCellsPart] = []
+        words = []
+        for part_index, part in enumerate(secret_parts):
+            if isinstance(part, SecretWord):
+                parts.append(
+                    TemplateSecretPart(
+                        slot_identifier=identifiers[
+                            ("secret", secret_index, part_index)
+                        ],
+                        word_count=1,
+                    )
+                )
+                words.append(part.answer)
+            else:
+                parts.append(
+                    TemplateSecretCellsPart(
+                        cells=part.cells,
+                        arrows=part.arrows,
+                    )
+                )
+        template_secrets.append(
+            TemplateSecret(
+                parts=tuple(parts),
+                words=tuple(words),
+                prompt=prompt,
+            )
+        )
+
+    return CrosswordTemplate(
+        format_name="krizovkar",
+        kind="template",
+        version=1,
+        grid=TemplateGrid(
+            width=width,
+            height=height,
+            cells=tuple(cells),
+        ),
+        slots=slots,
+        secrets=tuple(template_secrets),
+    )
 
 
 def generate_swedish_template(
@@ -637,6 +930,10 @@ def _resolve_template_secrets(
         index
         for index, secret in enumerate(template.secrets)
         if not secret.words
+        and any(
+            isinstance(part, TemplateSecretPart)
+            for part in secret.parts
+        )
     )
     if requirement is None:
         if unknown_indices:
@@ -664,9 +961,14 @@ def _resolve_template_secrets(
     secret_index = unknown_indices[0]
     reserved = template.secrets[secret_index]
     slots_by_identifier = {slot.identifier: slot for slot in template.slots}
+    reserved_slot_parts = tuple(
+        part
+        for part in reserved.parts
+        if isinstance(part, TemplateSecretPart)
+    )
     lengths = tuple(
         slots_by_identifier[part.slot_identifier].length
-        for part in reserved.parts
+        for part in reserved_slot_parts
     )
     if requirement.part_word_counts:
         counts = requirement.part_word_counts
@@ -684,14 +986,21 @@ def _resolve_template_secrets(
             )
 
     secrets = list(template.secrets)
-    secrets[secret_index] = TemplateSecret(
-        parts=tuple(
+    count_offset = 0
+    resolved_parts = []
+    for part in reserved.parts:
+        if isinstance(part, TemplateSecretCellsPart):
+            resolved_parts.append(part)
+            continue
+        resolved_parts.append(
             TemplateSecretPart(
                 slot_identifier=part.slot_identifier,
-                word_count=counts[index],
+                word_count=counts[count_offset],
             )
-            for index, part in enumerate(reserved.parts)
-        ),
+        )
+        count_offset += 1
+    secrets[secret_index] = TemplateSecret(
+        parts=tuple(resolved_parts),
         words=requirement.words,
         prompt=requirement.prompt or reserved.prompt,
     )
@@ -700,14 +1009,14 @@ def _resolve_template_secrets(
 
 def _secret_assignments(
     template: CrosswordTemplate,
-) -> tuple[dict[str, _Entry], frozenset[str], tuple[SecretPrompt, ...]]:
-    assignments = {}
-    secret_slot_identifiers = set()
-    prompts = []
+) -> dict[str, _Entry]:
+    assignments: dict[str, _Entry] = {}
     for secret in template.secrets:
         word_offset = 0
         multipart = len(secret.parts) > 1
         for part_index, part in enumerate(secret.parts):
+            if isinstance(part, TemplateSecretCellsPart):
+                continue
             assert part.word_count is not None
             part_words = secret.words[
                 word_offset : word_offset + part.word_count
@@ -724,10 +1033,21 @@ def _secret_assignments(
                 clue=clue,
                 letters=split_answer_letters(answer),
             )
-            secret_slot_identifiers.add(part.slot_identifier)
-        if secret.prompt is not None:
-            prompts.append(secret.prompt)
-    return assignments, frozenset(secret_slot_identifiers), tuple(prompts)
+    return assignments
+
+
+def _fixed_template_assignments(
+    template: CrosswordTemplate,
+) -> dict[str, _Entry]:
+    return {
+        slot.identifier: _Entry(
+            answer=slot.answer,
+            clue=slot.clue,
+            letters=split_answer_letters(slot.answer),
+        )
+        for slot in template.slots
+        if slot.answer is not None and slot.clue is not None
+    }
 
 
 def _fill_template_slots(
@@ -842,145 +1162,132 @@ def _template_grid_annotations(
         coordinate: number
         for number, coordinate in enumerate(external_starts, start=1)
     }
-    bars: dict[GridCoordinate, set[str]] = defaultdict(set)
+    horizontal_connections: set[tuple[GridCoordinate, GridCoordinate]] = set()
+    vertical_connections: set[tuple[GridCoordinate, GridCoordinate]] = set()
     for slot in template.slots:
-        if slot.direction == "horizontal" and slot.start.column > 1:
-            previous = (slot.start.row - 1, slot.start.column - 2)
-            if isinstance(
-                template.grid.cells[previous[0]][previous[1]],
-                TemplateLetterCell,
+        coordinates = _slot_coordinates(slot)
+        connections = (
+            horizontal_connections
+            if slot.direction == "horizontal"
+            else vertical_connections
+        )
+        connections.update(pairwise(coordinates))
+
+    bars: dict[GridCoordinate, set[str]] = defaultdict(set)
+    for row, cell_row in enumerate(template.grid.cells):
+        for column, cell in enumerate(cell_row):
+            if not isinstance(cell, TemplateLetterCell):
+                continue
+            coordinate = (row, column)
+            right = (row, column + 1)
+            if (
+                column + 1 < template.grid.width
+                and isinstance(cell_row[column + 1], TemplateLetterCell)
+                and (coordinate, right) not in horizontal_connections
             ):
-                bars[previous].add("right")
-        if slot.direction == "vertical" and slot.start.row > 1:
-            previous = (slot.start.row - 2, slot.start.column - 1)
-            if isinstance(
-                template.grid.cells[previous[0]][previous[1]],
-                TemplateLetterCell,
+                bars[coordinate].add("right")
+            below = (row + 1, column)
+            if (
+                row + 1 < template.grid.height
+                and isinstance(
+                    template.grid.cells[row + 1][column],
+                    TemplateLetterCell,
+                )
+                and (coordinate, below) not in vertical_connections
             ):
-                bars[previous].add("bottom")
+                bars[coordinate].add("bottom")
     return numbers, bars
 
 
-def create_grid_from_template(template: CrosswordTemplate) -> CrosswordGrid:
-    """Převede šablonu na nevyplněnou, ale vykreslitelnou cílovou mřížku."""
+def _template_secret_metadata(
+    template: CrosswordTemplate,
+) -> tuple[
+    frozenset[GridCoordinate],
+    dict[GridCoordinate, SecretArrow],
+    tuple[SecretPrompt, ...],
+]:
+    slots_by_identifier = {slot.identifier: slot for slot in template.slots}
+    coordinates: set[GridCoordinate] = set()
+    arrows: dict[GridCoordinate, SecretArrow] = {}
+    prompts: list[SecretPrompt] = []
+    for secret in template.secrets:
+        for part in secret.parts:
+            if isinstance(part, TemplateSecretPart):
+                coordinates.update(
+                    _slot_coordinates(slots_by_identifier[part.slot_identifier])
+                )
+                continue
 
-    secret_slot_identifiers = frozenset(
-        part.slot_identifier
-        for secret in template.secrets
-        for part in secret.parts
-    )
-    secret_coordinates = {
-        coordinate
-        for slot in template.slots
-        if slot.identifier in secret_slot_identifiers
-        for coordinate in _slot_coordinates(slot)
-    }
-    secret_prompts = tuple(
-        secret.prompt
-        for secret in template.secrets
-        if secret.prompt is not None
-    )
-    numbers, bars = _template_grid_annotations(template)
-    legend_section_counts: dict[GridCoordinate, int] = defaultdict(int)
-    for slot in template.slots:
-        if slot.legend_position is None:
-            continue
-        coordinate = (
-            slot.legend_position.row - 1,
-            slot.legend_position.column - 1,
-        )
-        legend_section_counts[coordinate] += 1
-
-    cells = []
-    for row_index, template_row in enumerate(template.grid.cells):
-        row = []
-        for column_index, template_cell in enumerate(template_row):
-            coordinate = (row_index, column_index)
-            if isinstance(template_cell, TemplateEmptyCell):
-                row.append(EmptyCell())
-            elif isinstance(template_cell, TemplateLegendCell):
-                row.append(
-                    LegendCell(
-                        texts=(None,) * legend_section_counts[coordinate]
+            coordinates.update(
+                (cell.row - 1, cell.column - 1) for cell in part.cells
+            )
+            if part.arrows:
+                for cell, direction in secret_path_arrows(
+                    SecretCells(cells=part.cells, arrows=True)
+                ):
+                    arrows.setdefault(
+                        (cell.row - 1, cell.column - 1),
+                        direction,
                     )
-                )
-            else:
-                cell_type = (
-                    SecretCell
-                    if coordinate in secret_coordinates
-                    else LetterCell
-                )
-                cell_bars = bars.get(coordinate, set())
-                row.append(
-                    cell_type(
-                        number=numbers.get(coordinate),
-                        bars=tuple(
-                            bar
-                            for bar in ("right", "bottom")
-                            if bar in cell_bars
-                        ),
-                    )
-                )
-        cells.append(tuple(row))
-
-    return CrosswordGrid(
-        format_name="krizovkar",
-        kind="grid",
-        version=1,
-        grid=Grid(
-            width=template.grid.width,
-            height=template.grid.height,
-            cells=tuple(cells),
-        ),
-        secret_prompts=secret_prompts,
+        if secret.prompt is not None:
+            prompts.append(secret.prompt)
+    return (
+        frozenset(coordinates),
+        arrows,
+        tuple(prompts),
     )
 
 
-def _filled_template_grid(
+def _template_grid_from_assignments(
     template: CrosswordTemplate,
     assignments: dict[str, _Entry],
-    secret_slot_identifiers: frozenset[str] = frozenset(),
-    secret_prompts: tuple[SecretPrompt, ...] = (),
 ) -> CrosswordGrid:
     letters: dict[GridCoordinate, str] = {}
-    slots_by_legend: dict[GridCoordinate, list[tuple[WordSlot, _Entry]]] = (
+    slots_by_legend: dict[GridCoordinate, list[WordSlot]] = (
         defaultdict(list)
     )
-    external_slots = []
+    external_slots: list[WordSlot] = []
     numbers, bars = _template_grid_annotations(template)
-    secret_coordinates = {
-        coordinate
-        for slot in template.slots
-        if slot.identifier in secret_slot_identifiers
-        for coordinate in _slot_coordinates(slot)
-    }
+    secret_coordinates, secret_arrows, secret_prompts = (
+        _template_secret_metadata(template)
+    )
 
     for slot in template.slots:
-        entry = assignments[slot.identifier]
-        for coordinate, letter in zip(_slot_coordinates(slot), entry.letters):
-            letters[coordinate] = letter
+        entry = assignments.get(slot.identifier)
+        if entry is not None:
+            for coordinate, letter in zip(
+                _slot_coordinates(slot),
+                entry.letters,
+            ):
+                letters[coordinate] = letter
         if slot.legend_position is None:
-            external_slots.append((slot, entry))
+            external_slots.append(slot)
         else:
             legend_coordinate = (
                 slot.legend_position.row - 1,
                 slot.legend_position.column - 1,
             )
-            slots_by_legend[legend_coordinate].append((slot, entry))
+            slots_by_legend[legend_coordinate].append(slot)
     direction_order = {"horizontal": 0, "vertical": 1}
     clues = tuple(
         ExternalClue(
             number=numbers[(slot.start.row - 1, slot.start.column - 1)],
             direction=slot.direction,
-            text=entry.clue,
+            text=assignments[slot.identifier].clue,
         )
-        for slot, entry in sorted(
+        for slot in sorted(
             external_slots,
             key=lambda item: (
-                numbers[(item[0].start.row - 1, item[0].start.column - 1)],
-                direction_order[item[0].direction],
+                numbers[(item.start.row - 1, item.start.column - 1)],
+                direction_order[item.direction],
             ),
         )
+        if slot.identifier in assignments
+    )
+    help_words = tuple(
+        assignments[slot.identifier].answer
+        for slot in template.slots
+        if slot.in_help and slot.identifier in assignments
     )
 
     cells = []
@@ -990,34 +1297,51 @@ def _filled_template_grid(
             coordinate = (row_index, column_index)
             if isinstance(template_cell, TemplateEmptyCell):
                 row.append(EmptyCell())
+            elif isinstance(template_cell, TemplateHelpCell):
+                row.append(
+                    HelpCell(words=help_words)
+                    if help_words
+                    else EmptyCell()
+                )
             elif isinstance(template_cell, TemplateLegendCell):
                 legend_slots = sorted(
                     slots_by_legend[coordinate],
-                    key=lambda item: direction_order[item[0].direction],
+                    key=lambda item: direction_order[item.direction],
                 )
                 row.append(
                     LegendCell(
-                        texts=tuple(entry.clue for _, entry in legend_slots)
+                        texts=tuple(
+                            assignments[slot.identifier].clue
+                            if slot.identifier in assignments
+                            else None
+                            for slot in legend_slots
+                        )
                     )
                 )
             else:
                 cell_bars = bars.get(coordinate, set())
-                cell_type = (
-                    SecretCell
-                    if coordinate in secret_coordinates
-                    else LetterCell
-                )
-                row.append(
-                    cell_type(
-                        value=letters[coordinate],
-                        number=numbers.get(coordinate),
-                        bars=tuple(
-                            bar
-                            for bar in ("right", "bottom")
-                            if bar in cell_bars
-                        ),
+                common_arguments = {
+                    "value": letters.get(coordinate),
+                    "number": numbers.get(coordinate),
+                    "bars": tuple(
+                        bar
+                        for bar in ("right", "bottom")
+                        if bar in cell_bars
+                    ),
+                }
+                if coordinate in secret_coordinates:
+                    row.append(
+                        SecretCell(
+                            **common_arguments,
+                            arrow=secret_arrows.get(coordinate),
+                        )
                     )
-                )
+                else:
+                    row.append(
+                        LetterCell(
+                            **common_arguments,
+                        )
+                    )
         cells.append(tuple(row))
 
     return CrosswordGrid(
@@ -1034,6 +1358,22 @@ def _filled_template_grid(
     )
 
 
+def create_grid_from_template(template: CrosswordTemplate) -> CrosswordGrid:
+    """Převede šablonu a její případný pevný obsah na mřížku."""
+
+    return _template_grid_from_assignments(
+        template,
+        _fixed_template_assignments(template),
+    )
+
+
+def _filled_template_grid(
+    template: CrosswordTemplate,
+    assignments: dict[str, _Entry],
+) -> CrosswordGrid:
+    return _template_grid_from_assignments(template, assignments)
+
+
 def fill_crossword_template(
     template: CrosswordTemplate,
     dictionary: CrosswordDictionary,
@@ -1044,14 +1384,23 @@ def fill_crossword_template(
     """Vyplní všechny sloty šablony různými hesly ze slovníku."""
 
     template = _resolve_template_secrets(template, secret, seed)
-    fixed_assignments, secret_slot_identifiers, secret_prompts = (
-        _secret_assignments(template)
-    )
+    secret_assignments = _secret_assignments(template)
+    fixed_assignments = _fixed_template_assignments(template)
+    for identifier, assignment in secret_assignments.items():
+        fixed = fixed_assignments.get(identifier)
+        if fixed is not None:
+            if fixed.answer != assignment.answer:
+                raise GenerationError(
+                    f"pevné heslo {fixed.answer!r} ve slotu {identifier!r} "
+                    f"neodpovídá tajence {assignment.answer!r}"
+                )
+            continue
+        fixed_assignments[identifier] = assignment
     entries_by_length = _usable_entries(dictionary)
     required_lengths = {
         slot.length
         for slot in template.slots
-        if slot.identifier not in secret_slot_identifiers
+        if slot.identifier not in fixed_assignments
     }
     missing_lengths = sorted(required_lengths - entries_by_length.keys())
     if missing_lengths:
@@ -1069,12 +1418,7 @@ def fill_crossword_template(
                 random.Random(attempt_seed),
                 fixed_assignments,
             )
-            return _filled_template_grid(
-                template,
-                assignments,
-                secret_slot_identifiers,
-                secret_prompts,
-            )
+            return _filled_template_grid(template, assignments)
         except _SearchFailed:
             continue
 

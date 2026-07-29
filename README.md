@@ -6,8 +6,9 @@ Křížovkář je připravovaný otevřený nástroj pro tvorbu švédských, kl
 
 Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu,
 experimentální generátory švédské a číslované mřížky z JSON slovníku,
-vykreslení výsledku do PDF a první krok grafického rozhraní. Podoba
-navazujících kroků editoru bude navržena v dalších změnách.
+automatický převod umístěného zadání na šablonu, vykreslení výsledku do
+PDF a první krok grafického rozhraní. Podoba dalších kroků editoru bude
+navržena v navazujících změnách.
 
 ## Grafické rozhraní
 
@@ -24,9 +25,9 @@ Náhled zobrazuje písmena i jejich křížení. První verze editoru zatím
 nezadává tajenky ani vlastní polohu pomůcky.
 
 Uložený YAML používá společný datový model zadání pro všechny druhy
-křížovek; způsob budoucího rozvržení se proto na této obrazovce nevybírá.
-Automatický převod `specification → template` zůstává navazujícím, dosud
-neimplementovaným krokem.
+křížovek. Volba v oddílu „Navazující šablona“ proto nemění zadání; použije se
+až tlačítkem „Vytvořit šablonu…“. Švédská varianta vloží legendy do
+volných buněk bezprostředně před hesla, číslovaná je umístí vně mřížky.
 
 GUI vyžaduje Python s podporou Tk 8.6 nebo novější. Modul `tkinter` je součástí
 standardní knihovny Pythonu, některé systémové distribuce jej ale instalují jako
@@ -54,8 +55,8 @@ Křížovkář rozlišuje tři samostatné druhy YAML dokumentů:
   písmeny a legendami, kterou lze přímo vykreslit.
 
 ```text
-specification → návrh rozložení (budoucí) → template
-template → grid (nevyplněná mřížka) → render → PDF
+umístěné specification + volba rozvržení → template
+template → grid (pevný nebo nevyplněný obsah) → render → PDF
 template + slovník → fill → grid → render → PDF
 požadavky + slovník → generate (= template + fill) → grid
 ```
@@ -71,7 +72,12 @@ grid:
   height: 10
 ```
 
-Šablona na rozdíl od cílové mřížky neobsahuje běžné odpovědi ani texty legend. Každému budoucímu heslu určuje stabilní identifikátor, začátek, směr a délku; matice buněk rozlišuje budoucí písmena, vepsané legendy a nevyplňovaná pole. Minimální zápis ukazuje [příklad šablony](examples/template-minimal.yaml).
+Šablona každému heslu určuje stabilní identifikátor, začátek, směr a
+délku; matice buněk rozlišuje budoucí písmena, vepsané legendy, pomůcku a
+nevyplňovaná pole. Hustá šablona nechá odpovědi a texty legend neznámé,
+šablona převedená ze zadání je naopak uchová jako pevný obsah slotů.
+Minimální zápis ukazuje [příklad šablony](examples/template-minimal.yaml) a
+pevnou variantu [šablona ze zadání](examples/template-from-specification.yaml).
 
 Šablona může navíc rezervovat jeden nebo více slotů pro části tajenky. Známá tajenka se ukládá jako seznam slov bez mezer a interpunkce, aby se neztratila povolená místa budoucího rozdělení. `word_count` u každé části určuje, kolik po sobě jdoucích slov se spojí do příslušného slotu. Ukazuje to [šablona s tajenkou](examples/template-secret.yaml). Pokud konkrétní znění zatím není známé, `words` i `word_count` se vynechají a zůstanou jen připravené sloty.
 
@@ -214,6 +220,8 @@ a `render` nepovinná. Bez ní příkaz zapíše výsledný YAML nebo binární 
 standardní výstup, takže jej lze přesměrovat nebo předat dalšímu programu:
 
 ```shell
+uv run krizovkar template examples/specification-placed-words.yaml \
+  --layout swedish > build/placed-template.yaml
 uv run krizovkar template --width 15 --height 10 > build/template.yaml
 uv run krizovkar grid build/template.yaml > build/unfilled-grid.yaml
 uv run krizovkar generate slovnik.json > build/grid.yaml
@@ -222,10 +230,11 @@ uv run krizovkar render build/grid.yaml > build/grid.pdf
 
 Stavová hláška jde v tomto režimu na standardní chybový výstup a výsledná data neznečistí. Při zadaném `--output` se dál zapisuje atomicky do souboru, existující soubor se bez `--force` nepřepíše a stavová hláška se vypíše na standardní výstup.
 
-Místo vstupního souboru přijímají příkazy `grid`, `fill`, `generate`, `validate`
-a `render` také `-`, které znamená standardní vstup. U příkazu `fill` lze tímto
-způsobem načíst šablonu nebo slovník, ale ne oba vstupy současně. Výstupy lze
-díky tomu spojovat přímo rourou. Šablona se může vykreslit bez mezikroku:
+Místo vstupního souboru přijímají příkazy `template`, `grid`, `fill`,
+`generate`, `validate` a `render` také `-`, které znamená standardní vstup. U
+`template` jde o vstupní zadání. U příkazu `fill` lze tímto způsobem načíst
+šablonu nebo slovník, ale ne oba vstupy současně. Výstupy lze díky tomu
+spojovat přímo rourou. Šablona se může vykreslit bez mezikroku:
 
 ```shell
 uv run krizovkar template --width 15 --height 10 \
@@ -242,7 +251,27 @@ uv run krizovkar template --width 15 --height 10 \
 
 ## Vytvoření šablony
 
-Hustou šablonu lze vytvořit bez slovníku a bez znalosti budoucích odpovědí. Výchozí rozvržení je švédské:
+Umístěné zadání převede na šablonu jeho volitelný poziční argument:
+
+```shell
+uv run krizovkar template examples/specification-placed-words.yaml \
+  --layout swedish \
+  --output build/template-from-specification.yaml
+```
+
+Převod zachová rozměr, odpovědi, legendy, tajenky, jejich zadání i pomůcku.
+Každé umístěné běžné nebo tajenkové slovo se stane pevným slotem.
+`--layout swedish` rezervuje volnou buňku bezprostředně vlevo od vodorovného
+hesla nebo nad svislým heslem. Pokud tam není místo nebo by legenda překryla
+písmeno, převod skončí s konkrétní chybou. `--layout numbered` samostatné
+legendové buňky nepotřebuje a texty připraví jako vnější číslované legendy.
+
+Rozměr i tajenky už v tomto režimu určuje zadání. Volby `--width`,
+`--height`, `--seed` a volby tajenky proto nelze se vstupním souborem
+kombinovat.
+
+Bez vstupního zadání vytvoří stejný příkaz hustou šablonu bez slovníku a
+bez znalosti budoucích odpovědí. Výchozí rozvržení je švédské:
 
 ```shell
 uv run krizovkar template \
@@ -286,17 +315,18 @@ uv run krizovkar template --width 7 --height 12 \
 
 Tyto volby fungují pro obě hodnoty `--layout`. U konkrétního textu se velikost písmen sjednotí, mezery a interpunkce se do buněk nezapisují a seznam slov zachová všechny povolené švy. Automatické dělení nikdy nerozdělí slovo. Generátor podle potřeby změní jinak vyvážené délky běžných slotů tak, aby maska obsahovala požadované délky tajenky od 3 do 8 polí; pokud se požadavek do zadaného rozměru nevejde, skončí s chybou. Volitelné `--secret-prompt` doplní zadání; jeho pozici a zarovnání určují `--secret-prompt-placement` a `--secret-prompt-alignment`. Seed ovlivňuje výběr vhodných slotů.
 
-Platnou šablonu lze bez slovníku převést na nevyplněnou cílovou mřížku:
+Platnou šablonu lze bez slovníku převést na cílovou mřížku:
 
 ```shell
 uv run krizovkar grid build/template.yaml \
   --output build/unfilled-grid.yaml
 ```
 
-Převod zachová nevyplňovaná a legendová pole, čísla a silné předěly
-číslovaného rozvržení, zvýraznění připravených tajenek a jejich zadání. Běžná
-písmena, texty legend ani známé znění tajenky ze šablony do prázdné mřížky
-nevloží. Šablonu lze bez mezikroku vykreslit také příkazem
+Převod zachová nevyplňovaná, legendová a pomocná pole, čísla a silné
+předěly číslovaného rozvržení, zvýraznění tajenek, jejich zobáčky a zadání.
+U husté šablony zůstanou písmena a texty legend prázdné. Šablona vytvořená
+ze zadání naopak přenese své pevné odpovědi, legendy a slova pomůcky.
+Šablonu lze bez mezikroku vykreslit také příkazem
 `krizovkar render build/template.yaml`.
 
 Šablonu lze později vyplnit samostatně:
@@ -307,7 +337,12 @@ uv run krizovkar fill build/template.yaml slovnik.json \
   --output build/filled-grid.yaml
 ```
 
-Plnění funguje i pro ručně vytvořené šablony. Pro každý slot vybere heslo odpovídající délky, zachová shodná písmena na kříženích a stejnou odpověď nepoužije dvakrát. Slot s vepsanou legendovou buňkou vytvoří švédskou legendu; slot bez ní dostane číslo a vnější legendu. Stejná šablona, slovník a seed vytvoří stejnou cílovou mřížku.
+Plnění funguje i pro ručně vytvořené a částečně pevné šablony. Pevné
+sloty zachová; pro každý zbývající slot vybere heslo odpovídající délky,
+zachová shodná písmena na kříženích a stejnou odpověď nepoužije dvakrát.
+Slot s vepsanou legendovou buňkou vytvoří švédskou legendu; slot bez ní
+dostane číslo a vnější legendu. Stejná šablona, slovník a seed vytvoří
+stejnou cílovou mřížku.
 
 Známou tajenku uloženou v šabloně `fill` doplní automaticky a její sloty nevyhledává ve slovníku. Rezervuje-li šablona jen prázdné tajenkové sloty, předá se konkrétní text pomocí `--secret` nebo opakovaného `--secret-part`. Stejné volby lze použít i u šablony bez rezervace; plnění pak vhodné sloty tajenky samo vybere. Tajenková pole se ve výsledné mřížce zvýrazní a jednotlivé části dostanou legendy `1. část tajenky`, `2. část tajenky` a tak dále.
 

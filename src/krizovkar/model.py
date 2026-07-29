@@ -147,7 +147,17 @@ class TemplateEmptyCell:
     """Nevyplňovaná buňka šablony."""
 
 
-TemplateCell = TemplateLetterCell | TemplateLegendCell | TemplateEmptyCell
+@dataclass(frozen=True, slots=True)
+class TemplateHelpCell:
+    """Buňka šablony vyhrazená pro pomůcku."""
+
+
+TemplateCell = (
+    TemplateLetterCell
+    | TemplateLegendCell
+    | TemplateEmptyCell
+    | TemplateHelpCell
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,13 +171,16 @@ class TemplateGrid:
 
 @dataclass(frozen=True, slots=True)
 class WordSlot:
-    """Místo pro jedno heslo bez dosud zvolené odpovědi a legendy."""
+    """Místo pro jedno heslo s volitelně pevným obsahem."""
 
     identifier: str
     start: Coordinate
     direction: WordDirection
     length: int
     legend_position: Coordinate | None = None
+    answer: str | None = None
+    clue: str | None = None
+    in_help: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,10 +192,18 @@ class TemplateSecretPart:
 
 
 @dataclass(frozen=True, slots=True)
-class TemplateSecret:
-    """Připravené sloty tajenky a volitelně její známá slova."""
+class TemplateSecretCellsPart:
+    """Jedna část tajenky určená vybranými písmennými poli."""
 
-    parts: tuple[TemplateSecretPart, ...]
+    cells: tuple[Coordinate, ...]
+    arrows: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateSecret:
+    """Připravené sloty nebo pole tajenky a volitelně její známá slova."""
+
+    parts: tuple[TemplateSecretPart | TemplateSecretCellsPart, ...]
     words: tuple[str, ...] = ()
     prompt: SecretPrompt | None = None
 
@@ -617,7 +638,26 @@ def _template_cell(cell: dict[str, Any]) -> TemplateCell:
         return TemplateLegendCell()
     if cell["type"] == "empty":
         return TemplateEmptyCell()
+    if cell["type"] == "help":
+        return TemplateHelpCell()
     raise ModelError(f"nepodporovaný typ buňky šablony: {cell['type']!r}")
+
+
+def _template_secret_part(
+    part: dict[str, Any],
+) -> TemplateSecretPart | TemplateSecretCellsPart:
+    if "slot" in part:
+        return TemplateSecretPart(
+            slot_identifier=part["slot"],
+            word_count=part.get("word_count"),
+        )
+    return TemplateSecretCellsPart(
+        cells=tuple(
+            Coordinate(row=cell["row"], column=cell["column"])
+            for cell in part["cells"]
+        ),
+        arrows=part.get("arrows", False),
+    )
 
 
 def _template_cells(
@@ -674,16 +714,16 @@ def load_crossword_template(source: YamlSource) -> CrosswordTemplate:
                     if "legend" in slot
                     else None
                 ),
+                answer=slot.get("answer"),
+                clue=slot.get("clue"),
+                in_help=slot.get("in_help", False),
             )
             for slot in data["slots"]
         ),
         secrets=tuple(
             TemplateSecret(
                 parts=tuple(
-                    TemplateSecretPart(
-                        slot_identifier=part["slot"],
-                        word_count=part.get("word_count"),
-                    )
+                    _template_secret_part(part)
                     for part in secret["parts"]
                 ),
                 words=tuple(secret.get("words", ())),
@@ -720,6 +760,8 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
     occupied: dict[tuple[int, int], dict[WordDirection, str]] = {}
     used_letters: set[tuple[int, int]] = set()
     used_legends: dict[tuple[int, int], dict[WordDirection, str]] = {}
+    fixed_letters: dict[tuple[int, int], tuple[str, str]] = {}
+    help_slots: list[str] = []
 
     for slot_index, slot in enumerate(template.slots):
         path = f"$.slots[{slot_index}]"
@@ -739,6 +781,39 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
                 f"{previous_identifier_path}"
             )
         identifiers[slot.identifier] = f"{path}.id"
+
+        if (slot.answer is None) != (slot.clue is None):
+            raise ModelError(
+                f"neplatný datový model: {path}: pevné heslo musí uvést "
+                "answer i clue"
+            )
+        if slot.clue is not None and not slot.clue.strip():
+            raise ModelError(
+                f"neplatný datový model: {path}.clue: "
+                "text legendy nesmí být prázdný"
+            )
+        if slot.in_help:
+            if slot.answer is None:
+                raise ModelError(
+                    f"neplatný datový model: {path}.in_help: "
+                    "do pomůcky lze zařadit jen pevně zadané heslo"
+                )
+            help_slots.append(slot.identifier)
+
+        answer_letters: tuple[str, ...] = ()
+        if slot.answer is not None:
+            try:
+                answer_letters = split_answer_letters(slot.answer)
+            except ValueError as error:
+                raise ModelError(
+                    f"neplatný datový model: {path}.answer: {error}"
+                ) from error
+            if len(answer_letters) != slot.length:
+                raise ModelError(
+                    f"neplatný datový model: {path}.answer: heslo má "
+                    f"{len(answer_letters)} polí, ale slot {slot.identifier!r} "
+                    f"má délku {slot.length}"
+                )
 
         row_step = 1 if slot.direction == "vertical" else 0
         column_step = 1 if slot.direction == "horizontal" else 0
@@ -770,6 +845,18 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
                 )
             directions[slot.direction] = slot.identifier
             used_letters.add(coordinate)
+            if answer_letters:
+                letter = answer_letters[offset]
+                previous_fixed = fixed_letters.get(coordinate)
+                if previous_fixed is not None and previous_fixed[0] != letter:
+                    previous_letter, previous_path = previous_fixed
+                    raise ModelError(
+                        "neplatný datový model: "
+                        f"{path}.answer: písmeno {letter!r} na souřadnici "
+                        f"row={row}, column={column} je v rozporu s písmenem "
+                        f"{previous_letter!r} z {previous_path}"
+                    )
+                fixed_letters.setdefault(coordinate, (letter, f"{path}.answer"))
 
         if slot.legend_position is None:
             continue
@@ -835,6 +922,28 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
                     "legendovou buňku nepoužívá žádný slot"
                 )
 
+    help_cells = [
+        (row_index, column_index)
+        for row_index, row in enumerate(grid.cells, start=1)
+        for column_index, cell in enumerate(row, start=1)
+        if isinstance(cell, TemplateHelpCell)
+    ]
+    if len(help_cells) > 1:
+        raise ModelError(
+            "neplatný datový model: $.grid.cells: "
+            "šablona smí obsahovat nejvýše jednu buňku pomůcky"
+        )
+    if help_slots and not help_cells:
+        raise ModelError(
+            "neplatný datový model: $.grid.cells: "
+            "hesla s in_help vyžadují buňku type: help"
+        )
+    if help_cells and not help_slots:
+        raise ModelError(
+            "neplatný datový model: $.grid.cells: "
+            "buňka type: help vyžaduje alespoň jedno heslo s in_help"
+        )
+
     slots_by_identifier = {slot.identifier: slot for slot in template.slots}
     used_secret_slots: dict[str, str] = {}
     for secret_index, secret in enumerate(template.secrets):
@@ -844,7 +953,12 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
                 f"neplatný datový model: {secret_path}.parts: "
                 "seznam nesmí být prázdný"
             )
-        counts = tuple(part.word_count for part in secret.parts)
+        slot_parts = tuple(
+            part
+            for part in secret.parts
+            if isinstance(part, TemplateSecretPart)
+        )
+        counts = tuple(part.word_count for part in slot_parts)
         if secret.words:
             if any(count is None for count in counts):
                 raise ModelError(
@@ -867,6 +981,60 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
         word_offset = 0
         for part_index, part in enumerate(secret.parts):
             part_path = f"{secret_path}.parts[{part_index}]"
+            if isinstance(part, TemplateSecretCellsPart):
+                if not part.cells:
+                    raise ModelError(
+                        f"neplatný datový model: {part_path}.cells: "
+                        "seznam nesmí být prázdný"
+                    )
+                seen_cells: set[Coordinate] = set()
+                for cell_index, coordinate in enumerate(part.cells):
+                    cell_path = f"{part_path}.cells[{cell_index}]"
+                    if coordinate in seen_cells:
+                        raise ModelError(
+                            f"neplatný datový model: {cell_path}: "
+                            "souřadnice se v jedné části nesmí opakovat"
+                        )
+                    seen_cells.add(coordinate)
+                    if (
+                        coordinate.row < 1
+                        or coordinate.column < 1
+                        or coordinate.row > grid.height
+                        or coordinate.column > grid.width
+                    ):
+                        raise ModelError(
+                            f"neplatný datový model: {cell_path}: "
+                            f"souřadnice row={coordinate.row}, "
+                            f"column={coordinate.column} leží mimo šablonu "
+                            f"{grid.width} × {grid.height}"
+                        )
+                    template_cell = grid.cells[
+                        coordinate.row - 1
+                    ][coordinate.column - 1]
+                    if not isinstance(template_cell, TemplateLetterCell):
+                        raise ModelError(
+                            f"neplatný datový model: {cell_path}: "
+                            "tajenka musí odkazovat na písmennou buňku"
+                        )
+                if part.arrows:
+                    if len(part.cells) < 2:
+                        raise ModelError(
+                            f"neplatný datový model: {part_path}.arrows: "
+                            "tajenka se šipkami musí obsahovat alespoň dvě "
+                            "buňky"
+                        )
+                    for cell_index, (current, following) in enumerate(
+                        pairwise(part.cells)
+                    ):
+                        try:
+                            _secret_step_direction(current, following)
+                        except ValueError as error:
+                            raise ModelError(
+                                f"neplatný datový model: "
+                                f"{part_path}.cells[{cell_index + 1}]: {error}"
+                            ) from error
+                continue
+
             slot = slots_by_identifier.get(part.slot_identifier)
             if slot is None:
                 raise ModelError(
@@ -888,12 +1056,19 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
                 word_offset : word_offset + part.word_count
             ]
             word_offset += part.word_count
-            part_length = len(split_answer_letters("".join(part_words)))
+            part_answer = "".join(part_words)
+            part_length = len(split_answer_letters(part_answer))
             if part_length != slot.length:
                 raise ModelError(
                     f"neplatný datový model: {part_path}: "
                     f"část tajenky má {part_length} polí, ale slot "
                     f"{slot.identifier!r} má délku {slot.length}"
+                )
+            if slot.answer is not None and slot.answer != part_answer:
+                raise ModelError(
+                    f"neplatný datový model: {part_path}: "
+                    f"tajenka {part_answer!r} neodpovídá pevnému heslu "
+                    f"{slot.answer!r} ve slotu {slot.identifier!r}"
                 )
 
 
@@ -1387,6 +1562,8 @@ def _template_cell_data(cell: TemplateCell) -> dict[str, str]:
         return {"type": "legend"}
     if isinstance(cell, TemplateEmptyCell):
         return {"type": "empty"}
+    if isinstance(cell, TemplateHelpCell):
+        return {"type": "help"}
     raise ModelError(
         f"nepodporovaný typ buňky šablony pro zápis: {type(cell).__name__}"
     )
@@ -1410,6 +1587,11 @@ def _crossword_template_data(template: CrosswordTemplate) -> dict[str, Any]:
                 "row": slot.legend_position.row,
                 "column": slot.legend_position.column,
             }
+        if slot.answer is not None:
+            data["answer"] = slot.answer
+            data["clue"] = slot.clue
+        if slot.in_help:
+            data["in_help"] = True
         slots.append(data)
 
     result: dict[str, Any] = {
@@ -1431,9 +1613,19 @@ def _crossword_template_data(template: CrosswordTemplate) -> dict[str, Any]:
         for secret in template.secrets:
             parts = []
             for part in secret.parts:
-                part_data: dict[str, Any] = {"slot": part.slot_identifier}
-                if part.word_count is not None:
-                    part_data["word_count"] = part.word_count
+                if isinstance(part, TemplateSecretCellsPart):
+                    part_data = {
+                        "cells": [
+                            _coordinate_data(coordinate)
+                            for coordinate in part.cells
+                        ]
+                    }
+                    if part.arrows:
+                        part_data["arrows"] = True
+                else:
+                    part_data = {"slot": part.slot_identifier}
+                    if part.word_count is not None:
+                        part_data["word_count"] = part.word_count
                 parts.append(part_data)
             secret_data: dict[str, Any] = {"parts": parts}
             if secret.words:

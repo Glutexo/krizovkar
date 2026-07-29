@@ -12,6 +12,7 @@ from krizovkar.generator import (
     GenerationError,
     SecretRequirement,
     create_grid_from_template,
+    create_template_from_specification,
     fill_crossword_template,
     generate_numbered_grid,
     generate_numbered_template,
@@ -23,20 +24,27 @@ from krizovkar.generator import (
 from krizovkar.layout import create_dense_swedish_layout
 from krizovkar.model import (
     Coordinate,
+    CrosswordSpecification,
     CrosswordTemplate,
     EmptyCell,
+    GridDimensions,
+    HelpCell,
     LegendCell,
     LetterCell,
     SecretCell,
     SecretPrompt,
     TemplateEmptyCell,
+    TemplateHelpCell,
     TemplateLegendCell,
     TemplateLetterCell,
     TemplateGrid,
     TemplateSecret,
+    TemplateSecretCellsPart,
     TemplateSecretPart,
+    WordPlacement,
     WordSlot,
     load_crossword_grid,
+    load_crossword_specification,
     write_crossword_grid,
 )
 from krizovkar.validation import check_crossword_grid
@@ -54,9 +62,219 @@ def _complete_dictionary(*lengths: int) -> CrosswordDictionary:
 
 
 TEST_DICTIONARY = _complete_dictionary(3, 4)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SPECIFICATION_PLACED_WORDS_EXAMPLE = (
+    PROJECT_ROOT / "examples" / "specification-placed-words.yaml"
+)
+SPECIFICATION_SECRETS_EXAMPLE = (
+    PROJECT_ROOT / "examples" / "specification-secrets.yaml"
+)
+SPECIFICATION_MULTIPART_SECRETS_EXAMPLE = (
+    PROJECT_ROOT / "examples" / "specification-multipart-secrets.yaml"
+)
+SPECIFICATION_SECRET_PROMPT_EXAMPLE = (
+    PROJECT_ROOT / "examples" / "specification-secret-prompt.yaml"
+)
 
 
 class GeneratorTest(unittest.TestCase):
+    def test_creates_swedish_template_from_specification(self) -> None:
+        specification = load_crossword_specification(
+            SPECIFICATION_PLACED_WORDS_EXAMPLE
+        )
+
+        template = create_template_from_specification(specification)
+
+        self.assertEqual(("h1", "v1", "v2"), tuple(
+            slot.identifier for slot in template.slots
+        ))
+        self.assertEqual(
+            ("LABE", "LES", "EMU"),
+            tuple(slot.answer for slot in template.slots),
+        )
+        self.assertEqual(
+            ("2,1", "1,2", "1,5"),
+            tuple(
+                f"{slot.legend_position.row},{slot.legend_position.column}"
+                for slot in template.slots
+                if slot.legend_position is not None
+            ),
+        )
+        self.assertIsInstance(template.grid.cells[0][0], TemplateHelpCell)
+
+        crossword = create_grid_from_template(template)
+        assert crossword.grid.cells is not None
+        self.assertEqual(
+            ("L", "A", "B", "E"),
+            tuple(crossword.grid.cells[1][column].value for column in range(1, 5)),
+        )
+        help_cell = crossword.grid.cells[0][0]
+        self.assertIsInstance(help_cell, HelpCell)
+        assert isinstance(help_cell, HelpCell)
+        self.assertEqual(("LES", "EMU"), help_cell.words)
+
+    def test_preserves_specification_order_in_help(self) -> None:
+        specification = CrosswordSpecification(
+            format_name="krizovkar",
+            kind="specification",
+            version=1,
+            grid=GridDimensions(width=4, height=4),
+            words=(
+                WordPlacement(
+                    answer="LES",
+                    start=Coordinate(row=1, column=1),
+                    direction="vertical",
+                    legend="Porost stromů",
+                    in_help=True,
+                ),
+                WordPlacement(
+                    answer="EMU",
+                    start=Coordinate(row=4, column=2),
+                    direction="horizontal",
+                    legend="Australský nelétavý pták",
+                    in_help=True,
+                ),
+            ),
+        )
+
+        template = create_template_from_specification(
+            specification,
+            layout="numbered",
+        )
+        crossword = create_grid_from_template(template)
+
+        self.assertEqual(
+            ("v1", "h1"),
+            tuple(slot.identifier for slot in template.slots),
+        )
+        assert crossword.grid.cells is not None
+        help_cell = crossword.grid.cells[0][1]
+        self.assertIsInstance(help_cell, HelpCell)
+        assert isinstance(help_cell, HelpCell)
+        self.assertEqual(("LES", "EMU"), help_cell.words)
+
+    def test_creates_numbered_template_with_both_secret_forms(self) -> None:
+        specification = load_crossword_specification(
+            SPECIFICATION_SECRETS_EXAMPLE
+        )
+
+        template = create_template_from_specification(
+            specification,
+            layout="numbered",
+        )
+        crossword = create_grid_from_template(template)
+
+        self.assertTrue(
+            all(slot.legend_position is None for slot in template.slots)
+        )
+        self.assertIsInstance(
+            template.secrets[0].parts[0],
+            TemplateSecretCellsPart,
+        )
+        self.assertEqual(("KŘÍŽOVKÁŘ",), template.secrets[1].words)
+        assert crossword.grid.cells is not None
+        self.assertEqual("right", crossword.grid.cells[1][1].arrow)
+        self.assertEqual("down", crossword.grid.cells[1][4].arrow)
+        self.assertEqual(
+            "KŘÍŽOVKÁŘ",
+            "".join(
+                crossword.grid.cells[4][column].value
+                for column in range(1, 10)
+            ),
+        )
+        self.assertEqual(4, len(crossword.clues))
+
+    def test_swedish_specification_requires_room_for_legend(self) -> None:
+        specification = load_crossword_specification(
+            SPECIFICATION_SECRET_PROMPT_EXAMPLE
+        )
+
+        with self.assertRaisesRegex(
+            GenerationError,
+            "nevejde vepsaná legenda",
+        ):
+            create_template_from_specification(specification)
+
+    def test_separates_adjacent_letters_not_joined_by_a_slot(self) -> None:
+        specification = load_crossword_specification(
+            SPECIFICATION_MULTIPART_SECRETS_EXAMPLE
+        )
+        template = create_template_from_specification(
+            specification,
+            layout="numbered",
+        )
+
+        crossword = create_grid_from_template(template)
+
+        assert crossword.grid.cells is not None
+        self.assertTrue(
+            all(
+                "bottom" in crossword.grid.cells[4][column].bars
+                for column in range(5)
+            )
+        )
+
+    def test_fills_unfixed_slots_around_fixed_answer(self) -> None:
+        template = CrosswordTemplate(
+            format_name="krizovkar",
+            kind="template",
+            version=1,
+            grid=TemplateGrid(
+                width=3,
+                height=3,
+                cells=(
+                    (
+                        TemplateEmptyCell(),
+                        TemplateLetterCell(),
+                        TemplateEmptyCell(),
+                    ),
+                    (
+                        TemplateLetterCell(),
+                        TemplateLetterCell(),
+                        TemplateLetterCell(),
+                    ),
+                    (
+                        TemplateEmptyCell(),
+                        TemplateLetterCell(),
+                        TemplateEmptyCell(),
+                    ),
+                ),
+            ),
+            slots=(
+                WordSlot(
+                    identifier="h1",
+                    start=Coordinate(row=2, column=1),
+                    direction="horizontal",
+                    length=3,
+                    answer="ABC",
+                    clue="Pevné heslo",
+                ),
+                WordSlot(
+                    identifier="v1",
+                    start=Coordinate(row=1, column=2),
+                    direction="vertical",
+                    length=3,
+                ),
+            ),
+        )
+        dictionary = CrosswordDictionary(
+            entries=(
+                DictionaryEntry(answer="XBX", clues=("Doplněné heslo",)),
+            )
+        )
+
+        crossword = fill_crossword_template(template, dictionary)
+
+        assert crossword.grid.cells is not None
+        self.assertEqual(
+            ("A", "B", "C"),
+            tuple(cell.value for cell in crossword.grid.cells[1]),
+        )
+        self.assertEqual(
+            ("X", "B", "X"),
+            tuple(crossword.grid.cells[row][1].value for row in range(3)),
+        )
+
     def test_normalizes_secret_words_and_discards_punctuation(self) -> None:
         self.assertEqual(
             ("KOMU", "SE", "NELENÍ", "TOMU", "SE", "ZELENÍ"),

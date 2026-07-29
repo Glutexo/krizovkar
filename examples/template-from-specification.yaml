@@ -1,0 +1,37 @@
+format: krizovkar
+kind: template
+version: 1
+grid:
+  width: 7
+  height: 6
+  cells:
+    - [{type: help}, {type: legend}, {type: empty}, {type: empty}, {type: legend}, {type: empty}, {type: empty}]
+    - [{type: legend}, {type: letter}, {type: letter}, {type: letter}, {type: letter}, {type: empty}, {type: empty}]
+    - [{type: empty}, {type: letter}, {type: empty}, {type: empty}, {type: letter}, {type: empty}, {type: empty}]
+    - [{type: empty}, {type: letter}, {type: empty}, {type: empty}, {type: letter}, {type: empty}, {type: empty}]
+    - [{type: empty}, {type: empty}, {type: empty}, {type: empty}, {type: empty}, {type: empty}, {type: empty}]
+    - [{type: empty}, {type: empty}, {type: empty}, {type: empty}, {type: empty}, {type: empty}, {type: empty}]
+slots:
+  - id: h1
+    start: {row: 2, column: 2}
+    direction: horizontal
+    length: 4
+    legend: {row: 2, column: 1}
+    answer: LABE
+    clue: Česká řeka
+  - id: v1
+    start: {row: 2, column: 2}
+    direction: vertical
+    length: 3
+    legend: {row: 1, column: 2}
+    answer: LES
+    clue: Porost stromů
+    in_help: true
+  - id: v2
+    start: {row: 2, column: 5}
+    direction: vertical
+    length: 3
+    legend: {row: 1, column: 5}
+    answer: EMU
+    clue: Australský nelétavý pták
+    in_help: true
