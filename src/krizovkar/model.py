@@ -37,18 +37,18 @@ DEFAULT_SECRET_PART_LEGEND = "{number}. část tajenky"
 
 @dataclass(frozen=True, slots=True)
 class LetterCell:
-    """Buňka obsahující jedno písmeno."""
+    """Běžná písmenná buňka s volitelně již známou hodnotou."""
 
-    value: str
+    value: str | None = None
     number: int | None = None
     bars: tuple[CellBar, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class SecretCell:
-    """Zvýrazněná buňka, jejíž písmeno patří do tajenky."""
+    """Zvýrazněná tajenková buňka s volitelně již známou hodnotou."""
 
-    value: str
+    value: str | None = None
     arrow: SecretArrow | None = None
     number: int | None = None
     bars: tuple[CellBar, ...] = ()
@@ -56,9 +56,9 @@ class SecretCell:
 
 @dataclass(frozen=True, slots=True)
 class LegendCell:
-    """Buňka s jedním nebo více texty a případnými šipkami."""
+    """Buňka pro dosud neznámé nebo již vyplněné texty legend."""
 
-    texts: tuple[str, ...]
+    texts: tuple[str | None, ...] = ()
     arrows: tuple[LegendArrow, ...] = ()
 
 
@@ -472,20 +472,20 @@ def _validated_data(source: Path, schema_name: str) -> dict[str, Any]:
 def _grid_cell(cell: dict[str, Any]) -> GridCell:
     if cell["type"] == "letter":
         return LetterCell(
-            value=cell["value"],
+            value=cell.get("value"),
             number=cell.get("number"),
             bars=tuple(cell.get("bars", ())),
         )
     if cell["type"] == "secret":
         return SecretCell(
-            value=cell["value"],
+            value=cell.get("value"),
             arrow=cell.get("arrow"),
             number=cell.get("number"),
             bars=tuple(cell.get("bars", ())),
         )
     if cell["type"] == "legend":
         return LegendCell(
-            texts=tuple(cell["texts"]),
+            texts=tuple(cell.get("texts", ())),
             arrows=tuple(cell.get("arrows", ())),
         )
     if cell["type"] == "empty":
@@ -564,6 +564,23 @@ def load_crossword_grid(source: str | Path) -> CrosswordGrid:
         clues=clues,
         secret_prompts=secret_prompts,
     )
+
+
+def load_crossword_document_kind(source: str | Path) -> str:
+    """Načte kořenový klíč ``kind`` pro volbu správného loaderu."""
+
+    source_path = Path(source)
+    data = _yaml_data(source_path)
+    if not isinstance(data, dict):
+        raise ModelError("neplatný datový model: $: očekává se objekt")
+    if "kind" not in data:
+        raise ModelError(
+            "neplatný datový model: $.kind: chybí povinný klíč 'kind'"
+        )
+    kind = data["kind"]
+    if not isinstance(kind, str):
+        raise ModelError("neplatný datový model: $.kind: očekává se text")
+    return kind
 
 
 def _template_cell(cell: dict[str, Any]) -> TemplateCell:
@@ -1146,14 +1163,18 @@ def _validate_specification_placements(
 
 def _grid_cell_data(cell: GridCell) -> dict[str, Any]:
     if isinstance(cell, LetterCell):
-        data: dict[str, Any] = {"type": "letter", "value": cell.value}
+        data: dict[str, Any] = {"type": "letter"}
+        if cell.value is not None:
+            data["value"] = cell.value
         if cell.number is not None:
             data["number"] = cell.number
         if cell.bars:
             data["bars"] = list(cell.bars)
         return data
     if isinstance(cell, SecretCell):
-        data = {"type": "secret", "value": cell.value}
+        data = {"type": "secret"}
+        if cell.value is not None:
+            data["value"] = cell.value
         if cell.arrow is not None:
             data["arrow"] = cell.arrow
         if cell.number is not None:
@@ -1162,7 +1183,9 @@ def _grid_cell_data(cell: GridCell) -> dict[str, Any]:
             data["bars"] = list(cell.bars)
         return data
     if isinstance(cell, LegendCell):
-        data: dict[str, Any] = {"type": "legend", "texts": list(cell.texts)}
+        data: dict[str, Any] = {"type": "legend"}
+        if cell.texts:
+            data["texts"] = list(cell.texts)
         if cell.arrows:
             data["arrows"] = list(cell.arrows)
         return data
@@ -1329,6 +1352,13 @@ def _dump_yaml_document(
     yaml = YAML()
     yaml.width = 100
     yaml.indent(mapping=2, sequence=2, offset=0)
+    yaml.representer.add_representer(
+        type(None),
+        lambda representer, _: representer.represent_scalar(
+            "tag:yaml.org,2002:null",
+            "null",
+        ),
+    )
     yaml.dump(data, output)
 
 

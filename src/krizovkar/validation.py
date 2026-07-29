@@ -193,6 +193,25 @@ def check_crossword_grid(crossword: CrosswordGrid) -> ValidationReport:
         )
 
     issues: list[ValidationIssue] = []
+    if any(
+        (
+            isinstance(cell, (LetterCell, SecretCell))
+            and cell.value is None
+        )
+        or (
+            isinstance(cell, LegendCell)
+            and (not cell.texts or any(text is None for text in cell.texts))
+        )
+        for row in cells
+        for cell in row
+    ):
+        issues.append(
+            _warning(
+                "grid.unfinished",
+                "$.grid.cells",
+                "mřížka obsahuje dosud nevyplněná písmena nebo legendy",
+            )
+        )
     component_count = _letter_component_count(crossword)
     if component_count > 1:
         issues.append(
@@ -211,7 +230,7 @@ def check_crossword_grid(crossword: CrosswordGrid) -> ValidationReport:
 
             path = _cell_path(row, column)
             directions = _answer_directions(crossword, row, column)
-            if directions and len(cell.texts) != len(directions):
+            if cell.texts and directions and len(cell.texts) != len(directions):
                 issues.append(
                     _warning(
                         "legend.text-count",

@@ -828,6 +828,114 @@ def _fill_template_slots(
     return result
 
 
+def _template_grid_annotations(
+    template: CrosswordTemplate,
+) -> tuple[dict[GridCoordinate, int], dict[GridCoordinate, set[str]]]:
+    external_starts = sorted(
+        {
+            (slot.start.row - 1, slot.start.column - 1)
+            for slot in template.slots
+            if slot.legend_position is None
+        }
+    )
+    numbers = {
+        coordinate: number
+        for number, coordinate in enumerate(external_starts, start=1)
+    }
+    bars: dict[GridCoordinate, set[str]] = defaultdict(set)
+    for slot in template.slots:
+        if slot.direction == "horizontal" and slot.start.column > 1:
+            previous = (slot.start.row - 1, slot.start.column - 2)
+            if isinstance(
+                template.grid.cells[previous[0]][previous[1]],
+                TemplateLetterCell,
+            ):
+                bars[previous].add("right")
+        if slot.direction == "vertical" and slot.start.row > 1:
+            previous = (slot.start.row - 2, slot.start.column - 1)
+            if isinstance(
+                template.grid.cells[previous[0]][previous[1]],
+                TemplateLetterCell,
+            ):
+                bars[previous].add("bottom")
+    return numbers, bars
+
+
+def create_grid_from_template(template: CrosswordTemplate) -> CrosswordGrid:
+    """Převede šablonu na nevyplněnou, ale vykreslitelnou cílovou mřížku."""
+
+    secret_slot_identifiers = frozenset(
+        part.slot_identifier
+        for secret in template.secrets
+        for part in secret.parts
+    )
+    secret_coordinates = {
+        coordinate
+        for slot in template.slots
+        if slot.identifier in secret_slot_identifiers
+        for coordinate in _slot_coordinates(slot)
+    }
+    secret_prompts = tuple(
+        secret.prompt
+        for secret in template.secrets
+        if secret.prompt is not None
+    )
+    numbers, bars = _template_grid_annotations(template)
+    legend_section_counts: dict[GridCoordinate, int] = defaultdict(int)
+    for slot in template.slots:
+        if slot.legend_position is None:
+            continue
+        coordinate = (
+            slot.legend_position.row - 1,
+            slot.legend_position.column - 1,
+        )
+        legend_section_counts[coordinate] += 1
+
+    cells = []
+    for row_index, template_row in enumerate(template.grid.cells):
+        row = []
+        for column_index, template_cell in enumerate(template_row):
+            coordinate = (row_index, column_index)
+            if isinstance(template_cell, TemplateEmptyCell):
+                row.append(EmptyCell())
+            elif isinstance(template_cell, TemplateLegendCell):
+                row.append(
+                    LegendCell(
+                        texts=(None,) * legend_section_counts[coordinate]
+                    )
+                )
+            else:
+                cell_type = (
+                    SecretCell
+                    if coordinate in secret_coordinates
+                    else LetterCell
+                )
+                cell_bars = bars.get(coordinate, set())
+                row.append(
+                    cell_type(
+                        number=numbers.get(coordinate),
+                        bars=tuple(
+                            bar
+                            for bar in ("right", "bottom")
+                            if bar in cell_bars
+                        ),
+                    )
+                )
+        cells.append(tuple(row))
+
+    return CrosswordGrid(
+        format_name="krizovkar",
+        kind="grid",
+        version=1,
+        grid=Grid(
+            width=template.grid.width,
+            height=template.grid.height,
+            cells=tuple(cells),
+        ),
+        secret_prompts=secret_prompts,
+    )
+
+
 def _filled_template_grid(
     template: CrosswordTemplate,
     assignments: dict[str, _Entry],
@@ -839,7 +947,7 @@ def _filled_template_grid(
         defaultdict(list)
     )
     external_slots = []
-    bars: dict[GridCoordinate, set[str]] = defaultdict(set)
+    numbers, bars = _template_grid_annotations(template)
     secret_coordinates = {
         coordinate
         for slot in template.slots
@@ -859,32 +967,6 @@ def _filled_template_grid(
                 slot.legend_position.column - 1,
             )
             slots_by_legend[legend_coordinate].append((slot, entry))
-
-        if slot.direction == "horizontal" and slot.start.column > 1:
-            previous = (slot.start.row - 1, slot.start.column - 2)
-            if isinstance(
-                template.grid.cells[previous[0]][previous[1]],
-                TemplateLetterCell,
-            ):
-                bars[previous].add("right")
-        if slot.direction == "vertical" and slot.start.row > 1:
-            previous = (slot.start.row - 2, slot.start.column - 1)
-            if isinstance(
-                template.grid.cells[previous[0]][previous[1]],
-                TemplateLetterCell,
-            ):
-                bars[previous].add("bottom")
-
-    external_starts = sorted(
-        {
-            (slot.start.row - 1, slot.start.column - 1)
-            for slot, _ in external_slots
-        }
-    )
-    numbers = {
-        coordinate: number
-        for number, coordinate in enumerate(external_starts, start=1)
-    }
     direction_order = {"horizontal": 0, "vertical": 1}
     clues = tuple(
         ExternalClue(

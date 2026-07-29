@@ -243,6 +243,8 @@ def _draw_legend_cell(
 ) -> None:
     pdf.setFillGray(LEGEND_FILL_GRAY)
     pdf.rect(left, bottom, size, size, stroke=0, fill=1)
+    if not cell.texts:
+        return
 
     section_height = size / len(cell.texts)
     if len(cell.texts) > 1:
@@ -264,15 +266,20 @@ def _draw_legend_cell(
     for section_index, (text, section_bottom, section_height) in enumerate(
         sections
     ):
-        padding = min(TEXT_CELL_PADDING, size * 0.08, section_height * 0.15)
-        _draw_fitted_text(
-            pdf,
-            text,
-            left + padding,
-            section_bottom + padding,
-            size - 2 * padding,
-            section_height - 2 * padding,
-        )
+        if text is not None:
+            padding = min(
+                TEXT_CELL_PADDING,
+                size * 0.08,
+                section_height * 0.15,
+            )
+            _draw_fitted_text(
+                pdf,
+                text,
+                left + padding,
+                section_bottom + padding,
+                size - 2 * padding,
+                section_height - 2 * padding,
+            )
         if section_index < len(cell.arrows):
             _draw_legend_arrow(
                 pdf,
@@ -502,6 +509,7 @@ def _draw_letter_cell(
     cell_size: float,
     font_size: float,
 ) -> None:
+    assert cell.value is not None
     text_width = pdfmetrics.stringWidth(
         cell.value,
         LETTER_FONT,
@@ -793,9 +801,24 @@ def _write_pdf(
     pdf = Canvas(canvas_target, pagesize=page_size, pageCompression=1)
     pdf.setTitle(f"Křížovkář – mřížka {width} × {height}")
     pdf.setCreator("Křížovkář")
+    has_unfilled_cells = (
+        crossword.grid.cells is not None
+        and any(
+            (
+                isinstance(cell, (LetterCell, SecretCell))
+                and cell.value is None
+            )
+            or (
+                isinstance(cell, LegendCell)
+                and (not cell.texts or any(text is None for text in cell.texts))
+            )
+            for row in crossword.grid.cells
+            for cell in row
+        )
+    )
     if crossword.grid.cells is None:
         subject = "Prázdná křížovková mřížka"
-    elif filled:
+    elif filled and not has_unfilled_cells:
         subject = "Vyplněná křížovková mřížka"
     else:
         subject = "Nevyplněná křížovková mřížka"
@@ -868,7 +891,10 @@ def _write_pdf(
         for row_index, row in enumerate(crossword.grid.cells):
             center_y = bottom + grid_height - (row_index + 0.5) * cell_size
             for column_index, cell in enumerate(row):
-                if not isinstance(cell, (LetterCell, SecretCell)):
+                if (
+                    not isinstance(cell, (LetterCell, SecretCell))
+                    or cell.value is None
+                ):
                     continue
                 center_x = left + (column_index + 0.5) * cell_size
                 cell_center_y = center_y

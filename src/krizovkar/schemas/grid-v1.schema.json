@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/master/src/krizovkar/schemas/grid-v1.schema.json",
   "title": "Cílová mřížka Křížovkáře, verze 1",
-  "description": "Společný datový model výsledné mřížky s vepsanými, číselnými nebo smíšenými legendami.",
+  "description": "Společný datový model nevyplněné nebo vyplněné mřížky s vepsanými, číselnými nebo smíšenými legendami.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -132,7 +132,7 @@
       }
     },
     "gridCell": {
-      "description": "Běžná, tajenková, legendová, nevyplňovaná nebo pomocná buňka.",
+      "description": "Běžná, tajenková, legendová, nevyplňovaná nebo pomocná buňka s volitelně již známým obsahem.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -149,6 +149,7 @@
           ]
         },
         "value": {
+          "description": "Volitelná již známá hodnota písmenné buňky.",
           "type": "string",
           "pattern": "^(?:CH|[A-ZÁÄČĎÉĚÍŇÓÔÖŘŠŤÚŮÜÝŽ])$"
         },
@@ -179,12 +180,20 @@
           ]
         },
         "texts": {
+          "description": "Volitelné texty legendové buňky; null rezervuje dosud nevyplněnou část.",
           "type": "array",
           "minItems": 1,
           "items": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "arrows": {
@@ -207,6 +216,11 @@
             "pattern": "\\S"
           }
         }
+      },
+      "dependentRequired": {
+        "arrows": [
+          "texts"
+        ]
       },
       "allOf": [
         {
@@ -243,9 +257,6 @@
             }
           },
           "then": {
-            "required": [
-              "value"
-            ],
             "not": {
               "anyOf": [
                 {
@@ -279,9 +290,6 @@
             }
           },
           "then": {
-            "required": [
-              "texts"
-            ],
             "not": {
               "anyOf": [
                 {

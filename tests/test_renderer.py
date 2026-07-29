@@ -217,6 +217,44 @@ class RenderModeTest(unittest.TestCase):
         draw_legend.assert_called_once()
         draw_secret_beak.assert_called_once()
 
+    def test_unfilled_pdf_skips_unknown_letters_and_empty_legend(self) -> None:
+        crossword = CrosswordGrid(
+            format_name="krizovkar",
+            kind="grid",
+            version=1,
+            grid=Grid(
+                width=2,
+                height=1,
+                cells=((LegendCell(), LetterCell()),),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "unfilled.pdf"
+            with patch(
+                "krizovkar.renderer._draw_letter_cell",
+                wraps=_draw_letter_cell,
+            ) as draw_letter:
+                render_pdf(crossword, output)
+
+            self.assertTrue(output.read_bytes().startswith(b"%PDF-"))
+
+        draw_letter.assert_not_called()
+
+    def test_unfilled_double_legend_keeps_section_divider(self) -> None:
+        pdf = Mock()
+
+        with patch("krizovkar.renderer._draw_fitted_text") as draw_text:
+            _draw_legend_cell(
+                pdf,
+                LegendCell(texts=(None, None)),
+                left=0,
+                bottom=0,
+                size=10,
+            )
+
+        pdf.line.assert_called_once_with(0, 5, 10, 5)
+        draw_text.assert_not_called()
+
 
 class SecretPromptRenderTest(unittest.TestCase):
     def test_multiple_prompts_keep_top_to_bottom_order(self) -> None:

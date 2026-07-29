@@ -1038,6 +1038,53 @@ class ModelTest(unittest.TestCase):
             assert isinstance(legend, LegendCell)
             self.assertEqual(("right",), legend.arrows)
 
+    def test_loads_and_writes_unfilled_grid_cells(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "unfilled.yaml"
+            output = Path(directory) / "written.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: grid\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 3\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: letter}, {type: secret}, {type: legend}]\n",
+                encoding="utf-8",
+            )
+
+            crossword = load_crossword_grid(source)
+            write_crossword_grid(crossword, output)
+
+            assert crossword.grid.cells is not None
+            letter, secret, legend = crossword.grid.cells[0]
+            self.assertIsNone(letter.value)
+            self.assertIsNone(secret.value)
+            self.assertFalse(legend.texts)
+            self.assertEqual(crossword, load_crossword_grid(output))
+            written = output.read_text(encoding="utf-8")
+            self.assertNotIn("value:", written)
+            self.assertNotIn("texts:", written)
+
+    def test_unfilled_legend_rejects_arrows_without_texts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "unfilled-legend-arrow.yaml"
+            source.write_text(
+                "format: krizovkar\n"
+                "kind: grid\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 1\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: legend, arrows: [right]}]\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ModelError, "vyžaduje také klíč 'texts'"):
+                load_crossword_grid(source)
+
     def test_rejects_unknown_legend_arrow(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "unknown-legend-arrow.yaml"
@@ -1341,7 +1388,7 @@ class CommandTest(unittest.TestCase):
 
     def test_argument_errors_are_in_czech(self) -> None:
         cases = (
-            (["render"], "je nutné zadat: MŘÍŽKA.yaml"),
+            (["render"], "je nutné zadat: VSTUP.yaml"),
             (
                 ["render", str(GRID_MINIMAL_EXAMPLE), "--page-format", "A7"],
                 "neplatná volba: 'A7'",
@@ -1418,6 +1465,35 @@ class CommandTest(unittest.TestCase):
             template = load_crossword_template(source)
             self.assertEqual(5, template.grid.width)
             self.assertEqual(5, template.grid.height)
+
+    def test_grid_writes_unfilled_yaml_to_stdout(self) -> None:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            result = main(["grid", str(TEMPLATE_SECRET_EXAMPLE)])
+
+        self.assertEqual(0, result)
+        self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
+        self.assertNotIn("Nevyplněná mřížka vytvořena", stdout.getvalue())
+        self.assertIn(
+            "Nevyplněná mřížka vytvořena: standardní výstup",
+            stderr.getvalue(),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "grid.yaml"
+            source.write_text(stdout.getvalue(), encoding="utf-8")
+            crossword = load_crossword_grid(source)
+
+        assert crossword.grid.cells is not None
+        self.assertTrue(
+            all(isinstance(cell, SecretCell) for cell in crossword.grid.cells[0])
+        )
+        self.assertTrue(
+            all(cell.value is None for cell in crossword.grid.cells[0])
+        )
+        self.assertEqual(1, crossword.grid.cells[0][0].number)
+        self.assertEqual(1, len(crossword.secret_prompts))
 
     def test_fill_writes_yaml_to_stdout_without_output(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1934,6 +2010,25 @@ class CommandTest(unittest.TestCase):
         self.assertTrue(pdf.startswith(b"%PDF-"))
         self.assertIn(b"%%EOF", pdf[-1024:])
         self.assertIn("PDF vytvořeno: standardní výstup", stderr.getvalue())
+
+    def test_render_accepts_template_without_dictionary(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "template.pdf"
+            stdout = io.StringIO()
+
+            with redirect_stdout(stdout):
+                result = main(
+                    [
+                        "render",
+                        str(TEMPLATE_SECRET_EXAMPLE),
+                        "--output",
+                        str(output),
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            self.assertIn("PDF vytvořeno:", stdout.getvalue())
+            self.assertTrue(output.read_bytes().startswith(b"%PDF-"))
 
     def test_render_handles_empty_cells(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

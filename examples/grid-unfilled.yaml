@@ -1,0 +1,8 @@
+format: krizovkar
+kind: grid
+version: 1
+grid:
+  width: 3
+  height: 1
+  cells:
+    - [{type: letter, number: 1}, {type: letter}, {type: letter}]

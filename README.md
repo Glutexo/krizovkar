@@ -24,10 +24,12 @@ Křížovkář rozlišuje tři samostatné druhy YAML dokumentů:
 
 - `kind: specification` je vstupní zadání se slovy, nápovědami, tajenkami a pravidly skládání,
 - `kind: template` je nevyplněná šablona s rolemi buněk a sloty hesel,
-- `kind: grid` je výsledná mřížka s konkrétními buňkami, kterou lze přímo vykreslit.
+- `kind: grid` je mřížka s konkrétními rolemi buněk a volitelně již doplněnými
+  písmeny a legendami, kterou lze přímo vykreslit.
 
 ```text
 specification → návrh rozložení (budoucí) → template
+template → grid (nevyplněná mřížka) → render → PDF
 template + slovník → fill → grid → render → PDF
 požadavky + slovník → generate (= template + fill) → grid
 ```
@@ -134,15 +136,27 @@ grid:
     - [{type: secret, value: Č, arrow: right}, {type: letter, value: CH}, {type: letter, value: Á}]
 ```
 
-Typ `letter` označuje běžné písmeno a `secret` písmeno patřící do tajenky. České `CH` zabírá jednu buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku. Tajenková buňka má v PDF světle šedé pozadí a může mít jeden směrový zobáček `arrow` ve směru `up`, `right`, `down` nebo `left`. Jde o jinou značku než seznam `arrows` v legendové buňce. Cílová mřížka už nerozlišuje, zda tajenku určil seznam polí, nebo souvislé heslo; u druhé varianty navíc obsahuje legendovou buňku s textem „Tajenka“. Zápis ukazuje [mřížka s českými písmeny](examples/grid-czech-letters.yaml); [ukázková cesta se zobáčky](examples/grid-secret-arrows.yaml) mění směr dvakrát.
+Typ `letter` označuje běžné písmenné pole a `secret` pole patřící do tajenky.
+Jejich `value` lze do doplnění odpovědi vynechat. Známé české `CH` zabírá jednu
+buňku stejně jako samostatné písmeno a písmena si zachovávají diakritiku.
+Tajenková buňka má v PDF světle šedé pozadí a může mít jeden směrový zobáček
+`arrow` ve směru `up`, `right`, `down` nebo `left`. Jde o jinou značku než
+seznam `arrows` v legendové buňce. Cílová mřížka už nerozlišuje, zda tajenku
+určil seznam polí, nebo souvislé heslo. Zápis ukazuje [nevyplněná mřížka](examples/grid-unfilled.yaml),
+[mřížka s českými písmeny](examples/grid-czech-letters.yaml) a
+[ukázková cesta se zobáčky](examples/grid-secret-arrows.yaml).
 
 Cílový dokument ukládá texty k tajenkám v kořenovém seznamu `secret_prompts`. Každá položka má stejné `text`, `placement` a `alignment` jako `prompt` ve vstupním zadání; seznam dovoluje v jedné mřížce více tajenek. Renderer je sází nad nebo pod mřížku a zarovnává k její levé nebo pravé hraně. Spodní zadání se zobrazí mezi mřížkou a případnými číselnými legendami. Zápis ukazuje [cílová mřížka se zadáním tajenky](examples/grid-secret-prompt.yaml).
 
 Čárkované rozložení může písmenné buňce přidat počáteční `number` a silné mezislovní `bars` na její pravé či dolní hraně. Renderer vloží číslo do levého horního rohu, předěly vykreslí stejným silným tahem jako vnější rám a očíslované `clues` rozdělí pod mřížkou do sloupců „Vodorovně“ a „Svisle“. Číslo bez odpovídající legendy může označit například tajenku bez nápovědy. Tyto položky nijak nevylučují buňky `type: legend`: [smíšená mřížka](examples/grid-mixed-clues.yaml) používá vepsané i číselné legendy současně, zatímco [číslovaná mřížka](examples/grid-classic.yaml) ukazuje samotné vnější legendy.
 
-Legenda používá neprázdný seznam textů a může u nich výslovně uvést směrové šipky:
+Vyplněná legenda používá neprázdný seznam textů a může u nich výslovně uvést
+směrové šipky. V nevyplněné mřížce lze `texts` vynechat nebo pomocí `null`
+zachovat počet prázdných částí složené legendy:
 
 ```yaml
+{type: legend}
+{type: legend, texts: [null, null]}
 {type: legend, texts: ["Česká řeka"]}
 {type: legend, texts: ["Savec", "Pohoří"], arrows: [right, down]}
 ```
@@ -169,10 +183,13 @@ Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-lett
 
 ## Výstup příkazů
 
-Volba `-o` neboli `--output` je u příkazů `template`, `fill`, `generate` a `render` nepovinná. Bez ní příkaz zapíše výsledný YAML nebo binární PDF na standardní výstup, takže jej lze přesměrovat nebo předat dalšímu programu:
+Volba `-o` neboli `--output` je u příkazů `template`, `grid`, `fill`, `generate`
+a `render` nepovinná. Bez ní příkaz zapíše výsledný YAML nebo binární PDF na
+standardní výstup, takže jej lze přesměrovat nebo předat dalšímu programu:
 
 ```shell
 uv run krizovkar template --width 15 --height 10 > build/template.yaml
+uv run krizovkar grid build/template.yaml > build/unfilled-grid.yaml
 uv run krizovkar generate slovnik.json > build/grid.yaml
 uv run krizovkar render build/grid.yaml > build/grid.pdf
 ```
@@ -224,6 +241,19 @@ uv run krizovkar template --width 7 --height 12 \
 ```
 
 Tyto volby fungují pro obě hodnoty `--layout`. U konkrétního textu se velikost písmen sjednotí, mezery a interpunkce se do buněk nezapisují a seznam slov zachová všechny povolené švy. Automatické dělení nikdy nerozdělí slovo. Generátor podle potřeby změní jinak vyvážené délky běžných slotů tak, aby maska obsahovala požadované délky tajenky od 3 do 8 polí; pokud se požadavek do zadaného rozměru nevejde, skončí s chybou. Volitelné `--secret-prompt` doplní zadání; jeho pozici a zarovnání určují `--secret-prompt-placement` a `--secret-prompt-alignment`. Seed ovlivňuje výběr vhodných slotů.
+
+Platnou šablonu lze bez slovníku převést na nevyplněnou cílovou mřížku:
+
+```shell
+uv run krizovkar grid build/template.yaml \
+  --output build/unfilled-grid.yaml
+```
+
+Převod zachová nevyplňovaná a legendová pole, čísla a silné předěly
+číslovaného rozvržení, zvýraznění připravených tajenek a jejich zadání. Běžná
+písmena, texty legend ani známé znění tajenky ze šablony do prázdné mřížky
+nevloží. Šablonu lze bez mezikroku vykreslit také příkazem
+`krizovkar render build/template.yaml`.
 
 Šablonu lze později vyplnit samostatně:
 
@@ -313,9 +343,16 @@ uv run krizovkar render examples/grid-random-letters.yaml \
   --output build/random-letters.pdf
 ```
 
-Volba `--page-format` přijímá `A0` až `A6`, `Letter` a `Legal`; nerozlišuje velikost písmen a její výchozí hodnota je `A4`. Výsledkem je vektorové PDF na zvoleném formátu s mřížkou a případnými písmeny podle datového modelu.
+Vstupem `render` může být cílová mřížka `kind: grid` i šablona
+`kind: template`; šablona se automaticky převede na nevyplněnou mřížku bez
+slovníku. Volba `--page-format` přijímá `A0` až `A6`, `Letter` a `Legal`,
+nerozlišuje velikost písmen a její výchozí hodnota je `A4`. Výsledkem je
+vektorové PDF na zvoleném formátu s mřížkou a případnými písmeny podle datového
+modelu.
 
-Výchozí PDF je vyplněné. Pro tisk prázdné křížovky přidej `--blank`:
+U vyplněné cílové mřížky PDF standardně zobrazí písmena. Pro jejich skrytí
+přidej `--blank`; šablona a nevyplněná mřížka zůstanou prázdné i bez této
+volby:
 
 ```shell
 uv run krizovkar render examples/grid-secret-arrows.yaml \

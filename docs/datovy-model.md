@@ -6,10 +6,12 @@ Existují tři samostatné druhy dokumentů:
 
 - zadání `specification` popisuje, co se má do křížovky vložit,
 - šablona `template` popisuje dosud nevyplněné buňky a sloty hesel,
-- cílová mřížka `grid` popisuje konkrétní výsledek po rozložení.
+- cílová mřížka `grid` popisuje konkrétní role buněk a volitelně jejich obsah.
 
 ```text
-specification → návrh rozložení → template → plnění → grid → vykreslení PDF
+specification → návrh rozložení → template
+template → grid (nevyplněná mřížka) → vykreslení PDF
+template + slovník → plnění → grid (vyplněná mřížka) → vykreslení PDF
 ```
 
 Každý druh má vlastní JSON Schema a vlastní Pythonový loader. Dokument proto vždy obsahuje povinnou položku `kind`; nástroj nemusí jeho význam odhadovat z ostatních položek.
@@ -74,7 +76,15 @@ Příkaz `fill` přijímá libovolnou platnou šablonu a slovník. Pomocí zpět
 
 Vepsané legendy převezmou texty přiřazených hesel. Sloty bez souřadnice `legend` se převedou na číslovaná hesla s vnějšími legendami; společný začátek vodorovného a svislého slotu sdílí jedno číslo. Seed určuje pořadí kandidátů a zachovává opakovatelnost výsledku.
 
-Příkaz `generate` je zkratka nad stejnými dvěma kroky: podle `--layout` nejprve vytvoří hustou švédskou nebo číslovanou šablonu a potom ji naplní zadaným slovníkem. Přijímá konkrétní tajenku s automatickým nebo pevným dělením; požadavek obsahující jen délku lze uchovat pouze v šabloně, protože k vytvoření cílové mřížky chybějí písmena.
+Příkaz `grid` převádí platnou šablonu na nevyplněnou cílovou mřížku bez
+slovníku. Role `letter`, `legend` a `empty` zachová, u číslovaných slotů doplní
+čísla začátků a silné mezislovní předěly a připravené tajenkové sloty převede
+na buňky `secret`. Přenese také jejich `prompt`. Hodnoty písmen, texty legend
+ani případná známá slova tajenky nepřenáší, takže výsledek lze bezpečně použít
+jako prázdnou křížovku pro luštitele. Příkaz `render` umí stejný převod provést
+automaticky, dostane-li přímo dokument `kind: template`.
+
+Příkaz `generate` je zkratka nad stejnými dvěma kroky: podle `--layout` nejprve vytvoří hustou švédskou nebo číslovanou šablonu a potom ji naplní zadaným slovníkem. Přijímá konkrétní tajenku s automatickým nebo pevným dělením. Požadavek obsahující jen délku nelze použít pro vyplněnou mřížku, ale příkazy `grid` a `render` jej zachovají jako označená nevyplněná tajenková pole.
 
 ## Cílová mřížka, verze 1
 
@@ -112,14 +122,24 @@ grid:
     - [{type: letter, value: O}, {type: letter, value: Ř}, {type: secret, value: J}]
 ```
 
-Pokud je `cells` uvedené, musí obsahovat přesně `grid.height` řádků a každý řádek přesně `grid.width` buněk. Jeho vynechání znamená prázdnou mřížku bez určených buněk.
+Pokud je `cells` uvedené, musí obsahovat přesně `grid.height` řádků a každý
+řádek přesně `grid.width` buněk. Jeho vynechání znamená prázdnou mřížku bez
+určených rolí buněk. Mřížka vytvořená ze šablony naopak role obsahuje, ale její
+písmena a legendy mohou zůstat nevyplněné.
 
 Podporované typy jsou:
 
 - `type: letter` pro běžnou písmennou buňku,
 - `type: secret` pro zvýrazněnou buňku, jejíž písmeno patří do tajenky.
 
-U obou typů musí být `value` právě jedno podporované velké písmeno. Písmena si zachovávají diakritiku; české `CH` se zapisuje jako jedna hodnota a zabírá jednu buňku. Renderer odlišuje tajenkovou buňku světle šedým pozadím. Jen `type: secret` může navíc obsahovat odchozí `arrow` ve směru `up`, `right`, `down` nebo `left`; vykreslí se jako plný černý trojúhelníkový zobáček se základnou na hraně pole a špičkou ve směru pokračování. Zobáček nepřekrývá písmeno a v očíslovaném poli se zmenší a posune mimo číslo.
+U obou typů je `value` volitelné. Jeho vynechání znamená dosud nevyplněné
+písmenné pole; uvedená hodnota musí být právě jedno podporované velké písmeno.
+Písmena si zachovávají diakritiku a české `CH` se zapisuje jako jedna hodnota
+a zabírá jednu buňku. Renderer neznámou hodnotu ponechá prázdnou a tajenkovou
+buňku odliší světle šedým pozadím. Jen `type: secret` může navíc obsahovat
+odchozí `arrow` ve směru `up`, `right`, `down` nebo `left`; vykreslí se jako
+plný černý trojúhelníkový zobáček se základnou na hraně pole a špičkou ve směru
+pokračování.
 
 Pozice v matici jednoznačně určuje souřadnici buňky; samostatné souřadnice se proto do každé buňky neopakují. Cílová mřížka pouze označuje buňky tajenky. Jejich pořadí a seskupení uchovává zdrojové zadání `specification`.
 
@@ -170,9 +190,15 @@ Renderer sází číslo do levého horního rohu buňky a vnější legendy pod 
 
 ## Buňka legendy
 
-Legenda neobsahuje `value`, ale neprázdný seznam `texts` s neprázdnými texty. Volitelné `arrows` může obsahovat směrové šipky:
+Legenda neobsahuje `value`. Volitelný neprázdný seznam `texts` uchovává již
+známé neprázdné texty. Hodnota `null` rezervuje jednu dosud nevyplněnou část,
+takže například `[null, null]` zachová vodorovné rozdělení dvojité legendy.
+Vynechání celého `texts` znamená prázdnou buňku bez určeného počtu částí.
+Volitelné `arrows` lze uvést jen společně s `texts`:
 
 ```yaml
+{type: legend}
+{type: legend, texts: [null, null]}
 {type: legend, texts: ["Česká řeka"]}
 {type: legend, texts: ["Savec", "Pohoří"], arrows: [right, down]}
 ```
@@ -182,9 +208,18 @@ Legenda neobsahuje `value`, ale neprázdný seznam `texts` s neprázdnými texty
 - Šipky `right` a `down` se přiřazují textům ve stejném pořadí.
 - Renderer text automaticky zalamuje a zmenšuje; české znaky vkládá do PDF pomocí fontu Noto Sans.
 
-Počet textů ani přítomnost šipek nejsou omezením datového formátu. Experimentální švédský generátor přesto vytváří pro každou vepsanou legendu jediný text bez šipky a rozloží okolní buňky tak, aby z ní vedl právě jeden možný směr hesla doprava nebo dolů.
+Počet textů ani shoda počtu textů a šipek nejsou estetickým omezením datového
+formátu. Experimentální švédský generátor přesto vytváří pro každou vyplněnou
+vepsanou legendu jediný text bez šipky a rozloží okolní buňky tak, aby z ní
+vedl právě jeden možný směr hesla doprava nebo dolů.
 
-Generovanou švédskou mřížku dělí souvislé legendové řádky a sloupce na plně vyplněné písmenné obdélníky. Jejich průsečíky jsou nevyplňované buňky; jiné nevyplňované buňky generátor nevytváří. Každý písmenný řádek obdélníku je platné vodorovné heslo a každý jeho sloupec platné svislé heslo. Horní a levý okraj tvoří legendy s výjimkou průsečíků s další legendovou osou. Číslované rozvržení naproti tomu používá všechny buňky pro písmena, začátky slotů čísluje po řádcích a jejich nápovědy ukládá do `clues`; hranice dalších slov označuje pomocí `bars`.
+Švédskou mřížku dělí souvislé legendové řádky a sloupce na písmenné
+obdélníky. Jejich průsečíky jsou nevyplňované buňky. Každý písmenný řádek
+obdélníku je vodorovný slot a každý jeho sloupec svislý slot. Horní a levý
+okraj tvoří legendy s výjimkou průsečíků s další legendovou osou. Číslované
+rozvržení naproti tomu používá všechny buňky pro písmena, začátky slotů čísluje
+po řádcích a hranice dalších slov označuje pomocí `bars`. Až plnění slovníkem
+doplní jejich hodnoty a texty `clues`.
 
 ## Nevyplňovaná buňka
 
@@ -346,7 +381,13 @@ Loader již ověřuje rozměry, rozsah běžných i tajenkových slov, shodu pí
 
 ## Validace
 
-Strojová pravidla jsou v samostatných schématech pro [cílovou mřížku](../src/krizovkar/schemas/grid-v1.schema.json) a [zadání](../src/krizovkar/schemas/specification-v1.schema.json). Schémata odmítají chybějící, neznámé a chybně napsané položky i nulové, záporné nebo neceločíselné rozměry. Pythonové loadery navíc kontrolují vztahy, které závisejí na více částech dokumentu.
+Strojová pravidla jsou v samostatných schématech pro
+[cílovou mřížku](../src/krizovkar/schemas/grid-v1.schema.json),
+[šablonu](../src/krizovkar/schemas/template-v1.schema.json) a
+[zadání](../src/krizovkar/schemas/specification-v1.schema.json). Schémata
+odmítají neznámé a chybně napsané položky i nulové, záporné nebo neceločíselné
+rozměry. Pythonové loadery navíc kontrolují vztahy, které závisejí na více
+částech dokumentu.
 
 Validace cílové mřížky rozlišuje dvě závažnosti:
 
@@ -357,7 +398,14 @@ Příkaz `krizovkar validate` při chybě vrací kód `2`. Samotná varování v
 
 Současná kvalitativní kontrola neurčuje jeden druh celé mřížky. Každý nový vodorovný či svislý běh písmen musí mít vlastní zdroj legendy: bezprostředně předcházející buňku `type: legend`, nebo `number` v počátečním písmenném poli. Za nový běh se považuje také heslo za silným předělem. Vepsaná jednoduchá legenda má jeden text a navazující směr, dvojitá dva texty v pořadí doprava a dolů; tato pravidla se kontrolují i vedle číselných legend v témže dokumentu. Tajenkové rohové šipky jsou samostatná pomůcka pro pořadí čtení a varování pro směrové šipky legend nevyvolávají. Všechny běžné a tajenkové písmenné buňky zároveň musí tvořit jedinou oblast propojenou společnými hranami; legendy, pomůcky a nevyplňované buňky jsou její hranice. Jde o neblokující formální pravidla pro dobrý výsledek, nikoli o další omezení datového formátu.
 
+Chybí-li některé písmenné `value` nebo legendové `texts`, validátor přidá
+jediné neblokující varování `grid.unfinished`. Nevyplněná mřížka tak zůstává
+platná a vykreslitelná; kontrola pouze odliší pracovní či tiskovou podobu od
+zcela doplněného výsledku.
+
 Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-minimal.yaml) a [zadání](../examples/specification-minimal.yaml).
+
+Převod minimální šablony ukazuje [nevyplněná cílová mřížka](../examples/grid-unfilled.yaml).
 
 Vyšší zadání ukazuje [příklad s umístěnými slovy a automatickou pomůckou](../examples/specification-placed-words.yaml).
 

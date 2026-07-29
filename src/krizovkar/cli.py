@@ -16,6 +16,7 @@ from krizovkar.generator import (
     DEFAULT_SEED,
     GenerationError,
     SecretRequirement,
+    create_grid_from_template,
     fill_crossword_template,
     generate_numbered_grid,
     generate_numbered_template,
@@ -29,6 +30,7 @@ from krizovkar.model import (
     SecretPrompt,
     dump_crossword_grid,
     dump_crossword_template,
+    load_crossword_document_kind,
     load_crossword_grid,
     load_crossword_template,
     write_crossword_grid,
@@ -196,6 +198,34 @@ def _parser() -> argparse.ArgumentParser:
     )
     template.set_defaults(handler=_template)
 
+    grid = commands.add_parser(
+        "grid",
+        help="vytvoří nevyplněnou cílovou mřížku ze šablony",
+        description=(
+            "Převede role buněk a sloty šablony na nevyplněnou cílovou "
+            "mřížku bez použití slovníku."
+        ),
+    )
+    grid.add_argument(
+        "template",
+        type=Path,
+        metavar="ŠABLONA.yaml",
+        help="vstupní YAML šablona křížovky",
+    )
+    grid.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        metavar="MŘÍŽKA.yaml",
+        help="cílový YAML soubor; bez volby standardní výstup",
+    )
+    grid.add_argument(
+        "--force",
+        action="store_true",
+        help="povolí přepsání existujícího YAML souboru",
+    )
+    grid.set_defaults(handler=_grid)
+
     fill = commands.add_parser(
         "fill",
         help="vyplní uloženou šablonu hesly ze slovníku",
@@ -308,14 +338,17 @@ def _parser() -> argparse.ArgumentParser:
 
     render = commands.add_parser(
         "render",
-        help="vytvoří PDF z cílové mřížky uložené v YAML",
-        description=("Načte a ověří YAML typu grid a vykreslí cílovou mřížku do PDF."),
+        help="vytvoří PDF z cílové mřížky nebo šablony",
+        description=(
+            "Načte a ověří YAML typu grid nebo template a vykreslí cílovou "
+            "mřížku do PDF. Šablonu převede bez použití slovníku."
+        ),
     )
     render.add_argument(
         "source",
         type=Path,
-        metavar="MŘÍŽKA.yaml",
-        help="vstupní YAML cílové mřížky",
+        metavar="VSTUP.yaml",
+        help="vstupní YAML cílové mřížky nebo šablony",
     )
     render.add_argument(
         "-o",
@@ -485,6 +518,21 @@ def _output_description(output: Path | None) -> str:
     return str(output) if output is not None else "standardní výstup"
 
 
+def _czech_count(
+    count: int,
+    singular: str,
+    few: str,
+    many: str,
+) -> str:
+    if count == 1:
+        noun = singular
+    elif 2 <= count <= 4:
+        noun = few
+    else:
+        noun = many
+    return f"{count} {noun}"
+
+
 def _print_success(message: str, output: Path | None) -> None:
     stream = sys.stdout if output is not None else sys.stderr
     print(message, file=stream)
@@ -525,7 +573,34 @@ def _template(arguments: argparse.Namespace) -> int:
 
     _print_success(
         f"Šablona vytvořena: {_output_description(arguments.output)} "
-        f"({arguments.width} × {arguments.height}, {len(template.slots)} slotů)",
+        f"({arguments.width} × {arguments.height}, "
+        f"{_czech_count(len(template.slots), 'slot', 'sloty', 'slotů')})",
+        arguments.output,
+    )
+    return 0
+
+
+def _grid(arguments: argparse.Namespace) -> int:
+    try:
+        template = load_crossword_template(arguments.template)
+        crossword = create_grid_from_template(template)
+        if arguments.output is None:
+            dump_crossword_grid(crossword, sys.stdout)
+        else:
+            write_crossword_grid(
+                crossword,
+                arguments.output,
+                overwrite=arguments.force,
+            )
+    except ModelError as error:
+        print(f"chyba: {error}", file=sys.stderr)
+        return 2
+
+    _print_success(
+        f"Nevyplněná mřížka vytvořena: "
+        f"{_output_description(arguments.output)} "
+        f"({template.grid.width} × {template.grid.height}, "
+        f"{_czech_count(len(template.slots), 'slot', 'sloty', 'slotů')})",
         arguments.output,
     )
     return 0
@@ -609,7 +684,17 @@ def _generate(arguments: argparse.Namespace) -> int:
 
 def _render(arguments: argparse.Namespace) -> int:
     try:
-        crossword = load_crossword_grid(arguments.source)
+        document_kind = load_crossword_document_kind(arguments.source)
+        if document_kind == "grid":
+            crossword = load_crossword_grid(arguments.source)
+        elif document_kind == "template":
+            template = load_crossword_template(arguments.source)
+            crossword = create_grid_from_template(template)
+        else:
+            raise ModelError(
+                "vykreslit lze pouze cílovou mřížku kind: grid nebo "
+                f"šablonu kind: template; vstup má kind: {document_kind!r}"
+            )
         if arguments.output is None:
             render_pdf_stream(
                 crossword,

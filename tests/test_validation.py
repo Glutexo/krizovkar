@@ -97,6 +97,35 @@ class QualityValidationTest(unittest.TestCase):
         self.assertEqual((), report.errors)
         self.assertEqual((), report.warnings)
 
+    def test_unfilled_cells_are_one_nonblocking_warning(self) -> None:
+        crossword = _good_dense_grid()
+        assert crossword.grid.cells is not None
+        cells = tuple(
+            tuple(
+                LegendCell()
+                if isinstance(cell, LegendCell)
+                else LetterCell()
+                if isinstance(cell, LetterCell)
+                else cell
+                for cell in row
+            )
+            for row in crossword.grid.cells
+        )
+        crossword = CrosswordGrid(
+            format_name=crossword.format_name,
+            kind=crossword.kind,
+            version=crossword.version,
+            grid=Grid(width=4, height=4, cells=cells),
+        )
+
+        report = check_crossword_grid(crossword)
+
+        self.assertTrue(report.is_valid)
+        self.assertEqual(
+            ("grid.unfinished",),
+            tuple(issue.code for issue in report.warnings),
+        )
+
     def test_numbered_grid_with_external_clues_has_no_warning(self) -> None:
         crossword = load_crossword_grid(GRID_CLASSIC_EXAMPLE)
 
