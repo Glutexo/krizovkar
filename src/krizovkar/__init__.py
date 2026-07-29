@@ -58,6 +58,7 @@ from krizovkar.model import (
     WordPlacement,
     WordSlot,
     dump_crossword_grid,
+    dump_crossword_specification,
     dump_crossword_template,
     load_crossword_document_kind,
     load_crossword_grid,
@@ -65,6 +66,7 @@ from krizovkar.model import (
     load_crossword_template,
     secret_path_arrows,
     write_crossword_grid,
+    write_crossword_specification,
     write_crossword_template,
 )
 from krizovkar.renderer import RenderError, render_pdf, render_pdf_stream
@@ -127,6 +129,7 @@ __all__ = [
     "check_dense_swedish_grid",
     "create_grid_from_template",
     "dump_crossword_grid",
+    "dump_crossword_specification",
     "dump_crossword_template",
     "fill_crossword_template",
     "generate_numbered_grid",
@@ -146,5 +149,6 @@ __all__ = [
     "validate_crossword_grid_file",
     "validate_dense_swedish_grid_file",
     "write_crossword_grid",
+    "write_crossword_specification",
     "write_crossword_template",
 ]

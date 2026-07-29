@@ -470,11 +470,10 @@ def _schema_validation_message(error: ValidationError) -> str:
     return f"hodnota neodpovídá pravidlu {validator!r}"
 
 
-def _validated_data(
-    source: YamlSource,
+def _validate_data(
+    data: Any,
     schema_name: str,
 ) -> dict[str, Any]:
-    data = _yaml_data(source)
     errors = sorted(
         _validator(schema_name).iter_errors(data),
         key=lambda error: tuple(str(part) for part in error.absolute_path),
@@ -490,6 +489,13 @@ def _validated_data(
         raise ModelError(f"neplatný datový model: {details}")
 
     return data
+
+
+def _validated_data(
+    source: YamlSource,
+    schema_name: str,
+) -> dict[str, Any]:
+    return _validate_data(_yaml_data(source), schema_name)
 
 
 def _grid_cell(cell: dict[str, Any]) -> GridCell:
@@ -1180,6 +1186,127 @@ def _validate_specification_placements(
         )
 
 
+def _coordinate_data(coordinate: Coordinate) -> dict[str, int]:
+    return {"row": coordinate.row, "column": coordinate.column}
+
+
+def _secret_prompt_data(prompt: SecretPrompt) -> dict[str, str]:
+    return {
+        "text": prompt.text,
+        "placement": prompt.placement,
+        "alignment": prompt.alignment,
+    }
+
+
+def _secret_part_data(
+    part: SecretPart,
+    *,
+    default_legend: str,
+    allow_prompt: bool,
+) -> dict[str, Any]:
+    if isinstance(part, SecretCells):
+        data: dict[str, Any] = {
+            "type": "cells",
+            "cells": [_coordinate_data(cell) for cell in part.cells],
+        }
+        if part.arrows:
+            data["arrows"] = True
+    elif isinstance(part, SecretWord):
+        data = {
+            "type": "word",
+            "answer": part.answer,
+            "start": _coordinate_data(part.start),
+            "direction": part.direction,
+        }
+        if part.legend != default_legend:
+            data["legend"] = part.legend
+    else:
+        raise ModelError(
+            "nepodporovaný typ tajenky pro zápis: "
+            f"{type(part).__name__}"
+        )
+
+    if part.prompt is not None:
+        if not allow_prompt:
+            raise ModelError(
+                "neplatný datový model: část složené tajenky "
+                "nemůže mít vlastní zadání"
+            )
+        data["prompt"] = _secret_prompt_data(part.prompt)
+    return data
+
+
+def _secret_definition_data(secret: SecretDefinition) -> dict[str, Any]:
+    if not isinstance(secret, SecretParts):
+        return _secret_part_data(
+            secret,
+            default_legend=DEFAULT_SECRET_LEGEND,
+            allow_prompt=True,
+        )
+
+    data: dict[str, Any] = {
+        "type": "parts",
+        "parts": [
+            _secret_part_data(
+                part,
+                default_legend=DEFAULT_SECRET_PART_LEGEND.format(
+                    number=part_index + 1
+                ),
+                allow_prompt=False,
+            )
+            for part_index, part in enumerate(secret.parts)
+        ],
+    }
+    if secret.prompt is not None:
+        data["prompt"] = _secret_prompt_data(secret.prompt)
+    return data
+
+
+def _crossword_specification_data(
+    specification: CrosswordSpecification,
+) -> dict[str, Any]:
+    data: dict[str, Any] = {
+        "format": specification.format_name,
+        "kind": specification.kind,
+        "version": specification.version,
+    }
+    if specification.grid is not None:
+        data["grid"] = {
+            "width": specification.grid.width,
+            "height": specification.grid.height,
+        }
+    if specification.words:
+        data["words"] = []
+        for word in specification.words:
+            word_data: dict[str, Any] = {
+                "answer": word.answer,
+                "start": _coordinate_data(word.start),
+                "direction": word.direction,
+                "legend": word.legend,
+            }
+            if word.in_help:
+                word_data["in_help"] = True
+            data["words"].append(word_data)
+    if specification.secrets:
+        data["secrets"] = [
+            _secret_definition_data(secret) for secret in specification.secrets
+        ]
+    if specification.help_position is not None:
+        data["help"] = {
+            "position": _coordinate_data(specification.help_position)
+        }
+
+    _validate_data(data, "specification-v1.schema.json")
+    if specification.grid is not None:
+        _validate_specification_placements(
+            specification.grid,
+            specification.words,
+            specification.secrets,
+            specification.help_position,
+        )
+    return data
+
+
 def _grid_cell_data(cell: GridCell) -> dict[str, Any]:
     if isinstance(cell, LetterCell):
         data: dict[str, Any] = {"type": "letter"}
@@ -1422,6 +1549,35 @@ def dump_crossword_grid(crossword: CrosswordGrid, output: TextIO) -> None:
         _crossword_grid_data(crossword),
         output,
         subject="cílovou mřížku",
+    )
+
+
+def write_crossword_specification(
+    specification: CrosswordSpecification,
+    output: str | Path,
+    *,
+    overwrite: bool = False,
+) -> Path:
+    """Zapíše zadání křížovky atomicky jako YAML."""
+
+    return _write_yaml_document(
+        _crossword_specification_data(specification),
+        output,
+        overwrite=overwrite,
+        subject="zadání křížovky",
+    )
+
+
+def dump_crossword_specification(
+    specification: CrosswordSpecification,
+    output: TextIO,
+) -> None:
+    """Zapíše zadání křížovky jako YAML do textového proudu."""
+
+    _dump_yaml_document_safely(
+        _crossword_specification_data(specification),
+        output,
+        subject="zadání křížovky",
     )
 
 
