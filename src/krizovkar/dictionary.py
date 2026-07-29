@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from krizovkar.alphabet import ANSWER_PATTERN
+from krizovkar.localization import system_error_message
 
 
 class DictionaryError(ValueError):
@@ -46,9 +47,8 @@ def _json_data(source: Path) -> Any:
         with source.open(encoding="utf-8") as stream:
             return json.load(stream, object_pairs_hook=_unique_object)
     except OSError as error:
-        detail = error.strerror or str(error)
         raise DictionaryError(
-            f"slovník nelze načíst ({source}): {detail}"
+            f"slovník nelze načíst ({source}): {system_error_message(error)}"
         ) from error
     except UnicodeError as error:
         raise DictionaryError(
@@ -57,7 +57,7 @@ def _json_data(source: Path) -> Any:
     except json.JSONDecodeError as error:
         raise DictionaryError(
             f"slovník není platný JSON ({source}, řádek {error.lineno}, "
-            f"sloupec {error.colno}): {error.msg}"
+            f"sloupec {error.colno})"
         ) from error
 
 

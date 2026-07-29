@@ -1103,8 +1103,14 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(("ARA", "EMU", "ÍRÁN"), help_cell.words)
 
     def test_grid_loader_rejects_specification(self) -> None:
-        with self.assertRaisesRegex(ModelError, r"\$\.kind"):
+        with self.assertRaises(ModelError) as caught:
             load_crossword_grid(SPECIFICATION_MINIMAL_EXAMPLE)
+
+        message = str(caught.exception)
+        self.assertIn("chybí povinný klíč 'grid'", message)
+        self.assertIn("$.kind: očekává se hodnota 'grid'", message)
+        self.assertNotIn("required property", message)
+        self.assertNotIn("was expected", message)
 
     def test_rejects_non_positive_dimension(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1136,8 +1142,13 @@ class ModelTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(ModelError, "duplicate key"):
+            with self.assertRaises(ModelError) as caught:
                 load_crossword_grid(source)
+
+        message = str(caught.exception)
+        self.assertIn("řádek 6, sloupec 3", message)
+        self.assertIn("duplicitní klíč", message)
+        self.assertNotIn("duplicate key", message)
 
     def test_rejects_row_with_wrong_number_of_cells(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1299,6 +1310,89 @@ class ModelTest(unittest.TestCase):
 
 
 class CommandTest(unittest.TestCase):
+    def test_help_is_in_czech(self) -> None:
+        cases = (
+            (["--help"], ("volby:", "příkazy:")),
+            (["fill", "--help"], ("poziční argumenty:", "volby:")),
+        )
+        for arguments, expected_sections in cases:
+            with self.subTest(arguments=arguments):
+                stdout = io.StringIO()
+
+                with (
+                    redirect_stdout(stdout),
+                    self.assertRaises(SystemExit) as caught,
+                ):
+                    main(arguments)
+
+                self.assertEqual(0, caught.exception.code)
+                help_text = stdout.getvalue()
+                self.assertTrue(help_text.startswith("použití: krizovkar"))
+                self.assertIn("zobrazí tuto nápovědu a skončí", help_text)
+                for section in expected_sections:
+                    self.assertIn(section, help_text)
+                for english_text in (
+                    "usage:",
+                    "positional arguments:",
+                    "options:",
+                    "show this help message and exit",
+                ):
+                    self.assertNotIn(english_text, help_text)
+
+    def test_argument_errors_are_in_czech(self) -> None:
+        cases = (
+            (["render"], "je nutné zadat: MŘÍŽKA.yaml"),
+            (
+                ["render", str(GRID_MINIMAL_EXAMPLE), "--page-format", "A7"],
+                "neplatná volba: 'A7'",
+            ),
+            (["template", "--width", "slovo"], "neplatná hodnota typu int"),
+            (
+                ["template", "--secret", "ABC", "--secret-part", "DEF"],
+                "nelze použít společně s argumentem --secret",
+            ),
+            (["template", "--neznamy"], "nerozpoznané argumenty: --neznamy"),
+            (["neznamy"], "argument příkaz: neplatná volba: 'neznamy'"),
+        )
+        for arguments, expected_message in cases:
+            with self.subTest(arguments=arguments):
+                stderr = io.StringIO()
+
+                with (
+                    redirect_stderr(stderr),
+                    self.assertRaises(SystemExit) as caught,
+                ):
+                    main(arguments)
+
+                self.assertEqual(2, caught.exception.code)
+                error_text = stderr.getvalue()
+                self.assertTrue(error_text.startswith("použití: krizovkar"))
+                self.assertIn("chyba:", error_text)
+                self.assertIn(expected_message, error_text)
+                for english_text in (
+                    "usage:",
+                    "error:",
+                    "required:",
+                    "invalid choice:",
+                    "invalid int value:",
+                    "not allowed with argument",
+                    "unrecognized arguments:",
+                ):
+                    self.assertNotIn(english_text, error_text)
+
+    def test_missing_input_file_error_is_in_czech(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "neexistuje.yaml"
+            stderr = io.StringIO()
+
+            with redirect_stderr(stderr):
+                result = main(["render", str(source)])
+
+        self.assertEqual(2, result)
+        error_text = stderr.getvalue()
+        self.assertIn("soubor nebo adresář neexistuje", error_text)
+        self.assertNotIn("No such file or directory", error_text)
+
     def test_template_writes_yaml_to_stdout_without_output(self) -> None:
         stdout = io.StringIO()
         stderr = io.StringIO()

@@ -20,6 +20,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import Paragraph
 
+from krizovkar.localization import system_error_message
 from krizovkar.model import (
     CrosswordGrid,
     EmptyCell,
@@ -963,8 +964,9 @@ def render_pdf(
         )
         temporary_path.replace(output_path)
     except OSError as error:
-        detail = error.strerror or str(error)
-        raise RenderError(f"PDF nelze zapsat ({output_path}): {detail}") from error
+        raise RenderError(
+            f"PDF nelze zapsat ({output_path}): {system_error_message(error)}"
+        ) from error
     finally:
         if "temporary_path" in locals():
             temporary_path.unlink(missing_ok=True)
@@ -990,5 +992,6 @@ def render_pdf_stream(
             filled=filled,
         )
     except OSError as error:
-        detail = error.strerror or str(error)
-        raise RenderError(f"PDF nelze zapsat: {detail}") from error
+        raise RenderError(
+            f"PDF nelze zapsat: {system_error_message(error)}"
+        ) from error

@@ -333,6 +333,10 @@ Nápovědu vypíše:
 uv run krizovkar --help
 ```
 
+Uživatelské rozhraní je české, včetně nápovědy, stavových a chybových hlášek.
+Anglicky zůstávají názvy příkazů, voleb, povolených hodnot a klíčů datového
+formátu, například `render`, `--output`, `numbered` nebo `grid`.
+
 Testy se spouštějí příkazem:
 
 ```shell

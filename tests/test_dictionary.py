@@ -35,8 +35,13 @@ class DictionaryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             source = self._source(directory, "{")
 
-            with self.assertRaisesRegex(DictionaryError, "není platný JSON"):
+            with self.assertRaises(DictionaryError) as caught:
                 load_dictionary(source)
+
+        message = str(caught.exception)
+        self.assertIn("není platný JSON", message)
+        self.assertIn("řádek 1, sloupec 2", message)
+        self.assertNotIn("Expecting", message)
 
     def test_rejects_duplicate_answer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -73,8 +78,13 @@ class DictionaryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "missing.json"
 
-            with self.assertRaisesRegex(DictionaryError, "nelze načíst"):
+            with self.assertRaises(DictionaryError) as caught:
                 load_dictionary(source)
+
+        message = str(caught.exception)
+        self.assertIn("nelze načíst", message)
+        self.assertIn("soubor nebo adresář neexistuje", message)
+        self.assertNotIn("No such file or directory", message)
 
 
 if __name__ == "__main__":

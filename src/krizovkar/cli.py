@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import BinaryIO
+from typing import Any, BinaryIO
 
 from krizovkar.dictionary import DictionaryError, load_dictionary
 from krizovkar.generator import (
@@ -47,12 +48,105 @@ LAYOUT_CHOICES = ("swedish", "numbered")
 DEFAULT_LAYOUT = "swedish"
 
 
+class _CzechHelpFormatter(argparse.HelpFormatter):
+    """Formátuje automaticky vytvářený řádek použití česky."""
+
+    def add_usage(
+        self,
+        usage: str | None,
+        actions: Sequence[argparse.Action],
+        groups: Sequence[argparse._MutuallyExclusiveGroup],
+        prefix: str | None = None,
+    ) -> None:
+        super().add_usage(
+            usage,
+            actions,
+            groups,
+            prefix="použití: " if prefix is None else prefix,
+        )
+
+
+def _localize_parser_error(message: str) -> str:
+    """Přeloží uživatelské chyby vytvářené knihovnou ``argparse``."""
+
+    replacements = (
+        ("the following arguments are required:", "je nutné zadat:"),
+        ("unrecognized arguments:", "nerozpoznané argumenty:"),
+        ("invalid choice:", "neplatná volba:"),
+        ("(choose from ", "(vyberte z "),
+        ("not allowed with argument", "nelze použít společně s argumentem"),
+        ("ignored explicit argument", "neočekávaná hodnota argumentu"),
+        ("expected at most one argument", "očekává se nejvýše jedna hodnota"),
+        ("expected at least one argument", "očekává se alespoň jedna hodnota"),
+        ("expected one argument", "očekává se jedna hodnota"),
+        ("ambiguous option:", "nejednoznačná volba:"),
+        (" could match ", " může znamenat "),
+        ("unexpected option string:", "neočekávaná volba:"),
+        ("conflicting subparser alias:", "opakovaný alias příkazu:"),
+        ("conflicting subparser:", "opakovaný příkaz:"),
+        ("unknown parser ", "neznámý příkaz "),
+        (" (choices: ", " (možnosti: "),
+    )
+    for source, translation in replacements:
+        message = message.replace(source, translation)
+
+    message = re.sub(
+        r"one of the arguments (.+) is required",
+        r"je nutné zadat jeden z argumentů \1",
+        message,
+    )
+    message = re.sub(
+        r"expected (\d+) arguments?",
+        r"očekávaný počet hodnot je \1",
+        message,
+    )
+    message = re.sub(
+        r"invalid ([^ ]+) value:",
+        r"neplatná hodnota typu \1:",
+        message,
+    )
+    message = re.sub(
+        r"can't open (.+): .+",
+        r"nelze otevřít \1",
+        message,
+    )
+    return message
+
+
+class _CzechArgumentParser(argparse.ArgumentParser):
+    """Argument parser se všemi automatickými uživatelskými texty česky."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        add_help = kwargs.pop("add_help", True)
+        kwargs.setdefault("formatter_class", _CzechHelpFormatter)
+        super().__init__(*args, add_help=False, **kwargs)
+        self._positionals.title = "poziční argumenty"
+        self._optionals.title = "volby"
+        if add_help:
+            self.add_argument(
+                "-h",
+                "--help",
+                action="help",
+                default=argparse.SUPPRESS,
+                help="zobrazí tuto nápovědu a skončí",
+            )
+
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        localized_message = _localize_parser_error(message)
+        self.exit(2, f"{self.prog}: chyba: {localized_message}\n")
+
+
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _CzechArgumentParser(
         prog="krizovkar",
         description="Tvorba švédských, klasických a dalších křížovek.",
     )
-    commands = parser.add_subparsers(dest="command", required=True)
+    commands = parser.add_subparsers(
+        dest="příkaz",
+        required=True,
+        title="příkazy",
+    )
 
     template = commands.add_parser(
         "template",
@@ -90,7 +184,7 @@ def _parser() -> argparse.ArgumentParser:
         default=DEFAULT_SEED,
         metavar="ČÍSLO",
         help=(
-            "seed výběru tajenkových slotů; "
+            "počáteční hodnota výběru tajenkových slotů; "
             f"výchozí je {DEFAULT_SEED}"
         ),
     )
@@ -110,8 +204,18 @@ def _parser() -> argparse.ArgumentParser:
             "délky a písmena na kříženích a zapíše cílovou mřížku."
         ),
     )
-    fill.add_argument("template", type=Path, metavar="ŠABLONA.yaml")
-    fill.add_argument("dictionary", type=Path, metavar="SLOVNÍK.json")
+    fill.add_argument(
+        "template",
+        type=Path,
+        metavar="ŠABLONA.yaml",
+        help="vstupní YAML šablona křížovky",
+    )
+    fill.add_argument(
+        "dictionary",
+        type=Path,
+        metavar="SLOVNÍK.json",
+        help="vstupní JSON slovník hesel a legend",
+    )
     fill.add_argument(
         "-o",
         "--output",
@@ -124,7 +228,7 @@ def _parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_SEED,
         metavar="ČÍSLO",
-        help=f"seed náhodných voleb; výchozí je {DEFAULT_SEED}",
+        help=f"počáteční hodnota náhodných voleb; výchozí je {DEFAULT_SEED}",
     )
     _add_secret_arguments(fill, allow_lengths=False)
     fill.add_argument(
@@ -143,7 +247,12 @@ def _parser() -> argparse.ArgumentParser:
             "slovníku a zapíše cílovou mřížku ve formátu YAML."
         ),
     )
-    generate.add_argument("source", type=Path, metavar="SLOVNÍK.json")
+    generate.add_argument(
+        "source",
+        type=Path,
+        metavar="SLOVNÍK.json",
+        help="vstupní JSON slovník hesel a legend",
+    )
     generate.add_argument(
         "-o",
         "--output",
@@ -171,7 +280,7 @@ def _parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_SEED,
         metavar="ČÍSLO",
-        help=f"seed náhodných voleb; výchozí je {DEFAULT_SEED}",
+        help=f"počáteční hodnota náhodných voleb; výchozí je {DEFAULT_SEED}",
     )
     _add_secret_arguments(generate, allow_lengths=False)
     generate.add_argument(
@@ -189,7 +298,12 @@ def _parser() -> argparse.ArgumentParser:
             "i číselné legendy. Varování zpracování neblokují."
         ),
     )
-    validate.add_argument("source", type=Path, metavar="MŘÍŽKA.yaml")
+    validate.add_argument(
+        "source",
+        type=Path,
+        metavar="MŘÍŽKA.yaml",
+        help="vstupní YAML cílové mřížky",
+    )
     validate.set_defaults(handler=_validate)
 
     render = commands.add_parser(
@@ -197,7 +311,12 @@ def _parser() -> argparse.ArgumentParser:
         help="vytvoří PDF z cílové mřížky uložené v YAML",
         description=("Načte a ověří YAML typu grid a vykreslí cílovou mřížku do PDF."),
     )
-    render.add_argument("source", type=Path, metavar="MŘÍŽKA.yaml")
+    render.add_argument(
+        "source",
+        type=Path,
+        metavar="MŘÍŽKA.yaml",
+        help="vstupní YAML cílové mřížky",
+    )
     render.add_argument(
         "-o",
         "--output",

@@ -14,9 +14,11 @@ from typing import Any, Literal, TextIO
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 from ruamel.yaml import YAML
+from ruamel.yaml.constructor import DuplicateKeyError
 from ruamel.yaml.error import YAMLError
 
 from krizovkar.alphabet import split_answer_letters
+from krizovkar.localization import system_error_message
 
 
 class ModelError(ValueError):
@@ -321,11 +323,31 @@ def _yaml_data(source: Path) -> Any:
         with source.open(encoding="utf-8") as stream:
             return yaml.load(stream)
     except OSError as error:
-        detail = error.strerror or str(error)
-        raise ModelError(f"vstupní soubor nelze načíst ({source}): {detail}") from error
-    except (UnicodeError, YAMLError) as error:
-        problem = getattr(error, "problem", None) or str(error)
-        raise ModelError(f"neplatný YAML ({source}): {problem}") from error
+        raise ModelError(
+            f"vstupní soubor nelze načíst ({source}): "
+            f"{system_error_message(error)}"
+        ) from error
+    except UnicodeError as error:
+        raise ModelError(
+            f"vstupní soubor není platný text v UTF-8 ({source})"
+        ) from error
+    except DuplicateKeyError as error:
+        raise ModelError(
+            f"neplatný YAML ({source}{_yaml_error_location(error)}): "
+            "duplicitní klíč"
+        ) from error
+    except YAMLError as error:
+        raise ModelError(
+            f"neplatný YAML ({source}{_yaml_error_location(error)}): "
+            "syntaktická chyba"
+        ) from error
+
+
+def _yaml_error_location(error: YAMLError) -> str:
+    mark = getattr(error, "problem_mark", None)
+    if mark is None:
+        return ""
+    return f", řádek {mark.line + 1}, sloupec {mark.column + 1}"
 
 
 def _validation_path(error: ValidationError) -> str:
@@ -334,6 +356,98 @@ def _validation_path(error: ValidationError) -> str:
         for part in error.absolute_path
     ]
     return "$" + "".join(parts)
+
+
+_SCHEMA_TYPE_NAMES = {
+    "array": "seznam",
+    "boolean": "logická hodnota",
+    "integer": "celé číslo",
+    "null": "prázdná hodnota null",
+    "number": "číslo",
+    "object": "objekt",
+    "string": "text",
+}
+
+
+def _schema_values(values: Any) -> str:
+    return ", ".join(repr(value) for value in values)
+
+
+def _schema_type_name(expected: Any) -> str:
+    if isinstance(expected, list):
+        return "jeden z typů " + ", ".join(
+            _SCHEMA_TYPE_NAMES.get(value, repr(value)) for value in expected
+        )
+    return _SCHEMA_TYPE_NAMES.get(expected, repr(expected))
+
+
+def _schema_validation_message(error: ValidationError) -> str:
+    """Popíše porušení JSON Schema česky bez textu z knihovny."""
+
+    validator = error.validator
+    expected = error.validator_value
+
+    if validator == "required":
+        missing = tuple(key for key in expected if key not in error.instance)
+        if len(missing) == 1:
+            return f"chybí povinný klíč {missing[0]!r}"
+        return f"chybějí povinné klíče {_schema_values(missing)}"
+    if validator == "type":
+        return f"očekává se {_schema_type_name(expected)}"
+    if validator == "const":
+        return f"očekává se hodnota {expected!r}"
+    if validator == "enum":
+        return f"povolené hodnoty jsou {_schema_values(expected)}"
+    if validator == "minimum":
+        return f"minimální povolená hodnota je {expected}"
+    if validator == "maximum":
+        return f"maximální povolená hodnota je {expected}"
+    if validator == "minItems":
+        return f"minimální počet položek seznamu je {expected}"
+    if validator == "maxItems":
+        return f"maximální počet položek seznamu je {expected}"
+    if validator == "minLength":
+        return f"minimální délka textu je {expected} znaků"
+    if validator == "maxLength":
+        return f"maximální délka textu je {expected} znaků"
+    if validator == "uniqueItems":
+        return "položky seznamu se nesmějí opakovat"
+    if validator == "pattern":
+        return "text neodpovídá požadovanému formátu"
+    if validator == "additionalProperties":
+        properties = error.schema.get("properties", {})
+        unexpected = tuple(
+            sorted(
+                (key for key in error.instance if key not in properties),
+                key=str,
+            )
+        )
+        if len(unexpected) == 1:
+            return f"objekt obsahuje nepovolený klíč {unexpected[0]!r}"
+        if unexpected:
+            return f"objekt obsahuje nepovolené klíče {_schema_values(unexpected)}"
+        return "objekt obsahuje nepovolený klíč"
+    if validator == "dependentRequired":
+        missing_dependencies = tuple(
+            (key, dependency)
+            for key, dependencies in expected.items()
+            if key in error.instance
+            for dependency in dependencies
+            if dependency not in error.instance
+        )
+        if missing_dependencies:
+            key, dependency = missing_dependencies[0]
+            return f"klíč {key!r} vyžaduje také klíč {dependency!r}"
+        return "chybí klíč vyžadovaný jiným klíčem"
+    if validator == "anyOf":
+        return "hodnota neodpovídá žádné povolené variantě"
+    if validator == "oneOf":
+        return "hodnota musí odpovídat právě jedné povolené variantě"
+    if validator == "allOf":
+        return "hodnota nesplňuje všechna požadovaná pravidla"
+    if validator == "not":
+        return "hodnota odpovídá zakázané variantě"
+    return f"hodnota neodpovídá pravidlu {validator!r}"
 
 
 def _validated_data(source: Path, schema_name: str) -> dict[str, Any]:
@@ -345,7 +459,10 @@ def _validated_data(source: Path, schema_name: str) -> dict[str, Any]:
 
     if errors:
         details = "; ".join(
-            f"{_validation_path(error)}: {error.message}" for error in errors
+            dict.fromkeys(
+                f"{_validation_path(error)}: {_schema_validation_message(error)}"
+                for error in errors
+            )
         )
         raise ModelError(f"neplatný datový model: {details}")
 
@@ -1188,10 +1305,15 @@ def _write_yaml_document(
             _dump_yaml_document(data, temporary)
 
         temporary_path.replace(output_path)
-    except (OSError, YAMLError) as error:
-        detail = getattr(error, "strerror", None) or str(error)
+    except OSError as error:
         raise ModelError(
-            f"{subject} nelze zapsat ({output_path}): {detail}"
+            f"{subject} nelze zapsat ({output_path}): "
+            f"{system_error_message(error)}"
+        ) from error
+    except YAMLError as error:
+        raise ModelError(
+            f"{subject} nelze zapsat ({output_path}): "
+            "data se nepodařilo převést do YAML"
         ) from error
     finally:
         if "temporary_path" in locals():
@@ -1218,9 +1340,14 @@ def _dump_yaml_document_safely(
 ) -> None:
     try:
         _dump_yaml_document(data, output)
-    except (OSError, YAMLError) as error:
-        detail = getattr(error, "strerror", None) or str(error)
-        raise ModelError(f"{subject} nelze zapsat: {detail}") from error
+    except OSError as error:
+        raise ModelError(
+            f"{subject} nelze zapsat: {system_error_message(error)}"
+        ) from error
+    except YAMLError as error:
+        raise ModelError(
+            f"{subject} nelze zapsat: data se nepodařilo převést do YAML"
+        ) from error
 
 
 def write_crossword_grid(
