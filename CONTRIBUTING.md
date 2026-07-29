@@ -25,6 +25,16 @@ Pokud push selže, nejprve vyřeš příčinu nebo nahlas blokaci. Dokončené z
 
 Veřejná dokumentace projektu je primárně v češtině. Uživatelské pojmy mají být konzistentní a srozumitelné i lidem bez technického zázemí.
 
+České početní tvary jsou v gettext katalogu
+`src/krizovkar/locale/cs/LC_MESSAGES/krizovkar.po`. Po jeho změně aktualizuj
+binární katalog a zahrň oba soubory do stejného commitu:
+
+```shell
+msgfmt --check \
+  --output-file=src/krizovkar/locale/cs/LC_MESSAGES/krizovkar.mo \
+  src/krizovkar/locale/cs/LC_MESSAGES/krizovkar.po
+```
+
 ## Licence příspěvků
 
 Odesláním příspěvku souhlasíš s jeho uvolněním pod [CC0 1.0 Universal](LICENSE).

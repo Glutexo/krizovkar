@@ -25,7 +25,7 @@ from krizovkar.generator import (
     generate_swedish_template,
     normalize_secret_text,
 )
-from krizovkar.localization import system_error_message
+from krizovkar.localization import ngettext, system_error_message
 from krizovkar.model import (
     LegendCell,
     ModelError,
@@ -552,19 +552,12 @@ def _input_description(source: Path) -> str:
     return str(source)
 
 
-def _czech_count(
+def _localized_count(
     count: int,
     singular: str,
-    few: str,
-    many: str,
+    plural: str,
 ) -> str:
-    if count == 1:
-        noun = singular
-    elif 2 <= count <= 4:
-        noun = few
-    else:
-        noun = many
-    return f"{count} {noun}"
+    return f"{count} {ngettext(singular, plural, count)}"
 
 
 def _print_success(message: str, output: Path | None) -> None:
@@ -608,7 +601,7 @@ def _template(arguments: argparse.Namespace) -> int:
     _print_success(
         f"Šablona vytvořena: {_output_description(arguments.output)} "
         f"({arguments.width} × {arguments.height}, "
-        f"{_czech_count(len(template.slots), 'slot', 'sloty', 'slotů')})",
+        f"{_localized_count(len(template.slots), 'slot', 'slotů')})",
         arguments.output,
     )
     return 0
@@ -634,7 +627,7 @@ def _grid(arguments: argparse.Namespace) -> int:
         f"Nevyplněná mřížka vytvořena: "
         f"{_output_description(arguments.output)} "
         f"({template.grid.width} × {template.grid.height}, "
-        f"{_czech_count(len(template.slots), 'slot', 'sloty', 'slotů')})",
+        f"{_localized_count(len(template.slots), 'slot', 'slotů')})",
         arguments.output,
     )
     return 0
@@ -674,7 +667,7 @@ def _fill(arguments: argparse.Namespace) -> int:
     _print_success(
         f"Mřížka vytvořena: {_output_description(arguments.output)} "
         f"({template.grid.width} × {template.grid.height}, "
-        f"{_czech_count(len(template.slots), 'heslo', 'hesla', 'hesel')}, "
+        f"{_localized_count(len(template.slots), 'heslo', 'hesel')}, "
         f"seed {arguments.seed})",
         arguments.output,
     )
@@ -719,7 +712,7 @@ def _generate(arguments: argparse.Namespace) -> int:
     _print_success(
         f"Mřížka vytvořena: {_output_description(arguments.output)} "
         f"({arguments.width} × {arguments.height}, "
-        f"{_czech_count(word_count, 'heslo', 'hesla', 'hesel')}, "
+        f"{_localized_count(word_count, 'heslo', 'hesel')}, "
         f"seed {arguments.seed})",
         arguments.output,
     )
