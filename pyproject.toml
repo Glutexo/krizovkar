@@ -12,8 +12,6 @@ license = "CC0-1.0"
 dependencies = [
     "jsonschema>=4.26,<5",
     "pyphen>=0.17.2,<0.18",
-    "pymupdf-fonts>=1.0.5,<2",
-    "reportlab>=5.0,<6",
     "ruamel.yaml>=0.19.1,<0.20",
 ]
 

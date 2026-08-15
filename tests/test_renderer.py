@@ -1,20 +1,16 @@
-"""Testy sazby a obsahových režimů PDF rendereru."""
+"""Testy LaTeXové sazby a překladu PDF."""
 
 from __future__ import annotations
 
+import subprocess
 import tempfile
 import unittest
-from io import BytesIO
+from io import BytesIO, StringIO
 from pathlib import Path
-from unittest.mock import Mock, patch
-
-from reportlab.lib.enums import TA_LEFT, TA_RIGHT
-from reportlab.lib.styles import ParagraphStyle
+from unittest.mock import patch
 
 from krizovkar.model import (
     CrosswordGrid,
-    EmptyCell,
-    ExternalClue,
     Grid,
     LegendCell,
     LetterCell,
@@ -23,75 +19,155 @@ from krizovkar.model import (
     load_crossword_grid,
 )
 from krizovkar.renderer import (
-    INNER_LINE_WIDTH,
-    MAX_CELL_SIZE,
-    TEXT_CELL_FONT_STEP,
-    TEXT_CELL_MAX_FONT_SIZE,
-    TEXT_CELL_PADDING,
-    STRONG_LINE_WIDTH,
-    _draw_cell_number,
-    _draw_external_clues,
-    _draw_fitted_text,
-    _draw_inner_grid_lines,
-    _draw_legend_cell,
-    _draw_letter_cell,
-    _draw_secret_beak,
-    _draw_secret_prompts,
-    _draw_strong_grid_lines,
+    RenderError,
+    _run_lualatex,
     _secret_beak_points,
     _secret_letter_center,
+    create_latex_source,
+    render_latex,
+    render_latex_stream,
     render_pdf,
     render_pdf_stream,
 )
-from krizovkar.typography import SOFT_HYPHEN
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GRID_CLASSIC_EXAMPLE = PROJECT_ROOT / "examples" / "grid-classic.yaml"
+GRID_CZECH_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-czech-letters.yaml"
+GRID_EMPTY_EXAMPLE = PROJECT_ROOT / "examples" / "grid-empty.yaml"
+GRID_HELP_EXAMPLE = PROJECT_ROOT / "examples" / "grid-help.yaml"
+GRID_LEGEND_EXAMPLE = PROJECT_ROOT / "examples" / "grid-legend.yaml"
 GRID_MIXED_CLUES_EXAMPLE = PROJECT_ROOT / "examples" / "grid-mixed-clues.yaml"
+GRID_SECRET_ARROWS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret-arrows.yaml"
 GRID_SECRET_PROMPT_EXAMPLE = PROJECT_ROOT / "examples" / "grid-secret-prompt.yaml"
+PDF_BYTES = b"%PDF-1.7\n%%EOF\n"
 
 
-class FittedTextTest(unittest.TestCase):
-    cell_text_size = MAX_CELL_SIZE - 2 * TEXT_CELL_PADDING
+def _fake_lualatex(source: Path, output_directory: Path) -> Path:
+    assert source.read_text(encoding="utf-8").startswith(
+        "% Automaticky vytvořil Křížovkář."
+    )
+    output = output_directory / f"{source.stem}.pdf"
+    output.write_bytes(PDF_BYTES)
+    return output
 
-    def _rendered_content(self, text: str) -> tuple[str, ParagraphStyle]:
-        with patch("krizovkar.renderer.Paragraph") as paragraph_type:
-            paragraph = paragraph_type.return_value
-            paragraph.wrap.return_value = (self.cell_text_size, 12.6)
 
-            _draw_fitted_text(
-                Mock(),
-                text,
-                0,
-                0,
-                self.cell_text_size,
-                self.cell_text_size,
-            )
+class LatexSourceTest(unittest.TestCase):
+    def test_source_is_standalone_lualatex_document(self) -> None:
+        crossword = load_crossword_grid(GRID_SECRET_PROMPT_EXAMPLE)
 
-        content, style = paragraph_type.call_args.args
-        return content, style
+        source = create_latex_source(crossword, page_format="a5")
 
-    def test_keeps_words_that_fit_on_their_own_line_whole(self) -> None:
-        for text in ("NÁŠ REŽISÉR", "RUSKY TEDY", "ANGL. KOPEC"):
-            with self.subTest(text=text):
-                content, style = self._rendered_content(text)
+        self.assertIn(r"\documentclass[10pt]{article}", source)
+        self.assertIn("paperwidth=148mm,paperheight=210mm", source)
+        self.assertIn(r"\usepackage{fontspec}", source)
+        self.assertIn("lmsans10-regular.otf", source)
+        self.assertIn("lmsans10-bold.otf", source)
+        self.assertIn(r"\usepackage{tikz}", source)
+        self.assertIn(r"\begin{document}", source)
+        self.assertTrue(source.endswith("\\end{document}\n"))
+        self.assertIn("lualatex -interaction=nonstopmode", source)
 
-                self.assertNotIn(SOFT_HYPHEN, content)
-                self.assertFalse(style.hyphenationLang)
+    def test_filled_and_blank_sources_share_layout_but_not_letters(self) -> None:
+        crossword = load_crossword_grid(GRID_SECRET_ARROWS_EXAMPLE)
 
-    def test_keeps_dictionary_hyphenation_for_an_overlong_word(self) -> None:
-        content, _ = self._rendered_content("NEJZAJÍMAVĚJŠÍ")
+        filled = create_latex_source(crossword)
+        blank = create_latex_source(crossword, filled=False)
 
-        self.assertIn(SOFT_HYPHEN, content)
+        self.assertEqual(25, filled.count(r"\KrizovkarLetter{"))
+        self.assertNotIn(r"\KrizovkarLetter{9.6mm}", blank)
+        for source in (filled, blank):
+            self.assertEqual(7, source.count(r"\fill[black!15]"))
+            self.assertIn(r"\fill (1,3.91) -- (1.28,3.5)", source)
+            self.assertIn(r"line width=1.25pt", source)
 
-    def test_slightly_shrinks_font_to_keep_words_whole(self) -> None:
-        content, style = self._rendered_content("ODDĚLENÍ TECHNICKÉ KONTROLY")
+    def test_source_contains_legend_help_and_empty_cell_sazba(self) -> None:
+        legend = create_latex_source(load_crossword_grid(GRID_LEGEND_EXAMPLE))
+        help_source = create_latex_source(load_crossword_grid(GRID_HELP_EXAMPLE))
+        empty = create_latex_source(load_crossword_grid(GRID_EMPTY_EXAMPLE))
 
-        self.assertNotIn(SOFT_HYPHEN, content)
-        self.assertEqual(
-            TEXT_CELL_MAX_FONT_SIZE - TEXT_CELL_FONT_STEP,
-            style.fontSize,
+        self.assertIn(r"\fill[black!7]", legend)
+        self.assertIn(r"\KrizovkarCellText", legend)
+        self.assertIn(r"\textbf{Pomůcka:}", help_source)
+        self.assertEqual(20, empty.count(r"\draw[gray!70,line width=0.65pt]"))
+
+    def test_numbered_source_keeps_numbers_bars_and_both_clue_columns(self) -> None:
+        crossword = load_crossword_grid(GRID_CLASSIC_EXAMPLE)
+
+        source = create_latex_source(crossword, filled=False)
+
+        self.assertIn(r"\textbf{Vodorovně}", source)
+        self.assertIn(r"\textbf{Svisle}", source)
+        self.assertIn(r"\textbf{20.}", source)
+        self.assertIn("font=\\bfseries\\fontsize{7pt}{7pt}", source)
+        self.assertEqual(12, source.count(r"line width=1.25pt] (") - 1)
+        self.assertNotIn(r"\KrizovkarLetter{9.6mm}", source)
+
+    def test_inline_and_numbered_clues_can_share_one_source(self) -> None:
+        crossword = load_crossword_grid(GRID_MIXED_CLUES_EXAMPLE)
+
+        source = create_latex_source(crossword, filled=False)
+
+        self.assertEqual(6, source.count(r"\fill[black!7]"))
+        self.assertIn("% Vnější číslované legendy", source)
+
+    def test_prompt_order_placement_and_alignment_are_explicit(self) -> None:
+        crossword = CrosswordGrid(
+            format_name="krizovkar",
+            kind="grid",
+            version=1,
+            grid=Grid(width=1, height=1, cells=((LetterCell(value="A"),),)),
+            secret_prompts=(
+                SecretPrompt("První nahoře", alignment="left"),
+                SecretPrompt("Druhé nahoře", alignment="right"),
+                SecretPrompt("Dole", placement="below", alignment="right"),
+            ),
         )
+
+        source = create_latex_source(crossword)
+
+        first = source.index("Prv")
+        second = source.index("Dru")
+        grid = source.index("% Křížovková mřížka")
+        below = source.index("% Zadání tajenky pod mřížkou")
+        self.assertLess(first, second)
+        self.assertLess(second, grid)
+        self.assertLess(grid, below)
+        self.assertIn(r"{\raggedright", source)
+        self.assertIn(r"{\raggedleft", source)
+
+    def test_user_text_is_escaped_instead_of_becoming_latex(self) -> None:
+        crossword = CrosswordGrid(
+            format_name="krizovkar",
+            kind="grid",
+            version=1,
+            grid=Grid(
+                width=2,
+                height=1,
+                cells=(
+                    (
+                        LegendCell(texts=(r'50%_# & \ {x} "citace" `',)),
+                        LetterCell(),
+                    ),
+                ),
+            ),
+        )
+
+        source = create_latex_source(crossword)
+
+        self.assertIn(
+            r"50\%\_\# \& \textbackslash{} \{x\}",
+            source,
+        )
+        self.assertEqual(2, source.count(r"\textquotedbl{}"))
+        self.assertIn(r"\textasciigrave{}", source)
+
+    def test_czech_letters_and_ch_remain_unicode(self) -> None:
+        crossword = load_crossword_grid(GRID_CZECH_LETTERS_EXAMPLE)
+
+        source = create_latex_source(crossword)
+
+        self.assertIn(r"\KrizovkarLetter{9.6mm}{CH}", source)
+        self.assertIn(r"\KrizovkarLetter{9.6mm}{Č}", source)
 
 
 class SecretBeakTest(unittest.TestCase):
@@ -116,18 +192,6 @@ class SecretBeakTest(unittest.TestCase):
                     self.assertAlmostEqual(expected, actual)
                 self.assertAlmostEqual(edge_value, base_start[edge_axis])
                 self.assertAlmostEqual(edge_value, base_end[edge_axis])
-
-    def test_beak_is_a_filled_closed_triangle(self) -> None:
-        pdf = Mock()
-        path = pdf.beginPath.return_value
-
-        _draw_secret_beak(pdf, "right", 0, 0, 100)
-
-        path.moveTo.assert_called_once()
-        self.assertEqual(2, path.lineTo.call_count)
-        path.close.assert_called_once_with()
-        pdf.setFillColorRGB.assert_called_once_with(0, 0, 0)
-        pdf.drawPath.assert_called_once_with(path, stroke=0, fill=1)
 
     def test_numbered_beak_avoids_upper_left_number(self) -> None:
         right_points = _secret_beak_points(
@@ -155,302 +219,130 @@ class SecretBeakTest(unittest.TestCase):
         self.assertEqual((40, 50), _secret_letter_center("left", 50, 50, 100))
 
 
-class RenderModeTest(unittest.TestCase):
+class LatexOutputTest(unittest.TestCase):
     crossword = CrosswordGrid(
         format_name="krizovkar",
         kind="grid",
         version=1,
-        grid=Grid(
-            width=2,
-            height=2,
-            cells=(
-                (
-                    LegendCell(texts=("Tajenka",)),
-                    SecretCell(value="A", arrow="right"),
-                ),
-                (LetterCell(value="B"), EmptyCell()),
-            ),
-        ),
+        grid=Grid(width=1, height=1, cells=((LetterCell(value="A"),),)),
     )
 
-    def test_filled_pdf_draws_letters_by_default(self) -> None:
+    def test_writes_latex_file_atomically_and_refuses_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "filled.pdf"
-            with patch(
-                "krizovkar.renderer._draw_letter_cell",
-                wraps=_draw_letter_cell,
-            ) as draw_letter:
-                render_pdf(self.crossword, output)
+            output = Path(directory) / "crossword.tex"
 
-        self.assertEqual(2, draw_letter.call_count)
+            returned = render_latex(self.crossword, output)
 
-    def test_renders_pdf_to_binary_stream(self) -> None:
-        output = BytesIO()
+            self.assertEqual(output, returned)
+            self.assertIn(r"\begin{document}", output.read_text(encoding="utf-8"))
+            with self.assertRaisesRegex(RenderError, "již existuje"):
+                render_latex(self.crossword, output)
+            render_latex(self.crossword, output, overwrite=True, filled=False)
 
-        render_pdf_stream(self.crossword, output)
+    def test_writes_latex_to_text_stream_without_closing_it(self) -> None:
+        output = StringIO()
 
-        content = output.getvalue()
-        self.assertTrue(content.startswith(b"%PDF-"))
-        self.assertIn(b"%%EOF", content)
+        render_latex_stream(self.crossword, output)
+
+        self.assertIn(r"\end{document}", output.getvalue())
         self.assertFalse(output.closed)
 
-    def test_blank_pdf_keeps_legend_and_secret_arrow(self) -> None:
+    def test_reports_text_stream_without_utf8_support(self) -> None:
+        class AsciiStream:
+            def write(self, content: str) -> None:
+                content.encode("ascii")
+
+        with self.assertRaisesRegex(RenderError, "UTF-8"):
+            render_latex_stream(self.crossword, AsciiStream())  # type: ignore[arg-type]
+
+
+class PdfCompilationTest(unittest.TestCase):
+    crossword = CrosswordGrid(
+        format_name="krizovkar",
+        kind="grid",
+        version=1,
+        grid=Grid(width=1, height=1, cells=((SecretCell(value="A"),),)),
+    )
+
+    def test_render_pdf_compiles_generated_latex_atomically(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "blank.pdf"
+            output = Path(directory) / "crossword.pdf"
+            with patch(
+                "krizovkar.renderer._run_lualatex",
+                side_effect=_fake_lualatex,
+            ) as compiler:
+                returned = render_pdf(self.crossword, output)
+
+            self.assertEqual(output, returned)
+            self.assertEqual(PDF_BYTES, output.read_bytes())
+            compiler.assert_called_once()
+            with self.assertRaisesRegex(RenderError, "již existuje"):
+                render_pdf(self.crossword, output)
+
+    def test_render_pdf_stream_keeps_binary_stream_open(self) -> None:
+        output = BytesIO()
+        with patch(
+            "krizovkar.renderer._run_lualatex",
+            side_effect=_fake_lualatex,
+        ):
+            render_pdf_stream(self.crossword, output)
+
+        self.assertEqual(PDF_BYTES, output.getvalue())
+        self.assertFalse(output.closed)
+
+    def test_lualatex_is_called_without_shell_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.tex"
+            source.write_text(r"\documentclass{article}", encoding="utf-8")
+
+            def fake_run(command, **kwargs):
+                (root / "source.pdf").write_bytes(PDF_BYTES)
+                return subprocess.CompletedProcess(command, 0, "hotovo")
+
+            with patch(
+                "krizovkar.renderer.subprocess.run",
+                side_effect=fake_run,
+            ) as run:
+                output = _run_lualatex(source, root)
+
+        self.assertEqual("source.pdf", output.name)
+        command = run.call_args.args[0]
+        self.assertEqual("lualatex", command[0])
+        self.assertIn("-no-shell-escape", command)
+        self.assertIn("-halt-on-error", command)
+        self.assertEqual(root, run.call_args.kwargs["cwd"])
+        self.assertEqual(subprocess.DEVNULL, run.call_args.kwargs["stdin"])
+
+    def test_missing_lualatex_has_actionable_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.tex"
+            source.write_text("", encoding="utf-8")
             with (
                 patch(
-                    "krizovkar.renderer._draw_letter_cell",
-                    wraps=_draw_letter_cell,
-                ) as draw_letter,
-                patch(
-                    "krizovkar.renderer._draw_legend_cell",
-                    wraps=_draw_legend_cell,
-                ) as draw_legend,
-                patch(
-                    "krizovkar.renderer._draw_secret_beak",
-                    wraps=_draw_secret_beak,
-                ) as draw_secret_beak,
+                    "krizovkar.renderer.subprocess.run",
+                    side_effect=FileNotFoundError,
+                ),
+                self.assertRaisesRegex(RenderError, "nainstalujte TeX Live"),
             ):
-                render_pdf(self.crossword, output, filled=False)
+                _run_lualatex(source, root)
 
-        draw_letter.assert_not_called()
-        draw_legend.assert_called_once()
-        draw_secret_beak.assert_called_once()
-
-    def test_unfilled_pdf_skips_unknown_letters_and_empty_legend(self) -> None:
-        crossword = CrosswordGrid(
-            format_name="krizovkar",
-            kind="grid",
-            version=1,
-            grid=Grid(
-                width=2,
-                height=1,
-                cells=((LegendCell(), LetterCell()),),
-            ),
-        )
+    def test_lualatex_error_includes_compiler_diagnostic(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "unfilled.pdf"
-            with patch(
-                "krizovkar.renderer._draw_letter_cell",
-                wraps=_draw_letter_cell,
-            ) as draw_letter:
-                render_pdf(crossword, output)
-
-            self.assertTrue(output.read_bytes().startswith(b"%PDF-"))
-
-        draw_letter.assert_not_called()
-
-    def test_unfilled_double_legend_keeps_section_divider(self) -> None:
-        pdf = Mock()
-
-        with patch("krizovkar.renderer._draw_fitted_text") as draw_text:
-            _draw_legend_cell(
-                pdf,
-                LegendCell(texts=(None, None)),
-                left=0,
-                bottom=0,
-                size=10,
+            root = Path(directory)
+            source = root / "source.tex"
+            source.write_text("", encoding="utf-8")
+            failed = subprocess.CompletedProcess(
+                ("lualatex",),
+                1,
+                "začátek\n! LaTeX Error: chybí balíček\nkonec",
             )
-
-        pdf.line.assert_called_once_with(0, 5, 10, 5)
-        draw_text.assert_not_called()
-
-
-class SecretPromptRenderTest(unittest.TestCase):
-    def test_multiple_prompts_keep_top_to_bottom_order(self) -> None:
-        pdf = Mock()
-        first = Mock()
-        second = Mock()
-
-        _draw_secret_prompts(
-            pdf,
-            ((first, 10), (second, 20)),
-            left=5,
-            bottom=10,
-            height=40,
-        )
-
-        first_y = first.drawOn.call_args.args[2]
-        second_y = second.drawOn.call_args.args[2]
-        self.assertEqual(5, first.drawOn.call_args.args[1])
-        self.assertEqual(5, second.drawOn.call_args.args[1])
-        self.assertGreater(first_y, second_y)
-
-    def test_example_prompt_is_drawn_in_blank_pdf(self) -> None:
-        crossword = load_crossword_grid(GRID_SECRET_PROMPT_EXAMPLE)
-
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "secret-prompt-blank.pdf"
-            with patch(
-                "krizovkar.renderer._draw_secret_prompts",
-                wraps=_draw_secret_prompts,
-            ) as draw_prompts:
-                render_pdf(crossword, output, filled=False)
-
-        draw_prompts.assert_called_once()
-        layouts = draw_prompts.call_args.args[1]
-        self.assertEqual(TA_LEFT, layouts[0][0].style.alignment)
-
-    def test_places_prompts_around_grid_and_above_external_clues(self) -> None:
-        crossword = CrosswordGrid(
-            format_name="krizovkar",
-            kind="grid",
-            version=1,
-            grid=Grid(
-                width=2,
-                height=1,
-                cells=(
-                    (
-                        LetterCell(value="A", number=1),
-                        LetterCell(value="B"),
-                    ),
-                ),
-            ),
-            clues=(
-                ExternalClue(
-                    number=1,
-                    direction="horizontal",
-                    text="Abeceda",
-                ),
-            ),
-            secret_prompts=(
-                SecretPrompt(
-                    text="Zadání nahoře",
-                    placement="above",
-                    alignment="left",
-                ),
-                SecretPrompt(
-                    text="Zadání dole",
-                    placement="below",
-                    alignment="right",
-                ),
-            ),
-        )
-
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "secret-prompts.pdf"
             with (
-                patch(
-                    "krizovkar.renderer._draw_inner_grid_lines",
-                    wraps=_draw_inner_grid_lines,
-                ) as draw_grid,
-                patch(
-                    "krizovkar.renderer._draw_external_clues",
-                    wraps=_draw_external_clues,
-                ) as draw_clues,
-                patch(
-                    "krizovkar.renderer._draw_secret_prompts",
-                    wraps=_draw_secret_prompts,
-                ) as draw_prompts,
+                patch("krizovkar.renderer.subprocess.run", return_value=failed),
+                self.assertRaisesRegex(RenderError, "chybí balíček"),
             ):
-                render_pdf(crossword, output, filled=False)
-
-        _, _, grid_left, grid_bottom, cell_size = draw_grid.call_args.args
-        grid_width = crossword.grid.width * cell_size
-        grid_top = grid_bottom + crossword.grid.height * cell_size
-
-        self.assertEqual(2, draw_prompts.call_count)
-        prompt_calls = {
-            call.args[1][0][0].style.alignment: call.args
-            for call in draw_prompts.call_args_list
-        }
-        _, below_layouts, below_left, below_bottom, below_height = (
-            prompt_calls[TA_RIGHT]
-        )
-        _, above_layouts, above_left, above_bottom, _ = prompt_calls[TA_LEFT]
-
-        self.assertAlmostEqual(grid_left, below_left)
-        self.assertAlmostEqual(grid_left, above_left)
-        self.assertAlmostEqual(grid_width, below_layouts[0][0].width)
-        self.assertAlmostEqual(grid_width, above_layouts[0][0].width)
-        self.assertLess(below_bottom + below_height, grid_bottom)
-        self.assertGreater(above_bottom, grid_top)
-
-        _, _, _, clue_bottom, clue_height = draw_clues.call_args.args
-        self.assertLess(clue_bottom + clue_height, below_bottom)
-
-
-class GridLineRenderTest(unittest.TestCase):
-    def test_all_inner_row_and_column_lines_are_visible(self) -> None:
-        grid = Grid(width=5, height=5)
-        pdf = Mock()
-
-        _draw_inner_grid_lines(pdf, grid, 0, 0, 10)
-
-        pdf.setStrokeColorRGB.assert_called_once_with(0, 0, 0)
-        pdf.setLineWidth.assert_called_once_with(INNER_LINE_WIDTH)
-        self.assertEqual(8, pdf.line.call_count)
-        pdf.line.assert_any_call(10, 0, 10, 50)
-        pdf.line.assert_any_call(40, 0, 40, 50)
-        pdf.line.assert_any_call(0, 10, 50, 10)
-        pdf.line.assert_any_call(0, 40, 50, 40)
-        self.assertLess(INNER_LINE_WIDTH, STRONG_LINE_WIDTH)
-
-    def test_word_bars_and_outer_frame_share_strong_line_width(self) -> None:
-        crossword = load_crossword_grid(GRID_CLASSIC_EXAMPLE)
-        pdf = Mock()
-
-        _draw_strong_grid_lines(pdf, crossword.grid, 0, 0, 10)
-
-        pdf.setLineWidth.assert_called_once_with(STRONG_LINE_WIDTH)
-        self.assertEqual(12, pdf.line.call_count)
-        pdf.rect.assert_called_once_with(0, 0, 60, 60, stroke=1, fill=0)
-
-
-class NumberedClueRenderTest(unittest.TestCase):
-    def test_blank_numbered_pdf_keeps_numbers_clues_and_secret_arrow(self) -> None:
-        crossword = load_crossword_grid(GRID_CLASSIC_EXAMPLE)
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "classic-blank.pdf"
-            with (
-                patch(
-                    "krizovkar.renderer._draw_letter_cell",
-                    wraps=_draw_letter_cell,
-                ) as draw_letter,
-                patch(
-                    "krizovkar.renderer._draw_cell_number",
-                    wraps=_draw_cell_number,
-                ) as draw_number,
-                patch(
-                    "krizovkar.renderer._draw_external_clues",
-                    wraps=_draw_external_clues,
-                ) as draw_clues,
-                patch(
-                    "krizovkar.renderer._draw_secret_beak",
-                    wraps=_draw_secret_beak,
-                ) as draw_secret_beak,
-            ):
-                render_pdf(crossword, output, filled=False)
-
-        draw_letter.assert_not_called()
-        self.assertEqual(20, draw_number.call_count)
-        draw_clues.assert_called_once()
-        draw_secret_beak.assert_called_once()
-        self.assertTrue(draw_secret_beak.call_args.kwargs["numbered"])
-
-    def test_inline_and_numbered_clues_are_drawn_together(self) -> None:
-        crossword = load_crossword_grid(GRID_MIXED_CLUES_EXAMPLE)
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "mixed.pdf"
-            with (
-                patch(
-                    "krizovkar.renderer._draw_legend_cell",
-                    wraps=_draw_legend_cell,
-                ) as draw_inline_clue,
-                patch(
-                    "krizovkar.renderer._draw_cell_number",
-                    wraps=_draw_cell_number,
-                ) as draw_number,
-                patch(
-                    "krizovkar.renderer._draw_external_clues",
-                    wraps=_draw_external_clues,
-                ) as draw_external_clues,
-            ):
-                render_pdf(crossword, output, filled=False)
-
-        self.assertEqual(6, draw_inline_clue.call_count)
-        draw_number.assert_called_once()
-        draw_external_clues.assert_called_once()
+                _run_lualatex(source, root)
 
 
 if __name__ == "__main__":

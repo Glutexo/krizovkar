@@ -10,9 +10,13 @@ Existují tři samostatné druhy dokumentů:
 
 ```text
 umístěné specification + volba rozvržení → template
-template → grid (pevný nebo nevyplněný obsah) → vykreslení PDF
-template + slovník → plnění → grid (vyplněná mřížka) → vykreslení PDF
+template → grid (pevný nebo nevyplněný obsah) → LaTeX → PDF
+template + slovník → plnění → grid (vyplněná mřížka) → LaTeX → PDF
 ```
+
+LaTeXová sazební šablona není dalším druhem YAML dokumentu a nemá položku
+`kind`. Jde o textový export cílové mřížky, který lze upravit a přeložit
+LuaLaTeXem do PDF.
 
 Každý druh má vlastní JSON Schema a vlastní Pythonový loader. Dokument proto vždy obsahuje povinnou položku `kind`; nástroj nemusí jeho význam odhadovat z ostatních položek.
 
@@ -135,10 +139,11 @@ začátků a silné mezislovní předěly a připravené tajenky převede na bu�
 `secret`. Přenese také jejich zobáčky a `prompt`. Nevyplněné sloty zůstanou
 prázdné; pevné sloty naopak vloží svá písmena a legendy a `in_help` naplní
 pomůcku. Samotná `secrets.words` u slotu bez pevného `answer` se při tomto
-převodu dál nezveřejňují. Příkaz `render` umí stejný převod provést
-automaticky, dostane-li přímo dokument `kind: template`.
+převodu dál nezveřejňují. Příkazy `latex` a `render` umějí stejný převod
+provést automaticky, dostanou-li přímo dokument `kind: template`. První z
+nich vypíše upravitelný LaTeX, druhý stejný zdroj přeloží LuaLaTeXem do PDF.
 
-Příkaz `generate` je zkratka nad stejnými dvěma kroky: podle `--layout` nejprve vytvoří hustou švédskou nebo číslovanou šablonu a potom ji naplní zadaným slovníkem. Přijímá konkrétní tajenku s automatickým nebo pevným dělením. Požadavek obsahující jen délku nelze použít pro vyplněnou mřížku, ale příkazy `grid` a `render` jej zachovají jako označená nevyplněná tajenková pole.
+Příkaz `generate` je zkratka nad stejnými dvěma kroky: podle `--layout` nejprve vytvoří hustou švédskou nebo číslovanou šablonu a potom ji naplní zadaným slovníkem. Přijímá konkrétní tajenku s automatickým nebo pevným dělením. Požadavek obsahující jen délku nelze použít pro vyplněnou mřížku, ale příkazy `grid`, `latex` a `render` jej zachovají jako označená nevyplněná tajenková pole.
 
 ## Cílová mřížka, verze 1
 
@@ -260,7 +265,7 @@ Volitelné `arrows` lze uvést jen společně s `texts`:
 - Texty se vykreslují do stejně vysokých částí v pořadí shora dolů.
 - Části oddělují vodorovné čáry.
 - Šipky `right` a `down` se přiřazují textům ve stejném pořadí.
-- Renderer text automaticky zalamuje a zmenšuje; české znaky vkládá do PDF pomocí fontu Noto Sans.
+- LaTeX text automaticky zalamuje a podle prostoru zmenšuje; české znaky sází LuaLaTeX pomocí fontu Latin Modern Sans.
 
 Počet textů ani shoda počtu textů a šipek nejsou estetickým omezením datového
 formátu. Experimentální švédský generátor přesto vytváří pro každou vyplněnou
@@ -446,8 +451,9 @@ Loader již ověřuje rozměry, rozsah běžných i tajenkových slov, shodu
 písmen na kříženích, obsazenost vybraných tajenkových polí a základní platnost
 výslovné polohy pomůcky. Převod `specification → template` navíc odmítne
 překryv dvou slotů ve stejném směru, kolizi legendy a písmene nebo pomůcky a
-jiné buňky. Příkaz `render` nadále přijímá `grid` nebo `template`; zadání lze
-vykreslit rourou `template ZADÁNÍ.yaml | render -`.
+jiné buňky. Příkazy `latex` a `render` nadále přijímají `grid` nebo
+`template`; zadání lze převést rourou `template ZADÁNÍ.yaml | latex -` nebo
+rovnou sestavit jako PDF pomocí `template ZADÁNÍ.yaml | render -`.
 
 ## Validace
 

@@ -28,6 +28,7 @@ from krizovkar.generator import (
 )
 from krizovkar.localization import ngettext, system_error_message
 from krizovkar.model import (
+    CrosswordGrid,
     LegendCell,
     ModelError,
     SecretPrompt,
@@ -44,6 +45,8 @@ from krizovkar.renderer import (
     DEFAULT_PAGE_FORMAT,
     SUPPORTED_PAGE_FORMATS,
     RenderError,
+    render_latex,
+    render_latex_stream,
     render_pdf,
     render_pdf_stream,
 )
@@ -349,12 +352,64 @@ def _parser() -> argparse.ArgumentParser:
     )
     validate.set_defaults(handler=_validate)
 
+    latex = commands.add_parser(
+        "latex",
+        help="vytvoří LaTeXovou šablonu z cílové mřížky nebo šablony",
+        description=(
+            "Načte a ověří YAML typu grid nebo template a vysází "
+            "křížovku jako samostatně přeložitelnou LaTeXovou šablonu. "
+            "Datovou šablonu převede bez použití slovníku."
+        ),
+    )
+    latex.add_argument(
+        "source",
+        type=Path,
+        metavar="VSTUP.yaml",
+        help=(
+            "vstupní YAML cílové mřížky nebo šablony; "
+            "- znamená standardní vstup"
+        ),
+    )
+    latex.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        metavar="VÝSTUP.tex",
+        help="cílová LaTeXová šablona; bez volby standardní výstup",
+    )
+    latex.add_argument(
+        "--force",
+        action="store_true",
+        help="povolí přepsání existující LaTeXové šablony",
+    )
+    latex.add_argument(
+        "--page-format",
+        type=str.upper,
+        choices=SUPPORTED_PAGE_FORMATS,
+        default=DEFAULT_PAGE_FORMAT,
+        metavar="FORMÁT",
+        help=(
+            "formát stránky: "
+            f"{', '.join(SUPPORTED_PAGE_FORMATS)}; výchozí je {DEFAULT_PAGE_FORMAT}"
+        ),
+    )
+    latex.add_argument(
+        "--blank",
+        action="store_true",
+        help=(
+            "skryje písmena; legendy, pomůcky, zvýraznění a zobáčky tajenky "
+            "zůstanou"
+        ),
+    )
+    latex.set_defaults(handler=_latex)
+
     render = commands.add_parser(
         "render",
-        help="vytvoří PDF z cílové mřížky nebo šablony",
+        help="sestaví PDF přes LaTeX z cílové mřížky nebo šablony",
         description=(
-            "Načte a ověří YAML typu grid nebo template a vykreslí cílovou "
-            "mřížku do PDF. Šablonu převede bez použití slovníku."
+            "Načte a ověří YAML typu grid nebo template, vytvoří stejnou "
+            "LaTeXovou šablonu jako příkaz latex a přeloží ji pomocí LuaLaTeXu "
+            "do PDF. Datovou šablonu převede bez použití slovníku."
         ),
     )
     render.add_argument(
@@ -767,22 +822,54 @@ def _generate(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _load_renderable_crossword(source_path: Path) -> CrosswordGrid:
+    source = _reusable_input_source(source_path)
+    document_kind = load_crossword_document_kind(source)
+    if isinstance(source, StringIO):
+        source.seek(0)
+    if document_kind == "grid":
+        return load_crossword_grid(source)
+    if document_kind == "template":
+        template = load_crossword_template(source)
+        return create_grid_from_template(template)
+    raise ModelError(
+        "sázet lze pouze cílovou mřížku kind: grid nebo "
+        f"šablonu kind: template; vstup má kind: {document_kind!r}"
+    )
+
+
+def _latex(arguments: argparse.Namespace) -> int:
+    try:
+        crossword = _load_renderable_crossword(arguments.source)
+        if arguments.output is None:
+            render_latex_stream(
+                crossword,
+                sys.stdout,
+                page_format=arguments.page_format,
+                filled=not arguments.blank,
+            )
+        else:
+            render_latex(
+                crossword,
+                arguments.output,
+                overwrite=arguments.force,
+                page_format=arguments.page_format,
+                filled=not arguments.blank,
+            )
+    except (ModelError, RenderError) as error:
+        print(f"chyba: {error}", file=sys.stderr)
+        return 2
+
+    _print_success(
+        f"LaTeX vytvořen: {_output_description(arguments.output)}",
+        arguments.output,
+    )
+    return 0
+
+
 def _render(arguments: argparse.Namespace) -> int:
     try:
-        source = _reusable_input_source(arguments.source)
-        document_kind = load_crossword_document_kind(source)
-        if isinstance(source, StringIO):
-            source.seek(0)
-        if document_kind == "grid":
-            crossword = load_crossword_grid(source)
-        elif document_kind == "template":
-            template = load_crossword_template(source)
-            crossword = create_grid_from_template(template)
-        else:
-            raise ModelError(
-                "vykreslit lze pouze cílovou mřížku kind: grid nebo "
-                f"šablonu kind: template; vstup má kind: {document_kind!r}"
-            )
+        crossword = _load_renderable_crossword(arguments.source)
         if arguments.output is None:
             render_pdf_stream(
                 crossword,

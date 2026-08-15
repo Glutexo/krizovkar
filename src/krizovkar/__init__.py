@@ -73,7 +73,14 @@ from krizovkar.model import (
     write_crossword_specification,
     write_crossword_template,
 )
-from krizovkar.renderer import RenderError, render_pdf, render_pdf_stream
+from krizovkar.renderer import (
+    RenderError,
+    create_latex_source,
+    render_latex,
+    render_latex_stream,
+    render_pdf,
+    render_pdf_stream,
+)
 from krizovkar.validation import (
     ValidationIssue,
     ValidationReport,
@@ -135,6 +142,7 @@ __all__ = [
     "check_crossword_grid",
     "check_dense_swedish_grid",
     "create_grid_from_template",
+    "create_latex_source",
     "create_template_from_specification",
     "dump_crossword_grid",
     "dump_crossword_specification",
@@ -151,6 +159,8 @@ __all__ = [
     "load_crossword_template",
     "normalize_secret_text",
     "place_secret_in_template",
+    "render_latex",
+    "render_latex_stream",
     "render_pdf",
     "render_pdf_stream",
     "secret_path_arrows",

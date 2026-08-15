@@ -11,8 +11,6 @@ from itertools import product
 from pathlib import Path
 from unittest.mock import patch
 
-from reportlab.lib.pagesizes import A5
-
 from krizovkar.cli import main
 from krizovkar.model import (
     Coordinate,
@@ -70,6 +68,13 @@ SPECIFICATION_SECRET_PROMPT_EXAMPLE = (
     PROJECT_ROOT / "examples" / "specification-secret-prompt.yaml"
 )
 TEMPLATE_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "template-secret.yaml"
+PDF_BYTES = b"%PDF-1.7\n%%EOF\n"
+
+
+def _fake_lualatex(source: Path, output_directory: Path) -> Path:
+    output = output_directory / f"{source.stem}.pdf"
+    output.write_bytes(PDF_BYTES)
+    return output
 
 
 class _BinaryStdout(io.StringIO):
@@ -1358,6 +1363,14 @@ class ModelTest(unittest.TestCase):
 
 
 class CommandTest(unittest.TestCase):
+    def setUp(self) -> None:
+        compiler = patch(
+            "krizovkar.renderer._run_lualatex",
+            side_effect=_fake_lualatex,
+        )
+        compiler.start()
+        self.addCleanup(compiler.stop)
+
     def test_help_is_in_czech(self) -> None:
         cases = (
             (["--help"], ("volby:", "příkazy:")),
@@ -1390,6 +1403,7 @@ class CommandTest(unittest.TestCase):
     def test_argument_errors_are_in_czech(self) -> None:
         cases = (
             (["render"], "je nutné zadat: VSTUP.yaml"),
+            (["latex"], "je nutné zadat: VSTUP.yaml"),
             (
                 ["render", str(GRID_MINIMAL_EXAMPLE), "--page-format", "A7"],
                 "neplatná volba: 'A7'",
@@ -2147,11 +2161,60 @@ class CommandTest(unittest.TestCase):
             )
 
     def test_page_format_names_are_case_insensitive(self) -> None:
-        self.assertEqual(A5, resolve_page_size("a5"))
+        width, height = resolve_page_size("a5")
+
+        self.assertAlmostEqual(148 * 72 / 25.4, width)
+        self.assertAlmostEqual(210 * 72 / 25.4, height)
 
     def test_rejects_unsupported_page_format(self) -> None:
         with self.assertRaisesRegex(RenderError, "nepodporovaný formát stránky"):
             resolve_page_size("A7")
+
+    def test_latex_writes_editable_source_to_stdout(self) -> None:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            result = main(
+                [
+                    "latex",
+                    str(GRID_CZECH_LETTERS_EXAMPLE),
+                    "--page-format",
+                    "A5",
+                ]
+            )
+
+        self.assertEqual(0, result)
+        source = stdout.getvalue()
+        self.assertTrue(source.startswith("% Automaticky vytvořil Křížovkář."))
+        self.assertIn(r"\documentclass[10pt]{article}", source)
+        self.assertIn(r"\KrizovkarLetter{9.6mm}{CH}", source)
+        self.assertIn("LaTeX vytvořen: standardní výstup", stderr.getvalue())
+
+    def test_latex_writes_file_and_refuses_accidental_overwrite(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "crossword.tex"
+            command = [
+                "latex",
+                str(GRID_SECRET_ARROWS_EXAMPLE),
+                "--output",
+                str(output),
+                "--blank",
+            ]
+
+            with redirect_stdout(io.StringIO()):
+                result = main(command)
+
+            self.assertEqual(0, result)
+            self.assertIn(r"\begin{tikzpicture}", output.read_text(encoding="utf-8"))
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                second_result = main(command)
+            self.assertEqual(2, second_result)
+            self.assertIn("již existuje", stderr.getvalue())
+            with redirect_stdout(io.StringIO()):
+                forced_result = main([*command, "--force"])
+            self.assertEqual(0, forced_result)
 
     def test_render_creates_pdf_and_refuses_accidental_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

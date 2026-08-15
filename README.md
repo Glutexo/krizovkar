@@ -6,9 +6,10 @@ Křížovkář je připravovaný otevřený nástroj pro tvorbu švédských, kl
 
 Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu,
 experimentální generátory švédské a číslované mřížky z JSON slovníku,
-automatický převod umístěného zadání na šablonu, vykreslení výsledku do
-PDF a první krok grafického rozhraní. Podoba dalších kroků editoru bude
-navržena v navazujících změnách.
+automatický převod umístěného zadání na šablonu, převod výsledku do
+upravitelné LaTeXové sazební šablony, její překlad do PDF a první krok
+grafického rozhraní. Podoba dalších kroků editoru bude navržena v
+navazujících změnách.
 
 ## Grafické rozhraní
 
@@ -56,10 +57,14 @@ Křížovkář rozlišuje tři samostatné druhy YAML dokumentů:
 
 ```text
 umístěné specification + volba rozvržení → template
-template → grid (pevný nebo nevyplněný obsah) → render → PDF
-template + slovník → fill → grid → render → PDF
+template → grid (pevný nebo nevyplněný obsah) → LaTeX → PDF
+template + slovník → fill → grid → LaTeX → PDF
 požadavky + slovník → generate (= template + fill) → grid
 ```
+
+YAML dokument `kind: template` je datová šablona určená k plnění hesly.
+Následná LaTeXová sazební šablona je samostatný textový výstup určený
+k vizuálním úpravám a překladu do PDF.
 
 Nejmenší platná cílová mřížka zatím určuje pouze rozměr:
 
@@ -215,9 +220,10 @@ Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-lett
 
 ## Vstup a výstup příkazů
 
-Volba `-o` neboli `--output` je u příkazů `template`, `grid`, `fill`, `generate`
-a `render` nepovinná. Bez ní příkaz zapíše výsledný YAML nebo binární PDF na
-standardní výstup, takže jej lze přesměrovat nebo předat dalšímu programu:
+Volba `-o` neboli `--output` je u příkazů `template`, `grid`, `fill`,
+`generate`, `latex` a `render` nepovinná. Bez ní příkaz zapíše výsledný
+YAML, textový LaTeX nebo binární PDF na standardní výstup, takže jej lze
+přesměrovat nebo předat dalšímu programu:
 
 ```shell
 uv run krizovkar template examples/specification-placed-words.yaml \
@@ -225,16 +231,26 @@ uv run krizovkar template examples/specification-placed-words.yaml \
 uv run krizovkar template --width 15 --height 10 > build/template.yaml
 uv run krizovkar grid build/template.yaml > build/unfilled-grid.yaml
 uv run krizovkar generate slovnik.json > build/grid.yaml
+uv run krizovkar latex build/grid.yaml > build/grid.tex
 uv run krizovkar render build/grid.yaml > build/grid.pdf
 ```
 
 Stavová hláška jde v tomto režimu na standardní chybový výstup a výsledná data neznečistí. Při zadaném `--output` se dál zapisuje atomicky do souboru, existující soubor se bez `--force` nepřepíše a stavová hláška se vypíše na standardní výstup.
 
 Místo vstupního souboru přijímají příkazy `template`, `grid`, `fill`,
-`generate`, `validate` a `render` také `-`, které znamená standardní vstup. U
-`template` jde o vstupní zadání. U příkazu `fill` lze tímto způsobem načíst
-šablonu nebo slovník, ale ne oba vstupy současně. Výstupy lze díky tomu
-spojovat přímo rourou. Šablona se může vykreslit bez mezikroku:
+`generate`, `validate`, `latex` a `render` také `-`, které znamená standardní
+vstup. U `template` jde o vstupní zadání. U příkazu `fill` lze tímto
+způsobem načíst šablonu nebo slovník, ale ne oba vstupy současně. Výstupy
+lze díky tomu spojovat přímo rourou. Datová šablona se může převést na
+LaTeX bez mezikroku:
+
+```shell
+uv run krizovkar template --width 15 --height 10 \
+  | uv run krizovkar latex - > build/template.tex
+```
+
+Nebo z ní lze rovnou sestavit PDF; `render` uvnitř vytvoří stejný LaTeXový
+zdroj a přeloží jej LuaLaTeXem:
 
 ```shell
 uv run krizovkar template --width 15 --height 10 \
@@ -326,7 +342,8 @@ Převod zachová nevyplňovaná, legendová a pomocná pole, čísla a silné
 předěly číslovaného rozvržení, zvýraznění tajenek, jejich zobáčky a zadání.
 U husté šablony zůstanou písmena a texty legend prázdné. Šablona vytvořená
 ze zadání naopak přenese své pevné odpovědi, legendy a slova pomůcky.
-Šablonu lze bez mezikroku vykreslit také příkazem
+Šablonu lze bez mezikroku převést na sazební šablonu příkazem
+`krizovkar latex build/template.yaml` nebo z ní rovnou sestavit PDF příkazem
 `krizovkar render build/template.yaml`.
 
 Šablonu lze později vyplnit samostatně:
@@ -411,27 +428,52 @@ Chyba znamená neplatný nebo vnitřně rozporný datový model a příkaz skon�
 
 Validátor nepřiřazuje celé mřížce jeden druh. U každého začátku hesla samostatně přijme bezprostředně předcházející legendovou buňku nebo číslo; silný předěl přitom zakládá nové heslo. Proto kontroluje vepsané legendy i ve mřížce, která zároveň obsahuje `number`, `bars` nebo vnější `clues`. Dále varuje zejména před směrovými šipkami vepsaných legend, nesouladem počtu jejich textů a navazujících směrů a oddělenými písmennými ostrovy. Zobáčky tajenky tato varování nevyvolávají.
 
-## Vytvoření PDF
+## Vytvoření LaTeXu a PDF
 
-Projekt vyžaduje Python 3.11 nebo novější. Závislosti lze nainstalovat a ukázkový YAML převést pomocí [uv](https://docs.astral.sh/uv/):
+Projekt vyžaduje Python 3.11 nebo novější. Pythonové závislosti lze
+nainstalovat pomocí [uv](https://docs.astral.sh/uv/):
 
 ```shell
 uv sync
+```
+
+Příkaz `latex` převede ukázkový YAML na samostatnou textovou sazební šablonu:
+
+```shell
+uv run krizovkar latex examples/grid-random-letters.yaml \
+  --page-format A4 \
+  --output build/random-letters.tex
+```
+
+Výsledný soubor používá TikZ, zachovává vektorovou mřížku a lze jej před
+překladem ručně upravit. K samostatnému překladu je potřeba LuaLaTeX, například
+z distribuce TeX Live, a balíčky `fontspec`, `babel`, `tikz`, `adjustbox` a
+`geometry`:
+
+```shell
+lualatex -interaction=nonstopmode -halt-on-error -no-shell-escape \
+  -output-directory=build build/random-letters.tex
+```
+
+Stejné dva kroky provede najednou příkaz `render`. LaTeXovou šablonu vytvoří
+v dočasném adresáři a PDF sestaví výhradně jejím překladem pomocí příkazu
+`lualatex`:
+
+```shell
 uv run krizovkar render examples/grid-random-letters.yaml \
   --page-format A4 \
   --output build/random-letters.pdf
 ```
 
-Vstupem `render` může být cílová mřížka `kind: grid` i šablona
-`kind: template`; šablona se automaticky převede na nevyplněnou mřížku bez
-slovníku. Volba `--page-format` přijímá `A0` až `A6`, `Letter` a `Legal`,
-nerozlišuje velikost písmen a její výchozí hodnota je `A4`. Výsledkem je
-vektorové PDF na zvoleném formátu s mřížkou a případnými písmeny podle datového
-modelu.
+Vstupem `latex` i `render` může být cílová mřížka `kind: grid` i šablona
+`kind: template`; datová šablona se automaticky převede na nevyplněnou mřížku
+bez slovníku. Volba `--page-format` přijímá `A0` až `A6`, `Letter` a `Legal`,
+nerozlišuje velikost písmen a její výchozí hodnota je `A4`. Obsah se podle
+potřeby zmenší tak, aby zůstal na jedné stránce zvoleného formátu.
 
-U vyplněné cílové mřížky PDF standardně zobrazí písmena. Pro jejich skrytí
-přidej `--blank`; šablona a nevyplněná mřížka zůstanou prázdné i bez této
-volby:
+U vyplněné cílové mřížky LaTeX i PDF standardně zobrazí písmena. Pro jejich
+skrytí přidej k příkazu `latex` nebo `render` volbu `--blank`; datová šablona a
+nevyplněná mřížka zůstanou prázdné i bez této volby:
 
 ```shell
 uv run krizovkar render examples/grid-secret-arrows.yaml \
@@ -441,7 +483,13 @@ uv run krizovkar render examples/grid-secret-arrows.yaml \
 
 Prázdná varianta skryje hodnoty běžných i tajenkových písmenných buněk. Zadání tajenek nad či pod mřížkou, legendy uvnitř i pod mřížkou, čísla, pomůcky, nevyplňovaná pole, šedé zvýraznění tajenky a její zobáčky zůstanou zobrazené stejně jako ve vyplněné variantě.
 
-Bez volby `--output` se binární PDF zapíše na standardní výstup. Pro uložení pomocí přesměrování lze použít například `uv run krizovkar render mřížka.yaml > mřížka.pdf`. Při výslovném `--output` příkaz existující soubor nepřepíše, dokud není přidána volba `--force`.
+Bez volby `--output` zapíše `latex` textový zdroj a `render` binární PDF na
+standardní výstup. Pro uložení pomocí přesměrování lze použít například
+`uv run krizovkar latex mřížka.yaml > mřížka.tex` nebo
+`uv run krizovkar render mřížka.yaml > mřížka.pdf`. Při výslovném
+`--output` příkazy existující soubor nepřepíší, dokud není přidána volba
+`--force`. Chybějící LuaLaTeX nebo chyba jeho překladu ukončí `render` s
+konkrétní chybovou zprávou; samotný export příkazem `latex` jej nevyžaduje.
 
 Nápovědu vypíše:
 
@@ -451,7 +499,7 @@ uv run krizovkar --help
 
 Uživatelské rozhraní je české, včetně nápovědy, stavových a chybových hlášek.
 Anglicky zůstávají názvy příkazů, voleb, povolených hodnot a klíčů datového
-formátu, například `render`, `--output`, `numbered` nebo `grid`.
+formátu, například `latex`, `render`, `--output`, `numbered` nebo `grid`.
 
 Testy se spouštějí příkazem:
 
