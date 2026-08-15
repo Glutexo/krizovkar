@@ -15,14 +15,19 @@ from krizovkar.gui import (
     GuiInputError,
     SpecificationSettings,
     _configure_tk_runtime,
+    create_blank_template,
     create_specification,
     create_template,
     main,
     parse_specification_settings,
+    parse_template_settings,
     parse_word_placement,
+    prepare_crossword,
 )
 from krizovkar.model import (
     Coordinate,
+    LegendCell,
+    LetterCell,
     WordPlacement,
     load_crossword_specification,
     write_crossword_specification,
@@ -59,6 +64,10 @@ class GuiTest(unittest.TestCase):
     def test_rejects_non_positive_dimension(self) -> None:
         with self.assertRaisesRegex(GuiInputError, "Počet řádků musí být kladný"):
             parse_specification_settings("15", "0")
+
+    def test_limits_automatically_generated_template_size(self) -> None:
+        with self.assertRaisesRegex(GuiInputError, "nejvýše 50"):
+            parse_template_settings("51", "10")
 
     def test_parses_and_normalizes_word(self) -> None:
         self.assertEqual(
@@ -191,6 +200,50 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual("LABE", template.slots[0].answer)
         self.assertIsNotNone(template.slots[0].legend_position)
+
+    def test_prepares_printable_crossword_from_placed_words(self) -> None:
+        word = parse_word_placement(
+            "LABE",
+            "Česká řeka",
+            "2",
+            "2",
+            "horizontal",
+            False,
+        )
+        specification = create_specification(
+            SpecificationSettings(width=7, height=6),
+            (word,),
+        )
+
+        prepared = prepare_crossword(specification, "swedish")
+
+        self.assertEqual("template", prepared.template.kind)
+        self.assertEqual("grid", prepared.grid.kind)
+        assert prepared.grid.grid.cells is not None
+        self.assertIsInstance(prepared.grid.grid.cells[1][0], LegendCell)
+        first_letter = prepared.grid.grid.cells[1][1]
+        self.assertIsInstance(first_letter, LetterCell)
+        assert isinstance(first_letter, LetterCell)
+        self.assertEqual("L", first_letter.value)
+
+    def test_creates_blank_numbered_template_without_words(self) -> None:
+        template = create_blank_template(
+            SpecificationSettings(width=7, height=6),
+            "numbered",
+        )
+
+        self.assertEqual("template", template.kind)
+        self.assertEqual(7, template.grid.width)
+        self.assertEqual(6, template.grid.height)
+        self.assertTrue(template.slots)
+        self.assertTrue(all(slot.legend_position is None for slot in template.slots))
+
+    def test_reports_too_small_blank_template_as_gui_error(self) -> None:
+        with self.assertRaisesRegex(GuiInputError, "nelze rozdělit"):
+            create_blank_template(
+                SpecificationSettings(width=2, height=2),
+                "swedish",
+            )
 
     def test_reports_template_layout_error_as_gui_input_error(self) -> None:
         word = parse_word_placement(
