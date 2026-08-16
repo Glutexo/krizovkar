@@ -1047,6 +1047,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._configure_window()
         self._configure_styles()
         self._build_menu()
+        self._build_toolbar()
         self._build_content()
         if self._document_kind == "template":
             self._watch_inputs()
@@ -1064,7 +1065,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.root.rowconfigure(0, weight=1)
         self.grid(row=0, column=0, sticky="nsew")
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
+        self.rowconfigure(1, weight=1)
         self.root.protocol("WM_DELETE_WINDOW", self.request_close)
 
     def _configure_styles(self) -> None:
@@ -1148,6 +1149,16 @@ class CrosswordDocumentWindow(ttk.Frame):
             state="disabled",
         )
 
+    def _build_toolbar(self) -> None:
+        self.toolbar = ttk.Frame(self, padding=(14, 0, 14, 10))
+        self.toolbar.grid(row=0, column=0, sticky="ew")
+        self.export_button = ttk.Menubutton(
+            self.toolbar,
+            text="Exportovat",
+            menu=self.export_menu,
+        )
+        self.export_button.pack(side="left")
+
     def _refresh_recent_documents_menu(self) -> None:
         self.recent_documents_menu.delete(0, "end")
         paths = self.application.recent_document_paths
@@ -1175,7 +1186,7 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _build_content(self) -> None:
         document_frame = ttk.Frame(self, padding=14)
-        document_frame.grid(row=0, column=0, sticky="nsew")
+        document_frame.grid(row=1, column=0, sticky="nsew")
         if self._document_kind == "template":
             self.template_tab = document_frame
             self._build_template_document()
@@ -1568,6 +1579,7 @@ class CrosswordDocumentWindow(ttk.Frame):
                 0,
                 state=template_state,
             )
+            self.export_button.configure(state=template_state)
             return
 
         template = self._template
@@ -1589,6 +1601,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             1,
             state=result_state,
         )
+        self.export_button.configure(state=result_state)
 
     def _refresh_template_view(self) -> None:
         if self._base_template is None:

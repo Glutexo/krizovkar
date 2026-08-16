@@ -839,6 +839,31 @@ class GuiTest(unittest.TestCase):
             crossword_window.export_menu.add_command.call_args_list,
         )
 
+    def test_toolbar_offers_export_menu(self) -> None:
+        window = Mock()
+        toolbar = Mock()
+        export_button = Mock()
+
+        with (
+            patch("krizovkar.gui.ttk.Frame", return_value=toolbar) as frame_type,
+            patch(
+                "krizovkar.gui.ttk.Menubutton",
+                return_value=export_button,
+            ) as menubutton_type,
+        ):
+            CrosswordDocumentWindow._build_toolbar(window)
+
+        frame_type.assert_called_once_with(window, padding=(14, 0, 14, 10))
+        toolbar.grid.assert_called_once_with(row=0, column=0, sticky="ew")
+        menubutton_type.assert_called_once_with(
+            toolbar,
+            text="Exportovat",
+            menu=window.export_menu,
+        )
+        export_button.pack.assert_called_once_with(side="left")
+        self.assertIs(toolbar, window.toolbar)
+        self.assertIs(export_button, window.export_button)
+
     def test_file_menu_follows_template_document(self) -> None:
         application = Mock()
         application._document_kind = "template"
@@ -859,6 +884,9 @@ class GuiTest(unittest.TestCase):
                 call(0, state="normal"),
             ],
             application.export_menu.entryconfigure.call_args_list,
+        )
+        application.export_button.configure.assert_called_once_with(
+            state="normal"
         )
 
     def test_file_menu_enables_complete_crossword_outputs(self) -> None:
@@ -884,6 +912,9 @@ class GuiTest(unittest.TestCase):
             ],
             application.export_menu.entryconfigure.call_args_list,
         )
+        application.export_button.configure.assert_called_once_with(
+            state="normal"
+        )
 
     def test_file_menu_disables_incomplete_crossword_outputs(self) -> None:
         application = Mock()
@@ -899,6 +930,9 @@ class GuiTest(unittest.TestCase):
         self.assertEqual(
             [call(0, state="disabled"), call(1, state="disabled")],
             application.export_menu.entryconfigure.call_args_list,
+        )
+        application.export_button.configure.assert_called_once_with(
+            state="disabled"
         )
 
     def test_page_format_is_chosen_in_export_dialog_and_remembered(self) -> None:
