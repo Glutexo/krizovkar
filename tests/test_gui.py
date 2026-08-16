@@ -167,6 +167,7 @@ class GuiTest(unittest.TestCase):
 
     def test_menu_uses_macos_tk_command_accelerators(self) -> None:
         window = Mock()
+        window._document_kind = "crossword"
         menu = Mock()
         file_menu = Mock()
         recent_documents_menu = Mock()
@@ -212,6 +213,25 @@ class GuiTest(unittest.TestCase):
         file_menu.add_cascade.assert_any_call(
             label="Otevřít poslední",
             menu=recent_documents_menu,
+        )
+
+    def test_template_menu_offers_create_crossword_action(self) -> None:
+        window = Mock()
+        window._document_kind = "template"
+        menu = Mock()
+        file_menu = Mock()
+        recent_documents_menu = Mock()
+        export_menu = Mock()
+
+        with patch(
+            "krizovkar.gui.tk.Menu",
+            side_effect=(menu, file_menu, recent_documents_menu, export_menu),
+        ):
+            CrosswordDocumentWindow._build_menu(window)
+
+        file_menu.add_command.assert_any_call(
+            label="Vytvořit křížovku podle této šablony",
+            command=window.create_crossword_from_template,
         )
 
     def test_application_menu_is_available_without_document(self) -> None:
@@ -845,9 +865,12 @@ class GuiTest(unittest.TestCase):
             crossword_window.export_menu.add_command.call_args_list,
         )
 
-    def test_toolbar_offers_export_menu(self) -> None:
-        window = Mock()
+    def test_toolbar_offers_template_actions_off_macos(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window._document_kind = "template"
+        window.export_menu = Mock()
         toolbar = Mock()
+        create_button = Mock()
         export_button = Mock()
 
         with (
@@ -860,24 +883,40 @@ class GuiTest(unittest.TestCase):
                 "krizovkar.gui.ttk.Menubutton",
                 return_value=export_button,
             ) as menubutton_type,
+            patch(
+                "krizovkar.gui.ttk.Button",
+                return_value=create_button,
+            ) as button_type,
         ):
             CrosswordDocumentWindow._build_toolbar(window)
 
         frame_type.assert_called_once_with(window, padding=(14, 0, 14, 10))
         toolbar.grid.assert_called_once_with(row=0, column=0, sticky="ew")
+        button_type.assert_called_once_with(
+            toolbar,
+            text="Vytvořit křížovku",
+            command=window.create_crossword_from_template,
+        )
         menubutton_type.assert_called_once_with(
             toolbar,
             text="Exportovat",
             menu=window.export_menu,
         )
-        export_button.pack.assert_called_once_with(side="left")
+        create_button.pack.assert_called_once_with(side="left", padx=(0, 6))
+        export_button.pack.assert_called_once_with(side="left", padx=(0, 6))
         self.assertIs(toolbar, window.toolbar)
-        self.assertIs(export_button, window.export_button)
+        self.assertEqual(
+            {
+                "create-crossword": create_button,
+                "export": export_button,
+            },
+            window._toolbar_controls,
+        )
 
     def test_macos_toolbar_is_attached_to_window_chrome(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         window.root = Mock()
-        window._document_kind = "crossword"
+        window._document_kind = "template"
         native_toolbar = Mock()
 
         with (
@@ -890,17 +929,25 @@ class GuiTest(unittest.TestCase):
         ):
             window._build_toolbar()
 
-        root, actions = create_toolbar.call_args.args
+        root, items = create_toolbar.call_args.args
         self.assertIs(window.root, root)
         self.assertEqual(
-            ["blank-crossword", "solution"],
-            [action.identifier for action in actions],
+            ["create-crossword", "export"],
+            [item.identifier for item in items],
         )
         self.assertEqual(
-            ["Křížovku bez písmen (PDF)…", "Řešení s písmeny (PDF)…"],
-            [action.label for action in actions],
+            ["Vytvořit křížovku", "Exportovat"],
+            [item.label for item in items],
         )
-        self.assertIs(native_toolbar, window.export_button)
+        self.assertEqual(
+            window.create_crossword_from_template,
+            items[0].command,
+        )
+        self.assertEqual(
+            ["Šablonu k tisku (PDF)…"],
+            [action.label for action in items[1].menu_actions],
+        )
+        self.assertIs(native_toolbar, window.toolbar)
         frame_type.assert_not_called()
 
     def test_file_menu_follows_template_document(self) -> None:
@@ -908,6 +955,7 @@ class GuiTest(unittest.TestCase):
         application._document_kind = "template"
         application._save_menu_index = 4
         application._save_as_menu_index = 5
+        application._create_crossword_menu_index = 7
 
         CrosswordDocumentWindow._refresh_file_menu(application)
 
@@ -915,6 +963,7 @@ class GuiTest(unittest.TestCase):
             [
                 call(4, label="Uložit šablonu"),
                 call(5, label="Uložit šablonu jako…"),
+                call(7, state="normal"),
             ],
             application.file_menu.entryconfigure.call_args_list,
         )
@@ -924,8 +973,12 @@ class GuiTest(unittest.TestCase):
             ],
             application.export_menu.entryconfigure.call_args_list,
         )
-        application.export_button.configure.assert_called_once_with(
-            state="normal"
+        self.assertEqual(
+            [
+                call("create-crossword", "normal"),
+                call("export", "normal"),
+            ],
+            application._configure_toolbar_action.call_args_list,
         )
 
     def test_file_menu_enables_complete_crossword_outputs(self) -> None:
@@ -951,8 +1004,35 @@ class GuiTest(unittest.TestCase):
             ],
             application.export_menu.entryconfigure.call_args_list,
         )
-        application.export_button.configure.assert_called_once_with(
-            state="normal"
+        application._configure_toolbar_action.assert_called_once_with(
+            "export",
+            "normal",
+        )
+
+    def test_template_actions_are_disabled_without_template(self) -> None:
+        application = Mock()
+        application._document_kind = "template"
+        application._save_menu_index = 4
+        application._save_as_menu_index = 5
+        application._create_crossword_menu_index = 7
+        application._base_template = None
+
+        CrosswordDocumentWindow._refresh_file_menu(application)
+
+        application.file_menu.entryconfigure.assert_any_call(
+            7,
+            state="disabled",
+        )
+        application.export_menu.entryconfigure.assert_called_once_with(
+            0,
+            state="disabled",
+        )
+        self.assertEqual(
+            [
+                call("create-crossword", "disabled"),
+                call("export", "disabled"),
+            ],
+            application._configure_toolbar_action.call_args_list,
         )
 
     def test_file_menu_disables_incomplete_crossword_outputs(self) -> None:
@@ -970,8 +1050,9 @@ class GuiTest(unittest.TestCase):
             [call(0, state="disabled"), call(1, state="disabled")],
             application.export_menu.entryconfigure.call_args_list,
         )
-        application.export_button.configure.assert_called_once_with(
-            state="disabled"
+        application._configure_toolbar_action.assert_called_once_with(
+            "export",
+            "disabled",
         )
 
     def test_page_format_is_chosen_in_export_dialog_and_remembered(self) -> None:

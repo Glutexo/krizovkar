@@ -89,19 +89,31 @@ class _ExportAction:
     command: Callable[[], None]
 
 
-class _ToolbarControl(Protocol):
-    """Společné minimum nativního a Tk panelu nástrojů."""
+@dataclass(frozen=True, slots=True)
+class _ToolbarItem:
+    """Přímá nebo rozbalovací položka panelu nástrojů."""
 
-    def configure(self, *, state: str) -> object: ...
+    identifier: str
+    label: str
+    tooltip: str
+    image_name: str
+    command: Callable[[], None] | None = None
+    menu_actions: tuple[_ExportAction, ...] = ()
+
+
+class _WindowToolbar(Protocol):
+    """Společné rozhraní nativního a Tk panelu nástrojů."""
+
+    def configure_action(self, identifier: str, *, state: str) -> None: ...
 
 
 def _create_macos_toolbar(
     window: tk.Toplevel,
-    actions: Sequence[_ExportAction],
-) -> _ToolbarControl:
+    items: Sequence[_ToolbarItem],
+) -> _WindowToolbar:
     from krizovkar.macos_toolbar import MacWindowToolbar
 
-    return MacWindowToolbar(window, actions)
+    return MacWindowToolbar(window, items)
 
 
 def _keyboard_shortcut(key: str, *, shift: bool = False) -> _KeyboardShortcut:
@@ -1138,6 +1150,16 @@ class CrosswordDocumentWindow(ttk.Frame):
             command=self.save_document_as,
         )
         self._save_as_menu_index = cast(int, self.file_menu.index("end"))
+        if self._document_kind == "template":
+            self.file_menu.add_separator()
+            self.file_menu.add_command(
+                label="Vytvořit křížovku podle této šablony",
+                command=self.create_crossword_from_template,
+            )
+            self._create_crossword_menu_index = cast(
+                int,
+                self.file_menu.index("end"),
+            )
         self.file_menu.add_separator()
         self.export_menu = tk.Menu(self.file_menu)
         self._add_export_actions()
@@ -1188,21 +1210,62 @@ class CrosswordDocumentWindow(ttk.Frame):
             ),
         )
 
+    def _toolbar_items(self) -> tuple[_ToolbarItem, ...]:
+        items: list[_ToolbarItem] = []
+        if self._document_kind == "template":
+            items.append(
+                _ToolbarItem(
+                    identifier="create-crossword",
+                    label="Vytvořit křížovku",
+                    tooltip="Vytvořit křížovku podle této šablony",
+                    image_name="doc.badge.plus",
+                    command=self.create_crossword_from_template,
+                )
+            )
+        items.append(
+            _ToolbarItem(
+                identifier="export",
+                label="Exportovat",
+                tooltip="Exportovat dokument do PDF",
+                image_name="square.and.arrow.up",
+                menu_actions=self._export_actions(),
+            )
+        )
+        return tuple(items)
+
     def _build_toolbar(self) -> None:
+        items = self._toolbar_items()
         if sys.platform == "darwin":
-            self.export_button = _create_macos_toolbar(
+            self.toolbar = _create_macos_toolbar(
                 self.root,
-                self._export_actions(),
+                items,
             )
             return
         self.toolbar = ttk.Frame(self, padding=(14, 0, 14, 10))
         self.toolbar.grid(row=0, column=0, sticky="ew")
-        self.export_button = ttk.Menubutton(
-            self.toolbar,
-            text="Exportovat",
-            menu=self.export_menu,
-        )
-        self.export_button.pack(side="left")
+        self._toolbar_controls: dict[str, ttk.Widget] = {}
+        for item in items:
+            if item.menu_actions:
+                control = ttk.Menubutton(
+                    self.toolbar,
+                    text=item.label,
+                    menu=self.export_menu,
+                )
+            else:
+                assert item.command is not None
+                control = ttk.Button(
+                    self.toolbar,
+                    text=item.label,
+                    command=item.command,
+                )
+            control.pack(side="left", padx=(0, 6))
+            self._toolbar_controls[item.identifier] = control
+
+    def _configure_toolbar_action(self, identifier: str, state: str) -> None:
+        if sys.platform == "darwin":
+            self.toolbar.configure_action(identifier, state=state)
+            return
+        self._toolbar_controls[identifier].configure(state=state)
 
     def _refresh_recent_documents_menu(self) -> None:
         self.recent_documents_menu.delete(0, "end")
@@ -1310,19 +1373,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             column=0,
             sticky="ew",
             pady=(10, 0),
-        )
-
-        self.create_crossword_button = ttk.Button(
-            sidebar,
-            text="Vytvořit křížovku podle této šablony",
-            command=self.create_crossword_from_template,
-            state="disabled",
-        )
-        self.create_crossword_button.grid(
-            row=1,
-            column=0,
-            sticky="ew",
-            pady=(12, 0),
         )
 
         preview_frame = ttk.LabelFrame(tab, text="Náhled šablony", padding=12)
@@ -1628,7 +1678,15 @@ class CrosswordDocumentWindow(ttk.Frame):
                 0,
                 state=template_state,
             )
-            self.export_button.configure(state=template_state)
+            self.file_menu.entryconfigure(
+                self._create_crossword_menu_index,
+                state=template_state,
+            )
+            self._configure_toolbar_action(
+                "create-crossword",
+                template_state,
+            )
+            self._configure_toolbar_action("export", template_state)
             return
 
         template = self._template
@@ -1650,19 +1708,17 @@ class CrosswordDocumentWindow(ttk.Frame):
             1,
             state=result_state,
         )
-        self.export_button.configure(state=result_state)
+        self._configure_toolbar_action("export", result_state)
 
     def _refresh_template_view(self) -> None:
         if self._base_template is None:
             self.template_preview.clear_preview("Šablona zatím není vytvořená.")
-            self.create_crossword_button.configure(state="disabled")
             self._refresh_file_menu()
             return
         self.template_preview.show_crossword(
             create_grid_from_template(self._base_template),
             show_letters=False,
         )
-        self.create_crossword_button.configure(state="normal")
         self._refresh_file_menu()
 
     def _slot_label(self, selected: WordSlot) -> str:

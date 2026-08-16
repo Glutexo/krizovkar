@@ -10,18 +10,23 @@ import objc
 from AppKit import (
     NSApp,
     NSImage,
+    NSImageNameAddTemplate,
     NSImageNameShareTemplate,
     NSMenu,
     NSMenuItem,
     NSMenuToolbarItem,
     NSToolbar,
     NSToolbarDisplayModeIconAndLabel,
+    NSToolbarItem,
     NSToolbarSizeModeRegular,
     NSWindowToolbarStyleUnified,
 )
 from Foundation import NSObject
 
-_EXPORT_ITEM_IDENTIFIER = "cz.glutexo.krizovkar.toolbar.export"
+_FALLBACK_IMAGES = {
+    "doc.badge.plus": NSImageNameAddTemplate,
+    "square.and.arrow.up": NSImageNameShareTemplate,
+}
 
 
 class ToolbarAction(Protocol):
@@ -32,81 +37,126 @@ class ToolbarAction(Protocol):
     command: Callable[[], None]
 
 
-class _ToolbarDelegate(NSObject):
-    """Dodá AppKitu položku exportu a předá její akce do Pythonu."""
+class ToolbarItem(Protocol):
+    """Data jedné přímé nebo rozbalovací položky panelu."""
 
-    def initWithActions_(
+    identifier: str
+    label: str
+    tooltip: str
+    image_name: str
+    command: Callable[[], None] | None
+    menu_actions: Sequence[ToolbarAction]
+
+
+class _ToolbarDelegate(NSObject):
+    """Dodá AppKitu položky panelu a předá jejich akce do Pythonu."""
+
+    def initWithItems_(
         self,
-        actions: Sequence[ToolbarAction],
+        items: Sequence[ToolbarItem],
     ) -> _ToolbarDelegate | None:
         self = objc.super(_ToolbarDelegate, self).init()
         if self is None:
             return None
-        self._actions = {action.identifier: action for action in actions}
-        self._enabled = True
-        self._toolbar_item = None
-        self._menu_items: list[NSMenuItem] = []
+        self._items = {item.identifier: item for item in items}
+        self._commands = {
+            action.identifier: action.command
+            for item in items
+            for action in item.menu_actions
+        }
+        self._commands.update(
+            {
+                item.identifier: item.command
+                for item in items
+                if item.command is not None
+            }
+        )
+        self._enabled = {item.identifier: True for item in items}
+        self._toolbar_items: dict[str, NSToolbarItem] = {}
+        self._menu_items: dict[str, list[NSMenuItem]] = {}
         return self
 
     def toolbarDefaultItemIdentifiers_(self, _toolbar: NSToolbar) -> list[str]:
-        return [_EXPORT_ITEM_IDENTIFIER]
+        return list(self._items)
 
     def toolbarAllowedItemIdentifiers_(self, _toolbar: NSToolbar) -> list[str]:
-        return [_EXPORT_ITEM_IDENTIFIER]
+        return list(self._items)
 
     def toolbar_itemForItemIdentifier_willBeInsertedIntoToolbar_(
         self,
         _toolbar: NSToolbar,
         item_identifier: str,
         _will_be_inserted: bool,
-    ) -> NSMenuToolbarItem | None:
-        if item_identifier != _EXPORT_ITEM_IDENTIFIER:
+    ) -> NSToolbarItem | None:
+        item = self._items.get(item_identifier)
+        if item is None:
             return None
 
-        menu = NSMenu.alloc().initWithTitle_("Exportovat")
+        if item.menu_actions:
+            toolbar_item = self._menu_toolbar_item(item)
+        else:
+            toolbar_item = NSToolbarItem.alloc().initWithItemIdentifier_(
+                item.identifier
+            )
+            toolbar_item.setTarget_(self)
+            toolbar_item.setAction_("performAction:")
+
+        toolbar_item.setLabel_(item.label)
+        toolbar_item.setPaletteLabel_(item.label)
+        toolbar_item.setToolTip_(item.tooltip)
+        image = NSImage.imageWithSystemSymbolName_accessibilityDescription_(
+            item.image_name,
+            item.label,
+        )
+        if image is None:
+            fallback_name = _FALLBACK_IMAGES.get(
+                item.image_name,
+                NSImageNameShareTemplate,
+            )
+            image = NSImage.imageNamed_(fallback_name)
+        toolbar_item.setImage_(image)
+        toolbar_item.setEnabled_(self._enabled[item.identifier])
+        self._toolbar_items[item.identifier] = toolbar_item
+        return toolbar_item
+
+    def _menu_toolbar_item(self, item: ToolbarItem) -> NSMenuToolbarItem:
+        menu = NSMenu.alloc().initWithTitle_(item.label)
         menu.setAutoenablesItems_(False)
-        self._menu_items = []
-        for action in self._actions.values():
+        menu_items: list[NSMenuItem] = []
+        for action in item.menu_actions:
             menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
                 action.label,
-                "performExport:",
+                "performAction:",
                 "",
             )
             menu_item.setTarget_(self)
             menu_item.setRepresentedObject_(action.identifier)
-            menu_item.setEnabled_(self._enabled)
+            menu_item.setEnabled_(self._enabled[item.identifier])
             menu.addItem_(menu_item)
-            self._menu_items.append(menu_item)
+            menu_items.append(menu_item)
 
         toolbar_item = NSMenuToolbarItem.alloc().initWithItemIdentifier_(
-            item_identifier
+            item.identifier
         )
-        toolbar_item.setLabel_("Exportovat")
-        toolbar_item.setPaletteLabel_("Exportovat")
-        toolbar_item.setToolTip_("Exportovat dokument do PDF")
-        image = NSImage.imageWithSystemSymbolName_accessibilityDescription_(
-            "square.and.arrow.up",
-            "Exportovat",
-        )
-        if image is None:
-            image = NSImage.imageNamed_(NSImageNameShareTemplate)
-        toolbar_item.setImage_(image)
         toolbar_item.setMenu_(menu)
-        toolbar_item.setEnabled_(self._enabled)
-        self._toolbar_item = toolbar_item
+        self._menu_items[item.identifier] = menu_items
         return toolbar_item
 
-    def performExport_(self, sender: NSMenuItem) -> None:
-        identifier = str(sender.representedObject())
-        action = self._actions.get(identifier)
-        if action is not None:
-            action.command()
+    def performAction_(self, sender: NSMenuItem | NSToolbarItem) -> None:
+        if isinstance(sender, NSToolbarItem):
+            identifier = str(sender.itemIdentifier())
+        else:
+            identifier = str(sender.representedObject())
+        command = self._commands.get(identifier)
+        if command is not None:
+            command()
 
-    def set_enabled(self, enabled: bool) -> None:
-        self._enabled = enabled
-        if self._toolbar_item is not None:
-            self._toolbar_item.setEnabled_(enabled)
-        for menu_item in self._menu_items:
+    def set_enabled(self, identifier: str, enabled: bool) -> None:
+        self._enabled[identifier] = enabled
+        toolbar_item = self._toolbar_items.get(identifier)
+        if toolbar_item is not None:
+            toolbar_item.setEnabled_(enabled)
+        for menu_item in self._menu_items.get(identifier, ()):
             menu_item.setEnabled_(enabled)
 
 
@@ -116,7 +166,7 @@ class MacWindowToolbar:
     def __init__(
         self,
         window: tk.Toplevel,
-        actions: Sequence[ToolbarAction],
+        items: Sequence[ToolbarItem],
     ) -> None:
         original_state = window.state()
         original_title = window.title()
@@ -138,7 +188,7 @@ class MacWindowToolbar:
                     "Nativní okno pro panel nástrojů nebylo nalezeno."
                 )
 
-            delegate = _ToolbarDelegate.alloc().initWithActions_(actions)
+            delegate = _ToolbarDelegate.alloc().initWithItems_(items)
             if delegate is None:
                 raise RuntimeError("Panelu nástrojů nelze vytvořit obsluhu.")
             toolbar = NSToolbar.alloc().initWithIdentifier_(
@@ -163,7 +213,7 @@ class MacWindowToolbar:
                 if original_state != "normal":
                     window.state(original_state)
 
-    def configure(self, *, state: str) -> None:
-        """Sjednotí aktivní stav s exportní nabídkou dokumentu."""
+    def configure_action(self, identifier: str, *, state: str) -> None:
+        """Sjednotí aktivní stav položky s dokumentem."""
 
-        self._delegate.set_enabled(state != "disabled")
+        self._delegate.set_enabled(identifier, state != "disabled")

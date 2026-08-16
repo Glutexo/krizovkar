@@ -10,45 +10,79 @@ from unittest.mock import Mock
 
 @unittest.skipUnless(sys.platform == "darwin", "vyžaduje AppKit")
 class MacToolbarTest(unittest.TestCase):
-    def test_export_menu_invokes_actions_and_follows_enabled_state(self) -> None:
+    def test_toolbar_invokes_direct_and_menu_actions(self) -> None:
         from AppKit import NSApplication
 
-        from krizovkar.macos_toolbar import (
-            _EXPORT_ITEM_IDENTIFIER,
-            _ToolbarDelegate,
-        )
+        from krizovkar.macos_toolbar import _ToolbarDelegate
 
         NSApplication.sharedApplication()
-        command = Mock()
-        action = SimpleNamespace(
+        create_command = Mock()
+        export_command = Mock()
+        export_action = SimpleNamespace(
             identifier="blank-template",
             label="Šablonu k tisku (PDF)…",
-            command=command,
+            command=export_command,
         )
-        delegate = _ToolbarDelegate.alloc().initWithActions_((action,))
+        create_item = SimpleNamespace(
+            identifier="create-crossword",
+            label="Vytvořit křížovku",
+            tooltip="Vytvořit křížovku podle této šablony",
+            image_name="doc.badge.plus",
+            command=create_command,
+            menu_actions=(),
+        )
+        export_item = SimpleNamespace(
+            identifier="export",
+            label="Exportovat",
+            tooltip="Exportovat dokument do PDF",
+            image_name="square.and.arrow.up",
+            command=None,
+            menu_actions=(export_action,),
+        )
+        delegate = _ToolbarDelegate.alloc().initWithItems_(
+            (create_item, export_item)
+        )
         assert delegate is not None
 
-        toolbar_item = (
+        create_toolbar_item = (
             delegate.toolbar_itemForItemIdentifier_willBeInsertedIntoToolbar_(
                 None,
-                _EXPORT_ITEM_IDENTIFIER,
+                create_item.identifier,
                 True,
             )
         )
-        assert toolbar_item is not None
-        menu_item = toolbar_item.menu().itemAtIndex_(0)
-
-        self.assertEqual("Exportovat", toolbar_item.label())
-        self.assertEqual(action.label, menu_item.title())
-        sent = NSApplication.sharedApplication().sendAction_to_from_(
-            "performExport:",
-            delegate,
-            menu_item,
+        export_toolbar_item = (
+            delegate.toolbar_itemForItemIdentifier_willBeInsertedIntoToolbar_(
+                None,
+                export_item.identifier,
+                True,
+            )
         )
-        self.assertTrue(sent)
-        command.assert_called_once_with()
+        assert create_toolbar_item is not None
+        assert export_toolbar_item is not None
+        menu_item = export_toolbar_item.menu().itemAtIndex_(0)
 
-        delegate.set_enabled(False)
+        application = NSApplication.sharedApplication()
+        self.assertTrue(
+            application.sendAction_to_from_(
+                "performAction:",
+                delegate,
+                create_toolbar_item,
+            )
+        )
+        self.assertTrue(
+            application.sendAction_to_from_(
+                "performAction:",
+                delegate,
+                menu_item,
+            )
+        )
+        create_command.assert_called_once_with()
+        export_command.assert_called_once_with()
 
-        self.assertFalse(toolbar_item.isEnabled())
+        delegate.set_enabled(create_item.identifier, False)
+        delegate.set_enabled(export_item.identifier, False)
+
+        self.assertFalse(create_toolbar_item.isEnabled())
+        self.assertFalse(export_toolbar_item.isEnabled())
         self.assertFalse(menu_item.isEnabled())

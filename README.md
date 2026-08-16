@@ -42,9 +42,9 @@ přetáhnout stejně jako soubor ve Finderu.
 Podle kořenového klíče `kind` má okno jednu ze dvou podob:
 
 - **Šablona** určuje rozměr, švédskou nebo číslovanou podobu a všechna místa
-  pro vodorovná a svislá hesla. Má vlastní náhled. Tlačítko **Vytvořit
-  křížovku podle této šablony** otevře nové okno s nezávislým dokumentem
-  `kind: crossword`.
+  pro vodorovná a svislá hesla. Má vlastní náhled. Akce **Vytvořit
+  křížovku podle této šablony** v panelu nástrojů a nabídce **Soubor**
+  otevře nové okno s nezávislým dokumentem `kind: crossword`.
 - **Křížovka** drží vlastní kopii zvolené šablony a doplněná hesla. Místo se
   vybírá kliknutím v náhledu nebo v seznamu; formulář ukazuje jeho délku a
   písmena známá z křížení. Dokument lze průběžně ukládat do YAML a po
@@ -64,13 +64,14 @@ deset naposledy otevřených nebo uložených dokumentů. Neexistující soubor
 při pokusu o otevření ze seznamu odstraní; celý seznam smaže volba **Vymazat
 nabídku**.
 
-Panel nástrojů dokumentového okna zatím obsahuje rozbalovací akci
-**Exportovat**. Na macOS je součástí systémového záhlaví okna; na ostatních
-systémech zůstává nad pracovní plochou. Nabízí stejné výstupy jako
-podnabídka **Soubor → Exportovat** podle právě otevřeného dokumentu. Formát
-stránky se volí přímo v dialogu vybraného exportu; poté naváže systémový
-dialog pro výběr umístění PDF. U křížovky se tisková podoba i řešení
-zpřístupní až po vyplnění všech hesel.
+Panel nástrojů dokumentového okna obsahuje rozbalovací akci **Exportovat**
+a u šablony také akci **Vytvořit křížovku**. Na macOS je součástí
+systémového záhlaví okna; na ostatních systémech zůstává nad pracovní
+plochou. Export nabízí stejné výstupy jako podnabídka **Soubor →
+Exportovat** podle právě otevřeného dokumentu. Formát stránky se volí přímo
+v dialogu vybraného exportu; poté naváže systémový dialog pro výběr umístění
+PDF. U křížovky se tisková podoba i řešení zpřístupní až po vyplnění
+všech hesel.
 
 Ve švédské podobě jsou místa pro nápovědy součástí předem vytvořené mřížky.
 Číslovaná podoba ponechá všechna pole pro písmena a nápovědy vysází pod
