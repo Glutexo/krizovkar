@@ -718,8 +718,6 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.slot_pattern_value = tk.StringVar(value="Vzor z křížení: —")
         self.progress_value = tk.StringVar()
         self.page_format_value = tk.StringVar(value=DEFAULT_PAGE_FORMAT)
-        self.template_page_format_value = self.page_format_value
-        self.crossword_page_format_value = self.page_format_value
         self.template_status_value = tk.StringVar(value="Šablona je otevřená.")
         self.crossword_status_value = tk.StringVar(
             value="Křížovka je otevřená."
@@ -780,15 +778,16 @@ class CrosswordDocumentWindow(ttk.Frame):
             command=self.save_document_as,
         )
         self.file_menu.add_separator()
-        self.file_menu.add_command(
-            label="Uložit dokument jako PDF…",
-            command=self.save_current_document_pdf,
+        self.export_menu = tk.Menu(self.file_menu)
+        self._add_export_actions()
+        self.export_menu.add_separator()
+        self.page_format_menu = tk.Menu(self.export_menu)
+        self._add_page_format_choices()
+        self.export_menu.add_cascade(
+            label="Formát stránky",
+            menu=self.page_format_menu,
         )
-        self.file_menu.add_command(
-            label="Uložit řešení křížovky (PDF)…",
-            command=self.save_solution_pdf,
-            state="disabled",
-        )
+        self.file_menu.add_cascade(label="Exportovat", menu=self.export_menu)
         self.file_menu.add_separator()
         self.file_menu.add_command(
             label="Zavřít okno",
@@ -807,6 +806,32 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.root.bind("<Command-Shift-S>", self._save_as_event)
         self.root.bind("<Control-w>", self._close_event)
         self.root.bind("<Command-w>", self._close_event)
+
+    def _add_export_actions(self) -> None:
+        if self._document_kind == "template":
+            self.export_menu.add_command(
+                label="Šablonu k tisku (PDF)…",
+                command=self.save_blank_template_pdf,
+            )
+            return
+        self.export_menu.add_command(
+            label="Křížovku bez písmen (PDF)…",
+            command=self.save_crossword_pdf,
+            state="disabled",
+        )
+        self.export_menu.add_command(
+            label="Řešení s písmeny (PDF)…",
+            command=self.save_solution_pdf,
+            state="disabled",
+        )
+
+    def _add_page_format_choices(self) -> None:
+        for page_format in SUPPORTED_PAGE_FORMATS:
+            self.page_format_menu.add_radiobutton(
+                label=page_format,
+                variable=self.page_format_value,
+                value=page_format,
+            )
 
     def _build_content(self) -> None:
         document_frame = ttk.Frame(self, padding=14)
@@ -888,42 +913,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             pady=(10, 0),
         )
 
-        outputs = ttk.LabelFrame(
-            sidebar,
-            text="Výstupy šablony",
-            padding=14,
-        )
-        outputs.grid(row=1, column=0, sticky="ew", pady=(12, 0))
-        outputs.columnconfigure(0, weight=1)
-        self._build_page_format_field(
-            outputs,
-            self.template_page_format_value,
-        )
-        self.blank_pdf_button = ttk.Button(
-            outputs,
-            text="Uložit šablonu k tisku (PDF)…",
-            command=self.save_blank_template_pdf,
-            state="disabled",
-        )
-        self.blank_pdf_button.grid(
-            row=1,
-            column=0,
-            sticky="ew",
-            pady=(10, 0),
-        )
-        self.blank_data_button = ttk.Button(
-            outputs,
-            text="Uložit šablonu (YAML)…",
-            command=self.save_blank_template_data,
-            state="disabled",
-        )
-        self.blank_data_button.grid(
-            row=2,
-            column=0,
-            sticky="ew",
-            pady=(5, 0),
-        )
-
         self.create_crossword_button = ttk.Button(
             sidebar,
             text="Vytvořit křížovku podle této šablony",
@@ -932,7 +921,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             style="Primary.TButton",
         )
         self.create_crossword_button.grid(
-            row=2,
+            row=1,
             column=0,
             sticky="ew",
             pady=(12, 0),
@@ -992,15 +981,6 @@ class CrosswordDocumentWindow(ttk.Frame):
         editor.pack(fill="x", pady=(12, 0))
         editor.columnconfigure(0, weight=1)
         self._build_crossword_editor(editor)
-
-        outputs = ttk.LabelFrame(
-            controls,
-            text="Výstupy křížovky",
-            padding=14,
-        )
-        outputs.pack(fill="x", pady=(12, 0))
-        outputs.columnconfigure(0, weight=1)
-        self._build_crossword_outputs(outputs)
 
         workspace = ttk.Frame(tab)
         workspace.grid(row=0, column=1, sticky="nsew")
@@ -1090,69 +1070,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             column=1,
             sticky="ew",
             padx=(6, 0),
-        )
-
-    def _build_page_format_field(
-        self,
-        parent: ttk.Frame,
-        value: tk.StringVar,
-        *,
-        row: int = 0,
-    ) -> None:
-        page = ttk.Frame(parent)
-        page.grid(row=row, column=0, sticky="w", pady=(0, 0))
-        ttk.Label(page, text="Formát stránky").grid(row=0, column=0, sticky="w")
-        ttk.Combobox(
-            page,
-            state="readonly",
-            width=9,
-            values=SUPPORTED_PAGE_FORMATS,
-            textvariable=value,
-        ).grid(row=1, column=0, sticky="w", pady=(3, 0))
-
-    def _build_crossword_outputs(self, parent: ttk.Frame) -> None:
-        self._build_page_format_field(
-            parent,
-            self.crossword_page_format_value,
-            row=0,
-        )
-
-        self.crossword_pdf_button = ttk.Button(
-            parent,
-            text="Uložit křížovku bez písmen (PDF)…",
-            command=self.save_crossword_pdf,
-            state="disabled",
-            style="Primary.TButton",
-        )
-        self.crossword_pdf_button.grid(
-            row=1,
-            column=0,
-            sticky="ew",
-            pady=(10, 0),
-        )
-        self.solution_pdf_button = ttk.Button(
-            parent,
-            text="Uložit řešení s písmeny (PDF)…",
-            command=self.save_solution_pdf,
-            state="disabled",
-        )
-        self.solution_pdf_button.grid(
-            row=2,
-            column=0,
-            sticky="ew",
-            pady=(5, 0),
-        )
-        self.current_data_button = ttk.Button(
-            parent,
-            text="Uložit křížovku (YAML)…",
-            command=self.save_current_template_data,
-            state="disabled",
-        )
-        self.current_data_button.grid(
-            row=3,
-            column=0,
-            sticky="ew",
-            pady=(5, 0),
         )
 
     def _build_crossword_preview(self, parent: ttk.Frame) -> None:
@@ -1307,12 +1224,13 @@ class CrosswordDocumentWindow(ttk.Frame):
                 4,
                 label="Uložit šablonu jako…",
             )
-            self.file_menu.entryconfigure(
-                6,
-                label="Uložit šablonu k tisku (PDF)…",
-                state="normal",
+            template_state = (
+                "normal" if self._base_template is not None else "disabled"
             )
-            self.file_menu.entryconfigure(7, state="disabled")
+            self.export_menu.entryconfigure(
+                0,
+                state=template_state,
+            )
             return
 
         template = self._template
@@ -1326,18 +1244,18 @@ class CrosswordDocumentWindow(ttk.Frame):
             label="Uložit křížovku jako…",
         )
         result_state = "normal" if complete else "disabled"
-        self.file_menu.entryconfigure(
-            6,
-            label="Uložit křížovku bez písmen (PDF)…",
+        self.export_menu.entryconfigure(
+            0,
             state=result_state,
         )
-        self.file_menu.entryconfigure(7, state=result_state)
+        self.export_menu.entryconfigure(
+            1,
+            state=result_state,
+        )
 
     def _refresh_template_view(self) -> None:
         if self._base_template is None:
             self.template_preview.clear_preview("Šablona zatím není vytvořená.")
-            self.blank_pdf_button.configure(state="disabled")
-            self.blank_data_button.configure(state="disabled")
             self.create_crossword_button.configure(state="disabled")
             self._refresh_file_menu()
             return
@@ -1345,8 +1263,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             create_grid_from_template(self._base_template),
             show_letters=False,
         )
-        self.blank_pdf_button.configure(state="normal")
-        self.blank_data_button.configure(state="normal")
         self.create_crossword_button.configure(state="normal")
         self._refresh_file_menu()
 
@@ -1527,12 +1443,6 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _refresh_crossword_view(self) -> None:
         self._refresh_crossword_preview()
         template = self._template
-        available_state = "normal" if template is not None else "disabled"
-        self.current_data_button.configure(state=available_state)
-        complete = template is not None and template_is_complete(template)
-        result_state = "normal" if complete else "disabled"
-        self.crossword_pdf_button.configure(state=result_state)
-        self.solution_pdf_button.configure(state=result_state)
         if template is None:
             self.progress_value.set("Křížovka zatím není vytvořená.")
             self._selected_slot_identifier = None
@@ -1637,7 +1547,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             title="Uložit křížovku bez písmen",
             initialfile="krizovka.pdf",
             success_message="Křížovka bez písmen byla uložena",
-            page_format=self.crossword_page_format_value.get(),
+            page_format=self.page_format_value.get(),
             document="crossword",
         )
 
@@ -1651,7 +1561,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             title="Uložit řešení křížovky",
             initialfile="reseni.pdf",
             success_message="Řešení bylo uloženo",
-            page_format=self.crossword_page_format_value.get(),
+            page_format=self.page_format_value.get(),
             document="crossword",
         )
 
@@ -1669,7 +1579,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             title="Uložit šablonu k tisku",
             initialfile="sablona.pdf",
             success_message="Šablona k tisku byla uložena",
-            page_format=self.template_page_format_value.get(),
+            page_format=self.page_format_value.get(),
             document="template",
         )
 
@@ -1792,20 +1702,8 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         return True
 
-    def save_blank_template_data(self) -> bool:
-        return self.save_document()
-
-    def save_current_template_data(self) -> bool:
-        return self.save_document()
-
     def save_current_document_data(self) -> bool:
         return self.save_document()
-
-    def save_current_document_pdf(self) -> None:
-        if self._document_kind == "template":
-            self.save_blank_template_pdf()
-        else:
-            self.save_crossword_pdf()
 
     def _show_action_error(
         self,

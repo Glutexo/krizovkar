@@ -37,9 +37,9 @@ před názvem označuje neuložené změny.
 Podle kořenového klíče `kind` má okno jednu ze dvou podob:
 
 - **Šablona** určuje rozměr, švédskou nebo číslovanou podobu a všechna místa
-  pro vodorovná a svislá hesla. Má vlastní náhled, formát stránky a uložení
-  do YAML nebo tiskového PDF. Tlačítko **Vytvořit křížovku podle této
-  šablony** otevře nové okno s nezávislým dokumentem `kind: crossword`.
+  pro vodorovná a svislá hesla. Má vlastní náhled. Tlačítko **Vytvořit
+  křížovku podle této šablony** otevře nové okno s nezávislým dokumentem
+  `kind: crossword`.
 - **Křížovka** drží vlastní kopii zvolené šablony a doplněná hesla. Místo se
   vybírá kliknutím v náhledu nebo v seznamu; formulář ukazuje jeho délku a
   písmena známá z křížení. Dokument lze průběžně ukládat do YAML a po
@@ -53,6 +53,11 @@ obsahuje neuložené změny, editor se zeptá na jejich uložení. Otevřená
 šablona a křížovka jsou po vytvoření nezávislé; změna jednoho okna proto
 obsah druhého neovlivní.
 
+PDF výstupy nejsou součástí pracovního panelu. Podnabídka **Soubor →
+Exportovat** nabízí výstupy dostupné pro daný dokument a volbu formátu
+stránky. U křížovky zpřístupní tiskovou podobu i řešení až po vyplnění
+všech hesel.
+
 Ve švédské podobě jsou místa pro nápovědy součástí předem vytvořené mřížky.
 Číslovaná podoba ponechá všechna pole pro písmena a nápovědy vysází pod
 mřížkou. Ruční zadávání souřadnic ani směru proto není potřeba. Nesprávnou
@@ -60,7 +65,7 @@ délku, opakované heslo nebo rozporné písmeno aplikace odmítne konkrétní
 zprávou. Editor zatím nezadává tajenky, vlastní pomůcku ani automatické
 vyplnění ze slovníku.
 
-Přímé uložení PDF používá LuaLaTeX a vyžaduje stejnou instalaci TeX Live
+Export do PDF používá LuaLaTeX a vyžaduje stejnou instalaci TeX Live
 jako příkaz `render`.
 
 GUI vyžaduje Python s podporou Tk 8.6 nebo novější. Modul `tkinter` je součástí

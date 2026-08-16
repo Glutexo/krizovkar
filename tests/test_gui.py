@@ -423,7 +423,7 @@ class GuiTest(unittest.TestCase):
         application = Mock()
         grid = Mock()
         application._complete_grid_or_error.return_value = grid
-        application.crossword_page_format_value.get.return_value = "A5"
+        application.page_format_value.get.return_value = "A5"
 
         CrosswordDocumentWindow.save_crossword_pdf(application)
         CrosswordDocumentWindow.save_solution_pdf(application)
@@ -458,7 +458,7 @@ class GuiTest(unittest.TestCase):
             TemplateSettings(3, 3),
             "numbered",
         )
-        application.template_page_format_value.get.return_value = "Letter"
+        application.page_format_value.get.return_value = "Letter"
 
         with patch("krizovkar.gui.create_grid_from_template") as create_grid:
             CrosswordDocumentWindow.save_blank_template_pdf(application)
@@ -474,19 +474,34 @@ class GuiTest(unittest.TestCase):
             document="template",
         )
 
-    def test_current_pdf_action_follows_window_document(self) -> None:
+    def test_export_actions_follow_window_document(self) -> None:
         template_window = Mock()
         template_window._document_kind = "template"
         crossword_window = Mock()
         crossword_window._document_kind = "crossword"
 
-        CrosswordDocumentWindow.save_current_document_pdf(template_window)
-        CrosswordDocumentWindow.save_current_document_pdf(crossword_window)
+        CrosswordDocumentWindow._add_export_actions(template_window)
+        CrosswordDocumentWindow._add_export_actions(crossword_window)
 
-        template_window.save_blank_template_pdf.assert_called_once_with()
-        template_window.save_crossword_pdf.assert_not_called()
-        crossword_window.save_crossword_pdf.assert_called_once_with()
-        crossword_window.save_blank_template_pdf.assert_not_called()
+        template_window.export_menu.add_command.assert_called_once_with(
+            label="Šablonu k tisku (PDF)…",
+            command=template_window.save_blank_template_pdf,
+        )
+        self.assertEqual(
+            [
+                call(
+                    label="Křížovku bez písmen (PDF)…",
+                    command=crossword_window.save_crossword_pdf,
+                    state="disabled",
+                ),
+                call(
+                    label="Řešení s písmeny (PDF)…",
+                    command=crossword_window.save_solution_pdf,
+                    state="disabled",
+                ),
+            ],
+            crossword_window.export_menu.add_command.call_args_list,
+        )
 
     def test_file_menu_follows_template_document(self) -> None:
         application = Mock()
@@ -498,14 +513,14 @@ class GuiTest(unittest.TestCase):
             [
                 call(3, label="Uložit šablonu"),
                 call(4, label="Uložit šablonu jako…"),
-                call(
-                    6,
-                    label="Uložit šablonu k tisku (PDF)…",
-                    state="normal",
-                ),
-                call(7, state="disabled"),
             ],
             application.file_menu.entryconfigure.call_args_list,
+        )
+        self.assertEqual(
+            [
+                call(0, state="normal"),
+            ],
+            application.export_menu.entryconfigure.call_args_list,
         )
 
     def test_file_menu_enables_complete_crossword_outputs(self) -> None:
@@ -519,14 +534,56 @@ class GuiTest(unittest.TestCase):
             [
                 call(3, label="Uložit křížovku"),
                 call(4, label="Uložit křížovku jako…"),
-                call(
-                    6,
-                    label="Uložit křížovku bez písmen (PDF)…",
-                    state="normal",
-                ),
-                call(7, state="normal"),
             ],
             application.file_menu.entryconfigure.call_args_list,
+        )
+        self.assertEqual(
+            [
+                call(0, state="normal"),
+                call(1, state="normal"),
+            ],
+            application.export_menu.entryconfigure.call_args_list,
+        )
+
+    def test_file_menu_disables_incomplete_crossword_outputs(self) -> None:
+        application = Mock()
+        application._document_kind = "crossword"
+        application._template = create_crossword_document(
+            create_blank_template(TemplateSettings(3, 3), "numbered")
+        )
+
+        CrosswordDocumentWindow._refresh_file_menu(application)
+
+        self.assertEqual(
+            [call(0, state="disabled"), call(1, state="disabled")],
+            application.export_menu.entryconfigure.call_args_list,
+        )
+
+    def test_page_formats_are_offered_in_export_menu(self) -> None:
+        window = Mock()
+
+        CrosswordDocumentWindow._add_page_format_choices(window)
+
+        self.assertEqual(
+            [
+                call(
+                    label=page_format,
+                    variable=window.page_format_value,
+                    value=page_format,
+                )
+                for page_format in (
+                    "A0",
+                    "A1",
+                    "A2",
+                    "A3",
+                    "A4",
+                    "A5",
+                    "A6",
+                    "LETTER",
+                    "LEGAL",
+                )
+            ],
+            window.page_format_menu.add_radiobutton.call_args_list,
         )
 
     def test_saves_pdf_through_renderer_without_manual_dialog(self) -> None:
