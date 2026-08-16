@@ -67,15 +67,18 @@ Experimentální generátor ověřuje základní práci se slovníkem a kříže
 
 ## Datový model
 
-Křížovkář rozlišuje tři samostatné druhy YAML dokumentů:
+Křížovkář rozlišuje čtyři samostatné druhy YAML dokumentů:
 
 - `kind: specification` je vstupní zadání se slovy, nápovědami, tajenkami a pravidly skládání,
 - `kind: template` je nevyplněná šablona s rolemi buněk a sloty hesel,
+- `kind: crossword` je editovatelná křížovka s vlastní kopií šablony
+  a postupně doplňovanými hesly,
 - `kind: grid` je mřížka s konkrétními rolemi buněk a volitelně již doplněnými
   písmeny a legendami, kterou lze přímo vykreslit.
 
 ```text
 umístěné specification + volba rozvržení → template
+template → crossword (ruční doplňování) → grid → LaTeX → PDF
 template → grid (pevný nebo nevyplněný obsah) → LaTeX → PDF
 template + slovník → fill → grid → LaTeX → PDF
 požadavky + slovník → generate (= template + fill) → grid
@@ -84,6 +87,12 @@ požadavky + slovník → generate (= template + fill) → grid
 YAML dokument `kind: template` je datová šablona určená k plnění hesly.
 Následná LaTeXová sazební šablona je samostatný textový výstup určený
 k vizuálním úpravám a překladu do PDF.
+
+Dokument `kind: crossword` používá stejné role buněk a sloty, ale
+jednoznačně označuje samostatnou rozpracovanou nebo hotovou křížovku.
+Může proto obsahovat libovolný počet doplněných hesel a po opětovném
+otevření se nezamění se zdrojovou šablonou. Zápis ukazuje
+[minimální křížovka](examples/crossword-minimal.yaml).
 
 Nejmenší platná cílová mřížka zatím určuje pouze rozměr:
 
@@ -178,7 +187,7 @@ secrets:
 
 Slovní části bez výslovné `legend` dostanou postupně popisky `1. část tajenky`, `2. část tajenky` a tak dále. Vlastní text může použít také formulaci `2. díl tajenky` nebo `Tajenka: 3. díl`. Části `type: cells` vlastní legendu nemají, mohou obsahovat samostatná pole a každá může samostatně zapnout zobáčky pro souvislou cestu. Obě vícedílné podoby ukazuje [zadání s vícedílnými tajenkami](examples/specification-multipart-secrets.yaml).
 
-Význam dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md). Strojová pravidla jsou oddělená v [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json), [JSON Schema šablony](src/krizovkar/schemas/template-v1.schema.json) a [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json).
+Význam dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md). Strojová pravidla jsou oddělená v [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json), [JSON Schema šablony](src/krizovkar/schemas/template-v1.schema.json), [JSON Schema editovatelné křížovky](src/krizovkar/schemas/crossword-v1.schema.json) a [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json).
 
 Model nemá přepínač mezi švédskou a čárkovanou křížovkou. Zadání hesla, jeho odpovědi a legendy je v obou případech stejné; konkrétní cílová mřížka pouze určí, zda legendu vloží do samostatné buňky, nebo ji spojí s číslem písmenné buňky a uvede pod mřížkou. Legendová buňka zabírá místo, takže stejné zadání může být platné pro jedno rozložení a nevejít se do jiného. Oba způsoby lze v jedné mřížce libovolně kombinovat.
 
@@ -484,9 +493,10 @@ uv run krizovkar render examples/grid-random-letters.yaml \
   --output build/random-letters.pdf
 ```
 
-Vstupem `latex` i `render` může být cílová mřížka `kind: grid` i šablona
-`kind: template`; datová šablona se automaticky převede na nevyplněnou mřížku
-bez slovníku. Volba `--page-format` přijímá `A0` až `A6`, `Letter` a `Legal`,
+Vstupem `latex` i `render` může být cílová mřížka `kind: grid`,
+šablona `kind: template` i editovatelná křížovka `kind: crossword`; oba
+strukturální dokumenty se automaticky převedou na mřížku bez slovníku.
+Volba `--page-format` přijímá `A0` až `A6`, `Letter` a `Legal`,
 nerozlišuje velikost písmen a její výchozí hodnota je `A4`. Obsah se podle
 potřeby zmenší tak, aby zůstal na jedné stránce zvoleného formátu.
 

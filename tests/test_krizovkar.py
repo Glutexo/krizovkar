@@ -40,6 +40,7 @@ from krizovkar.model import (
 from krizovkar.renderer import RenderError, resolve_page_size
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+CROSSWORD_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "crossword-minimal.yaml"
 GRID_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "grid-minimal.yaml"
 GRID_CLASSIC_EXAMPLE = PROJECT_ROOT / "examples" / "grid-classic.yaml"
 GRID_CZECH_LETTERS_EXAMPLE = PROJECT_ROOT / "examples" / "grid-czech-letters.yaml"
@@ -2189,6 +2190,17 @@ class CommandTest(unittest.TestCase):
         self.assertTrue(source.startswith("% Automaticky vytvořil Křížovkář."))
         self.assertIn(r"\documentclass[10pt]{article}", source)
         self.assertIn(r"\KrizovkarLetter{9.6mm}{CH}", source)
+        self.assertIn("LaTeX vytvořen: standardní výstup", stderr.getvalue())
+
+    def test_latex_accepts_editable_crossword_document(self) -> None:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            result = main(["latex", str(CROSSWORD_MINIMAL_EXAMPLE)])
+
+        self.assertEqual(0, result)
+        self.assertIn(r"\KrizovkarLetter", stdout.getvalue())
         self.assertIn("LaTeX vytvořen: standardní výstup", stderr.getvalue())
 
     def test_latex_writes_file_and_refuses_accidental_overwrite(self) -> None:

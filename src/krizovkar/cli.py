@@ -34,6 +34,7 @@ from krizovkar.model import (
     SecretPrompt,
     dump_crossword_grid,
     dump_crossword_template,
+    load_crossword_document,
     load_crossword_document_kind,
     load_crossword_grid,
     load_crossword_specification,
@@ -832,9 +833,13 @@ def _load_renderable_crossword(source_path: Path) -> CrosswordGrid:
     if document_kind == "template":
         template = load_crossword_template(source)
         return create_grid_from_template(template)
+    if document_kind == "crossword":
+        crossword = load_crossword_document(source)
+        return create_grid_from_template(crossword)
     raise ModelError(
-        "sázet lze pouze cílovou mřížku kind: grid nebo "
-        f"šablonu kind: template; vstup má kind: {document_kind!r}"
+        "sázet lze pouze cílovou mřížku kind: grid, šablonu "
+        "kind: template nebo křížovku kind: crossword; vstup má "
+        f"kind: {document_kind!r}"
     )
 
 

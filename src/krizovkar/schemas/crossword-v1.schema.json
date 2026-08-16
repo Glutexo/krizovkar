@@ -1,0 +1,299 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/master/src/krizovkar/schemas/crossword-v1.schema.json",
+  "title": "Editovatelná křížovka Křížovkáře, verze 1",
+  "description": "Editovatelná křížovka s vlastní kopií šablony, postupně doplňovanými hesly, pomůckou a tajenkami.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "kind",
+    "version",
+    "grid",
+    "slots"
+  ],
+  "properties": {
+    "format": {
+      "description": "Jednoznačný název formátu.",
+      "const": "krizovkar"
+    },
+    "kind": {
+      "description": "Druh dokumentu.",
+      "const": "crossword"
+    },
+    "version": {
+      "description": "Hlavní verze datového modelu editovatelné křížovky.",
+      "const": 1
+    },
+    "grid": {
+      "description": "Obdélníková matice rolí všech buněk převzatá ze šablony.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height",
+        "cells"
+      ],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cells": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/templateCell"
+            }
+          }
+        }
+      }
+    },
+    "slots": {
+      "description": "Místa pro neznámá nebo pevně zadaná hesla v určeném pořadí.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/wordSlot"
+      }
+    },
+    "secrets": {
+      "description": "Volitelné tajenky rezervované ve slotech nebo vybraných polích.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/templateSecret"
+      }
+    }
+  },
+  "$defs": {
+    "coordinate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "row",
+        "column"
+      ],
+      "properties": {
+        "row": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "templateCell": {
+      "description": "Nevyplněné písmeno, budoucí legenda, pomůcka nebo nevyplňovaná buňka.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "letter",
+            "legend",
+            "empty",
+            "help"
+          ]
+        }
+      }
+    },
+    "wordSlot": {
+      "description": "Souvislé místo pro jedno heslo.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "start",
+        "direction",
+        "length"
+      ],
+      "properties": {
+        "id": {
+          "description": "Stabilní identifikátor slotu v rámci dokumentu.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "start": {
+          "$ref": "#/$defs/coordinate"
+        },
+        "direction": {
+          "enum": [
+            "horizontal",
+            "vertical"
+          ]
+        },
+        "length": {
+          "description": "Počet písmenných buněk; CH zabírá jednu.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "legend": {
+          "description": "Volitelná vepsaná legenda bezprostředně před začátkem slotu.",
+          "$ref": "#/$defs/coordinate"
+        },
+        "answer": {
+          "description": "Volitelná doplněná odpověď.",
+          "type": "string",
+          "pattern": "^[A-ZÁÄČĎÉĚÍŇÓÔÖŘŠŤÚŮÜÝŽ]+$"
+        },
+        "clue": {
+          "description": "Legenda doplněné odpovědi.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "in_help": {
+          "description": "Zda se doplněná odpověď vypíše v buňce pomůcky.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "dependentRequired": {
+        "answer": [
+          "clue"
+        ],
+        "clue": [
+          "answer"
+        ]
+      },
+      "if": {
+        "properties": {
+          "in_help": {
+            "const": true
+          }
+        },
+        "required": [
+          "in_help"
+        ]
+      },
+      "then": {
+        "required": [
+          "answer",
+          "clue"
+        ]
+      }
+    },
+    "secretPrompt": {
+      "description": "Text zadání tajenky a jeho umístění u budoucí mřížky.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "placement": {
+          "enum": [
+            "above",
+            "below"
+          ],
+          "default": "above"
+        },
+        "alignment": {
+          "enum": [
+            "left",
+            "right"
+          ],
+          "default": "left"
+        }
+      }
+    },
+    "templateSecretSlotPart": {
+      "description": "Jedna část tajenky přiřazená slotu.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slot"
+      ],
+      "properties": {
+        "slot": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "word_count": {
+          "description": "Počet po sobě jdoucích slov známé tajenky v této části.",
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "templateSecretCellsPart": {
+      "description": "Jedna část tajenky určená vybranými písmennými poli.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cells"
+      ],
+      "properties": {
+        "cells": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/coordinate"
+          }
+        },
+        "arrows": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "templateSecretPart": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/templateSecretSlotPart"
+        },
+        {
+          "$ref": "#/$defs/templateSecretCellsPart"
+        }
+      ]
+    },
+    "templateSecret": {
+      "description": "Připravená tajenka ze slotů nebo vybraných polí s volitelně již známými slovy.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parts"
+      ],
+      "properties": {
+        "words": {
+          "description": "Slova tajenky bez mezer a interpunkce; seznam zachovává povolené švy.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-ZÁÄČĎÉĚÍŇÓÔÖŘŠŤÚŮÜÝŽ]+$"
+          }
+        },
+        "parts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/templateSecretPart"
+          }
+        },
+        "prompt": {
+          "$ref": "#/$defs/secretPrompt"
+        }
+      }
+    }
+  }
+}

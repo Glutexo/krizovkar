@@ -2,14 +2,17 @@
 
 Křížovkář ukládá data jako textové dokumenty v YAML 1.2. Model je nezávislý na budoucím editoru, aby stejné soubory mohly používat různé nástroje.
 
-Existují tři samostatné druhy dokumentů:
+Existují čtyři samostatné druhy dokumentů:
 
 - zadání `specification` popisuje, co se má do křížovky vložit,
 - šablona `template` popisuje dosud nevyplněné buňky a sloty hesel,
+- editovatelná křížovka `crossword` drží vlastní kopii šablony a
+  průběžně doplňovaná hesla,
 - cílová mřížka `grid` popisuje konkrétní role buněk a volitelně jejich obsah.
 
 ```text
 umístěné specification + volba rozvržení → template
+template → crossword (ruční doplňování) → grid → LaTeX → PDF
 template → grid (pevný nebo nevyplněný obsah) → LaTeX → PDF
 template + slovník → plnění → grid (vyplněná mřížka) → LaTeX → PDF
 ```
@@ -144,6 +147,21 @@ provést automaticky, dostanou-li přímo dokument `kind: template`. První z
 nich vypíše upravitelný LaTeX, druhý stejný zdroj přeloží LuaLaTeXem do PDF.
 
 Příkaz `generate` je zkratka nad stejnými dvěma kroky: podle `--layout` nejprve vytvoří hustou švédskou nebo číslovanou šablonu a potom ji naplní zadaným slovníkem. Přijímá konkrétní tajenku s automatickým nebo pevným dělením. Požadavek obsahující jen délku nelze použít pro vyplněnou mřížku, ale příkazy `grid`, `latex` a `render` jej zachovají jako označená nevyplněná tajenková pole.
+
+## Editovatelná křížovka, verze 1
+
+Dokument `kind: crossword` vzniká jako samostatná kopie šablony a slouží
+k ručnímu doplňování odpovědí a legend. Zachovává matici rolí buněk,
+sloty i tajenky; jednotlivé sloty mohou obsahovat dvojici `answer` a `clue`,
+ale rozpracovaný dokument nemusí mít vyplněná všechna hesla. Od
+`kind: template` se druh liší záměrem dokumentu, nikoli strukturou mřížky.
+Díky samostatnému druhu lze soubor po otevření jednoznačně přiřadit
+editoru křížovky. Minimální zápis ukazuje
+[editovatelná křížovka](../examples/crossword-minimal.yaml).
+
+Příkazy `latex` a `render` přijímají dokument křížovky stejně jako
+šablonu. Před sazbou jej převedou na cílovou mřížku a zachovají všechna
+dosud doplněná písmena a legendy.
 
 ## Cílová mřížka, verze 1
 
@@ -451,15 +469,17 @@ Loader již ověřuje rozměry, rozsah běžných i tajenkových slov, shodu
 písmen na kříženích, obsazenost vybraných tajenkových polí a základní platnost
 výslovné polohy pomůcky. Převod `specification → template` navíc odmítne
 překryv dvou slotů ve stejném směru, kolizi legendy a písmene nebo pomůcky a
-jiné buňky. Příkazy `latex` a `render` nadále přijímají `grid` nebo
-`template`; zadání lze převést rourou `template ZADÁNÍ.yaml | latex -` nebo
+jiné buňky. Příkazy `latex` a `render` nadále přijímají `grid`,
+`template` nebo `crossword`; zadání lze převést rourou
+`template ZADÁNÍ.yaml | latex -` nebo
 rovnou sestavit jako PDF pomocí `template ZADÁNÍ.yaml | render -`.
 
 ## Validace
 
 Strojová pravidla jsou v samostatných schématech pro
 [cílovou mřížku](../src/krizovkar/schemas/grid-v1.schema.json),
-[šablonu](../src/krizovkar/schemas/template-v1.schema.json) a
+[šablonu](../src/krizovkar/schemas/template-v1.schema.json),
+[editovatelnou křížovku](../src/krizovkar/schemas/crossword-v1.schema.json) a
 [zadání](../src/krizovkar/schemas/specification-v1.schema.json). Schémata
 odmítají neznámé a chybně napsané položky i nulové, záporné nebo neceločíselné
 rozměry. Pythonové loadery navíc kontrolují vztahy, které závisejí na více
