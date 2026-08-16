@@ -1846,6 +1846,11 @@ class CrosswordDocumentWindow(ttk.Frame):
             name = "Nová křížovka"
         marker = "*" if self._dirty else ""
         self.root.title(f"{marker}{name} — Křížovkář")
+        if sys.platform == "darwin":
+            title_path = (
+                str(self._path.absolute()) if self._path is not None else ""
+            )
+            self.root.attributes("-titlepath", title_path)
 
     def _set_dirty(self, dirty: bool) -> None:
         self._dirty = dirty

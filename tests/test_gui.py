@@ -454,15 +454,44 @@ class GuiTest(unittest.TestCase):
 
     def test_window_title_identifies_file_and_unsaved_changes(self) -> None:
         window = Mock()
-        window._path = Path("krizovka.yaml")
+        path = Path("krizovka.yaml")
+        window._path = path
         window._dirty = True
         window._document_kind = "crossword"
 
-        CrosswordDocumentWindow._update_title(window)
+        with patch("krizovkar.gui.sys.platform", "darwin"):
+            CrosswordDocumentWindow._update_title(window)
 
         window.root.title.assert_called_once_with(
             "*krizovka.yaml — Křížovkář"
         )
+        window.root.attributes.assert_called_once_with(
+            "-titlepath",
+            str(path.absolute()),
+        )
+
+    def test_new_macos_document_has_no_proxy_icon(self) -> None:
+        window = Mock()
+        window._path = None
+        window._dirty = True
+        window._document_kind = "template"
+
+        with patch("krizovkar.gui.sys.platform", "darwin"):
+            CrosswordDocumentWindow._update_title(window)
+
+        window.root.title.assert_called_once_with("*Nová šablona — Křížovkář")
+        window.root.attributes.assert_called_once_with("-titlepath", "")
+
+    def test_other_platforms_do_not_set_macos_proxy_icon(self) -> None:
+        window = Mock()
+        window._path = Path("krizovka.yaml")
+        window._dirty = False
+        window._document_kind = "crossword"
+
+        with patch("krizovkar.gui.sys.platform", "linux"):
+            CrosswordDocumentWindow._update_title(window)
+
+        window.root.attributes.assert_not_called()
 
     def test_closing_dirty_window_can_discard_document_changes(self) -> None:
         window = Mock()

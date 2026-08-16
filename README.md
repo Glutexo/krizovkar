@@ -32,7 +32,9 @@ uv run krizovkar-gui examples/template-minimal.yaml \
 
 Každé viditelné okno představuje právě jeden YAML soubor a v titulku ukazuje
 jeho název, případně **Nová šablona** nebo **Nová křížovka**. Hvězdička
-před názvem označuje neuložené změny.
+před názvem označuje neuložené změny. Na macOS má otevřený nebo uložený
+dokument v záhlaví také systémovou ikonu svého YAML souboru, kterou lze
+přetáhnout stejně jako soubor ve Finderu.
 
 Podle kořenového klíče `kind` má okno jednu ze dvou podob:
 
