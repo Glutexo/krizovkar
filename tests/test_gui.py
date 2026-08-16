@@ -423,7 +423,6 @@ class GuiTest(unittest.TestCase):
         application = Mock()
         grid = Mock()
         application._complete_grid_or_error.return_value = grid
-        application.page_format_value.get.return_value = "A5"
 
         CrosswordDocumentWindow.save_crossword_pdf(application)
         CrosswordDocumentWindow.save_solution_pdf(application)
@@ -433,19 +432,17 @@ class GuiTest(unittest.TestCase):
                 call(
                     grid,
                     filled=False,
-                    title="Uložit křížovku bez písmen",
+                    title="Exportovat křížovku bez písmen",
                     initialfile="krizovka.pdf",
                     success_message="Křížovka bez písmen byla uložena",
-                    page_format="A5",
                     document="crossword",
                 ),
                 call(
                     grid,
                     filled=True,
-                    title="Uložit řešení křížovky",
+                    title="Exportovat řešení s písmeny",
                     initialfile="reseni.pdf",
                     success_message="Řešení bylo uloženo",
-                    page_format="A5",
                     document="crossword",
                 ),
             ],
@@ -458,7 +455,6 @@ class GuiTest(unittest.TestCase):
             TemplateSettings(3, 3),
             "numbered",
         )
-        application.page_format_value.get.return_value = "Letter"
 
         with patch("krizovkar.gui.create_grid_from_template") as create_grid:
             CrosswordDocumentWindow.save_blank_template_pdf(application)
@@ -467,10 +463,9 @@ class GuiTest(unittest.TestCase):
         application._save_pdf.assert_called_once_with(
             create_grid.return_value,
             filled=False,
-            title="Uložit šablonu k tisku",
+            title="Exportovat šablonu k tisku",
             initialfile="sablona.pdf",
             success_message="Šablona k tisku byla uložena",
-            page_format="Letter",
             document="template",
         )
 
@@ -559,37 +554,44 @@ class GuiTest(unittest.TestCase):
             application.export_menu.entryconfigure.call_args_list,
         )
 
-    def test_page_formats_are_offered_in_export_menu(self) -> None:
+    def test_page_format_is_chosen_in_export_dialog_and_remembered(self) -> None:
         window = Mock()
+        window._page_format = "A4"
 
-        CrosswordDocumentWindow._add_page_format_choices(window)
+        with patch("krizovkar.gui.PdfExportDialog") as dialog_type:
+            dialog_type.return_value.result = "A5"
+            page_format = CrosswordDocumentWindow._choose_page_format(
+                window,
+                title="Exportovat křížovku bez písmen",
+            )
 
-        self.assertEqual(
-            [
-                call(
-                    label=page_format,
-                    variable=window.page_format_value,
-                    value=page_format,
-                )
-                for page_format in (
-                    "A0",
-                    "A1",
-                    "A2",
-                    "A3",
-                    "A4",
-                    "A5",
-                    "A6",
-                    "LETTER",
-                    "LEGAL",
-                )
-            ],
-            window.page_format_menu.add_radiobutton.call_args_list,
+        self.assertEqual("A5", page_format)
+        dialog_type.assert_called_once_with(
+            window.root,
+            title="Exportovat křížovku bez písmen",
+            initial_page_format="A4",
         )
+        self.assertEqual("A5", window._page_format)
 
-    def test_saves_pdf_through_renderer_without_manual_dialog(self) -> None:
+    def test_cancelled_page_format_dialog_keeps_previous_format(self) -> None:
+        window = Mock()
+        window._page_format = "A4"
+
+        with patch("krizovkar.gui.PdfExportDialog") as dialog_type:
+            dialog_type.return_value.result = None
+            page_format = CrosswordDocumentWindow._choose_page_format(
+                window,
+                title="Exportovat šablonu k tisku",
+            )
+
+        self.assertIsNone(page_format)
+        self.assertEqual("A4", window._page_format)
+
+    def test_saves_pdf_with_format_chosen_in_export_dialog(self) -> None:
         template = _filled_numbered_crossword()
         grid = create_grid_from_template(template)
         application = Mock()
+        application._choose_page_format.return_value = "A5"
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "krizovka.pdf"
             application._choose_output.return_value = (output, False)
@@ -602,17 +604,19 @@ class GuiTest(unittest.TestCase):
                     application,
                     grid,
                     filled=False,
-                    title="Uložit křížovku bez písmen",
+                    title="Exportovat křížovku bez písmen",
                     initialfile="krizovka.pdf",
                     success_message="Křížovka bez písmen byla uložena",
-                    page_format="A5",
                     document="crossword",
                 )
 
             self.assertEqual(PDF_BYTES, output.read_bytes())
 
+        application._choose_page_format.assert_called_once_with(
+            title="Exportovat křížovku bez písmen",
+        )
         application._choose_output.assert_called_once_with(
-            title="Uložit křížovku bez písmen",
+            title="Exportovat křížovku bez písmen",
             initialfile="krizovka.pdf",
             extension=".pdf",
             filetypes=(("PDF soubory", "*.pdf"), ("Všechny soubory", "*")),
@@ -636,8 +640,26 @@ class GuiTest(unittest.TestCase):
         application.root.update_idletasks.assert_called_once_with()
         application._show_action_error.assert_not_called()
 
+    def test_cancelled_export_dialog_does_not_choose_output(self) -> None:
+        application = Mock()
+        application._choose_page_format.return_value = None
+
+        CrosswordDocumentWindow._save_pdf(
+            application,
+            Mock(),
+            filled=False,
+            title="Exportovat šablonu k tisku",
+            initialfile="sablona.pdf",
+            success_message="Šablona k tisku byla uložena",
+            document="template",
+        )
+
+        application._choose_output.assert_not_called()
+        application._set_document_status.assert_not_called()
+
     def test_pdf_render_error_is_shown_and_restores_cursor(self) -> None:
         application = Mock()
+        application._choose_page_format.return_value = "A4"
         application._choose_output.return_value = (Path("sablona.pdf"), False)
 
         with patch(
@@ -648,10 +670,9 @@ class GuiTest(unittest.TestCase):
                 application,
                 Mock(),
                 filled=False,
-                title="Uložit šablonu k tisku",
+                title="Exportovat šablonu k tisku",
                 initialfile="sablona.pdf",
                 success_message="Šablona k tisku byla uložena",
-                page_format="A4",
                 document="template",
             )
 

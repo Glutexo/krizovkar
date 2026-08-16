@@ -54,9 +54,10 @@ obsahuje neuložené změny, editor se zeptá na jejich uložení. Otevřená
 obsah druhého neovlivní.
 
 PDF výstupy nejsou součástí pracovního panelu. Podnabídka **Soubor →
-Exportovat** nabízí výstupy dostupné pro daný dokument a volbu formátu
-stránky. U křížovky zpřístupní tiskovou podobu i řešení až po vyplnění
-všech hesel.
+Exportovat** nabízí výstupy dostupné pro daný dokument. Formát stránky
+se volí přímo v dialogu vybraného exportu; poté naváže systémový dialog
+pro výběr umístění PDF. U křížovky se tisková podoba i řešení
+zpřístupní až po vyplnění všech hesel.
 
 Ve švédské podobě jsou místa pro nápovědy součástí předem vytvořené mřížky.
 Číslovaná podoba ponechá všechna pole pro písmena a nápovědy vysází pod

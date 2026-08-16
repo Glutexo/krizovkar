@@ -9,7 +9,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from io import StringIO
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import cast
 
 from krizovkar.alphabet import split_answer_letters
@@ -68,6 +68,69 @@ class TemplateSettings:
 
     width: int
     height: int
+
+
+class PdfExportDialog(simpledialog.Dialog):
+    """Vybere formát PDF před systémovým dialogem pro uložení."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        *,
+        title: str,
+        initial_page_format: str,
+    ) -> None:
+        self._initial_page_format = initial_page_format
+        self._page_format_value: tk.StringVar
+        super().__init__(parent, title)
+
+    def body(self, master: tk.Frame) -> tk.Widget:
+        master.configure(padx=16, pady=12)
+        master.columnconfigure(0, weight=1)
+        ttk.Label(
+            master,
+            text="Zvolte formát stránky pro tiskové PDF.",
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(master, text="Formát stránky").grid(
+            row=1,
+            column=0,
+            sticky="w",
+            pady=(12, 0),
+        )
+        self._page_format_value = tk.StringVar(
+            master=master,
+            value=self._initial_page_format,
+        )
+        page_format = ttk.Combobox(
+            master,
+            state="readonly",
+            width=12,
+            values=SUPPORTED_PAGE_FORMATS,
+            textvariable=self._page_format_value,
+        )
+        page_format.grid(row=2, column=0, sticky="ew", pady=(3, 0))
+        return page_format
+
+    def buttonbox(self) -> None:
+        buttons = ttk.Frame(self, padding=(16, 0, 16, 16))
+        ttk.Button(
+            buttons,
+            text="Vybrat umístění…",
+            command=self.ok,
+            default="active",
+            style="Primary.TButton",
+        ).pack(side="right")
+        ttk.Button(
+            buttons,
+            text="Zrušit",
+            command=self.cancel,
+        ).pack(side="right", padx=(0, 8))
+        buttons.pack(fill="x")
+        self.bind("<Return>", self.ok)
+        self.bind("<Escape>", self.cancel)
+
+    def apply(self) -> None:
+        self.result = self._page_format_value.get()
 
 
 def _positive_integer(value: str, label: str) -> int:
@@ -717,7 +780,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.slot_title_value = tk.StringVar(value="Vyberte heslo.")
         self.slot_pattern_value = tk.StringVar(value="Vzor z křížení: —")
         self.progress_value = tk.StringVar()
-        self.page_format_value = tk.StringVar(value=DEFAULT_PAGE_FORMAT)
+        self._page_format = DEFAULT_PAGE_FORMAT
         self.template_status_value = tk.StringVar(value="Šablona je otevřená.")
         self.crossword_status_value = tk.StringVar(
             value="Křížovka je otevřená."
@@ -780,13 +843,6 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.file_menu.add_separator()
         self.export_menu = tk.Menu(self.file_menu)
         self._add_export_actions()
-        self.export_menu.add_separator()
-        self.page_format_menu = tk.Menu(self.export_menu)
-        self._add_page_format_choices()
-        self.export_menu.add_cascade(
-            label="Formát stránky",
-            menu=self.page_format_menu,
-        )
         self.file_menu.add_cascade(label="Exportovat", menu=self.export_menu)
         self.file_menu.add_separator()
         self.file_menu.add_command(
@@ -824,14 +880,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             command=self.save_solution_pdf,
             state="disabled",
         )
-
-    def _add_page_format_choices(self) -> None:
-        for page_format in SUPPORTED_PAGE_FORMATS:
-            self.page_format_menu.add_radiobutton(
-                label=page_format,
-                variable=self.page_format_value,
-                value=page_format,
-            )
 
     def _build_content(self) -> None:
         document_frame = ttk.Frame(self, padding=14)
@@ -1544,10 +1592,9 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._save_pdf(
             grid,
             filled=False,
-            title="Uložit křížovku bez písmen",
+            title="Exportovat křížovku bez písmen",
             initialfile="krizovka.pdf",
             success_message="Křížovka bez písmen byla uložena",
-            page_format=self.page_format_value.get(),
             document="crossword",
         )
 
@@ -1558,10 +1605,9 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._save_pdf(
             grid,
             filled=True,
-            title="Uložit řešení křížovky",
+            title="Exportovat řešení s písmeny",
             initialfile="reseni.pdf",
             success_message="Řešení bylo uloženo",
-            page_format=self.page_format_value.get(),
             document="crossword",
         )
 
@@ -1576,12 +1622,22 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._save_pdf(
             create_grid_from_template(self._base_template),
             filled=False,
-            title="Uložit šablonu k tisku",
+            title="Exportovat šablonu k tisku",
             initialfile="sablona.pdf",
             success_message="Šablona k tisku byla uložena",
-            page_format=self.page_format_value.get(),
             document="template",
         )
+
+    def _choose_page_format(self, *, title: str) -> str | None:
+        dialog = PdfExportDialog(
+            self.root,
+            title=title,
+            initial_page_format=self._page_format,
+        )
+        page_format = cast(str | None, dialog.result)
+        if page_format is not None:
+            self._page_format = page_format
+        return page_format
 
     def _save_pdf(
         self,
@@ -1591,9 +1647,11 @@ class CrosswordDocumentWindow(ttk.Frame):
         title: str,
         initialfile: str,
         success_message: str,
-        page_format: str,
         document: str,
     ) -> None:
+        page_format = self._choose_page_format(title=title)
+        if page_format is None:
+            return
         selected = self._choose_output(
             title=title,
             initialfile=initialfile,
