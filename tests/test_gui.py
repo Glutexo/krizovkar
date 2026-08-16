@@ -16,7 +16,6 @@ from krizovkar.gui import (
     CrosswordApplication,
     CrosswordDocumentWindow,
     GuiInputError,
-    StartupDocumentDialog,
     TemplateSettings,
     _RecentDocuments,
     _configure_tk_runtime,
@@ -76,35 +75,6 @@ def _filled_numbered_crossword():
 
 
 class GuiTest(unittest.TestCase):
-    def test_startup_dialog_stays_open_after_cancelled_file_selection(self) -> None:
-        dialog = Mock()
-        dialog.application.choose_document.return_value = None
-
-        StartupDocumentDialog._open_document(dialog)
-
-        dialog.application.choose_document.assert_called_once_with(parent=dialog)
-        dialog.cancel.assert_not_called()
-
-    def test_startup_dialog_closes_after_opening_document(self) -> None:
-        dialog = Mock()
-        window = Mock()
-        dialog.application.choose_document.return_value = window
-
-        StartupDocumentDialog._open_document(dialog)
-
-        self.assertIs(window, dialog.result)
-        dialog.cancel.assert_called_once_with()
-
-    def test_startup_dialog_can_create_new_document(self) -> None:
-        dialog = Mock()
-        window = Mock()
-        dialog.application.new_template_document.return_value = window
-
-        StartupDocumentDialog._new_document(dialog)
-
-        self.assertIs(window, dialog.result)
-        dialog.cancel.assert_called_once_with()
-
     def test_recent_documents_use_macos_application_support(self) -> None:
         with (
             patch("krizovkar.gui.sys.platform", "darwin"),
@@ -976,10 +946,10 @@ class GuiTest(unittest.TestCase):
         self.assertEqual(2, exit_code)
         self.assertIn("grafické rozhraní nelze spustit", error_output.getvalue())
 
-    def test_main_opens_startup_document_dialog(self) -> None:
+    def test_main_opens_system_file_dialog(self) -> None:
         root = Mock()
         application = Mock()
-        application.choose_startup_document.return_value = Mock()
+        application.choose_document.return_value = Mock()
         with (
             patch("krizovkar.gui.tk.Tk", return_value=root),
             patch(
@@ -990,15 +960,15 @@ class GuiTest(unittest.TestCase):
             exit_code = main([])
 
         self.assertEqual(0, exit_code)
-        application.choose_startup_document.assert_called_once_with()
+        application.choose_document.assert_called_once_with(parent=None)
         application.new_template_document.assert_not_called()
         application.open_document.assert_not_called()
         root.mainloop.assert_called_once_with()
 
-    def test_main_exits_cleanly_when_startup_dialog_is_closed(self) -> None:
+    def test_main_exits_cleanly_when_system_file_dialog_is_cancelled(self) -> None:
         root = Mock()
         application = Mock()
-        application.choose_startup_document.return_value = None
+        application.choose_document.return_value = None
         with (
             patch("krizovkar.gui.tk.Tk", return_value=root),
             patch(
@@ -1009,6 +979,7 @@ class GuiTest(unittest.TestCase):
             exit_code = main([])
 
         self.assertEqual(0, exit_code)
+        application.choose_document.assert_called_once_with(parent=None)
         root.destroy.assert_called_once_with()
         root.mainloop.assert_not_called()
 
@@ -1033,7 +1004,7 @@ class GuiTest(unittest.TestCase):
             ],
             application.open_document.call_args_list,
         )
-        application.choose_startup_document.assert_not_called()
+        application.choose_document.assert_not_called()
         root.mainloop.assert_called_once_with()
 
     def test_main_exits_when_no_given_yaml_can_be_opened(self) -> None:

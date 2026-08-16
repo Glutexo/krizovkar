@@ -21,12 +21,11 @@ příkazem:
 uv run krizovkar-gui
 ```
 
-Tím se otevře úvodní dialog s volbami **Otevřít soubor…** a **Nový
-dokument**. První volba naváže systémovým výběrem existující šablony
-nebo křížovky, druhá vytvoří novou neuloženou šablonu. Zavření dialogu
-ukončí aplikaci bez vytvoření dokumentu. Existující šablonu nebo
-křížovku lze také otevřít přímo při spuštění; každá zadaná cesta
-dostane vlastní okno a úvodní dialog se v tom případě nezobrazí:
+Tím se otevře systémový dialog pro výběr existující šablony nebo
+křížovky. Jeho zavření ukončí aplikaci bez vytvoření dokumentu.
+Existující soubor lze také otevřít přímo při spuštění; každá zadaná
+cesta dostane vlastní okno a systémový dialog se v tom případě
+nezobrazí:
 
 ```shell
 uv run krizovkar-gui examples/template-minimal.yaml \

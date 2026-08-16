@@ -262,74 +262,6 @@ class PdfExportDialog(simpledialog.Dialog):
         self.result = self._page_format_value.get()
 
 
-class StartupDocumentDialog(simpledialog.Dialog):
-    """Nabídne otevření existujícího nebo vytvoření nového dokumentu."""
-
-    def __init__(
-        self,
-        parent: tk.Misc,
-        *,
-        application: CrosswordApplication,
-    ) -> None:
-        self.application = application
-        super().__init__(parent, "Otevřít dokument Křížovkáře")
-
-    def body(self, master: tk.Frame) -> None:
-        master.configure(padx=18, pady=16)
-        ttk.Label(
-            master,
-            text=(
-                "Otevřete uloženou šablonu nebo křížovku, případně "
-                "začněte novým dokumentem."
-            ),
-            wraplength=430,
-            justify="left",
-        ).pack(fill="x")
-        return None
-
-    def buttonbox(self) -> None:
-        buttons = ttk.Frame(self, padding=(18, 0, 18, 18))
-        open_button = ttk.Button(
-            buttons,
-            text="Otevřít soubor…",
-            command=self._open_document,
-            default="active",
-        )
-        open_button.pack(side="right")
-        ttk.Button(
-            buttons,
-            text="Nový dokument",
-            command=self._new_document,
-        ).pack(side="right", padx=(0, 8))
-        ttk.Button(
-            buttons,
-            text="Zrušit",
-            command=self.cancel,
-        ).pack(side="right", padx=(0, 8))
-        buttons.pack(fill="x")
-        self.initial_focus = open_button
-        self.bind("<Return>", lambda _event: self._open_document())
-        self.bind("<Escape>", self.cancel)
-        self.bind(
-            _keyboard_shortcut("n").sequence,
-            lambda _event: self._new_document(),
-        )
-
-    def _open_document(self) -> None:
-        window = self.application.choose_document(parent=self)
-        if window is None:
-            return
-        self.result = window
-        self.cancel()
-
-    def _new_document(self) -> None:
-        self.result = self.application.new_template_document()
-        self.cancel()
-
-    def cancel(self, _event: tk.Event[tk.Misc] | None = None) -> None:
-        self.destroy()
-
-
 def _positive_integer(value: str, label: str) -> int:
     try:
         number = int(value.strip())
@@ -878,10 +810,6 @@ class CrosswordApplication:
     def recent_document_paths(self) -> tuple[Path, ...]:
         return self._recent_documents.paths
 
-    def choose_startup_document(self) -> CrosswordDocumentWindow | None:
-        dialog = StartupDocumentDialog(self.root, application=self)
-        return cast(CrosswordDocumentWindow | None, dialog.result)
-
     def new_template_document(self) -> CrosswordDocumentWindow:
         template = create_blank_template(
             TemplateSettings(DEFAULT_GRID_WIDTH, DEFAULT_GRID_HEIGHT),
@@ -901,7 +829,7 @@ class CrosswordApplication:
     def choose_document(
         self,
         *,
-        parent: tk.Misc,
+        parent: tk.Misc | None,
     ) -> CrosswordDocumentWindow | None:
         filename = filedialog.askopenfilename(
             parent=parent,
@@ -2147,7 +2075,7 @@ class CrosswordDocumentWindow(ttk.Frame):
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Otevře zadané dokumenty, nebo novou šablonu, a spustí GUI."""
+    """Otevře zadané dokumenty nebo zobrazí jejich systémový výběr."""
 
     document_paths = tuple(
         Path(argument) for argument in (sys.argv[1:] if argv is None else argv)
@@ -2168,7 +2096,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             root.destroy()
             return 2
     else:
-        if application.choose_startup_document() is None:
+        if application.choose_document(parent=None) is None:
             root.destroy()
             return 0
     root.mainloop()
