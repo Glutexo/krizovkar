@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 from io import StringIO
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
-from typing import cast
+from typing import Protocol, cast
 
 from krizovkar.alphabet import split_answer_letters
 from krizovkar.generator import (
@@ -78,6 +78,30 @@ class _KeyboardShortcut:
 
     accelerator: str
     sequence: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ExportAction:
+    """Jedna položka exportu sdílená nabídkou a panelem nástrojů."""
+
+    identifier: str
+    label: str
+    command: Callable[[], None]
+
+
+class _ToolbarControl(Protocol):
+    """Společné minimum nativního a Tk panelu nástrojů."""
+
+    def configure(self, *, state: str) -> object: ...
+
+
+def _create_macos_toolbar(
+    window: tk.Toplevel,
+    actions: Sequence[_ExportAction],
+) -> _ToolbarControl:
+    from krizovkar.macos_toolbar import MacWindowToolbar
+
+    return MacWindowToolbar(window, actions)
 
 
 def _keyboard_shortcut(key: str, *, shift: bool = False) -> _KeyboardShortcut:
@@ -1028,6 +1052,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             layout if document.kind == "crossword" else None
         )
         self._selected_slot_identifier: str | None = None
+        self._content_row = 0 if sys.platform == "darwin" else 1
 
         self.width_value = tk.StringVar(value=str(document.grid.width))
         self.height_value = tk.StringVar(value=str(document.grid.height))
@@ -1047,8 +1072,8 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._configure_window()
         self._configure_styles()
         self._build_menu()
-        self._build_toolbar()
         self._build_content()
+        self._build_toolbar()
         if self._document_kind == "template":
             self._watch_inputs()
             self._refresh_template_view()
@@ -1065,7 +1090,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.root.rowconfigure(0, weight=1)
         self.grid(row=0, column=0, sticky="nsew")
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=1)
+        self.rowconfigure(self._content_row, weight=1)
         self.root.protocol("WM_DELETE_WINDOW", self.request_close)
 
     def _configure_styles(self) -> None:
@@ -1132,24 +1157,44 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.root.bind(close_shortcut.sequence, self._close_event)
 
     def _add_export_actions(self) -> None:
+        for action in self._export_actions():
+            options: dict[str, object] = {
+                "label": action.label,
+                "command": action.command,
+            }
+            if self._document_kind == "crossword":
+                options["state"] = "disabled"
+            self.export_menu.add_command(**options)
+
+    def _export_actions(self) -> tuple[_ExportAction, ...]:
         if self._document_kind == "template":
-            self.export_menu.add_command(
-                label="Šablonu k tisku (PDF)…",
-                command=self.save_blank_template_pdf,
+            return (
+                _ExportAction(
+                    "blank-template",
+                    "Šablonu k tisku (PDF)…",
+                    self.save_blank_template_pdf,
+                ),
             )
-            return
-        self.export_menu.add_command(
-            label="Křížovku bez písmen (PDF)…",
-            command=self.save_crossword_pdf,
-            state="disabled",
-        )
-        self.export_menu.add_command(
-            label="Řešení s písmeny (PDF)…",
-            command=self.save_solution_pdf,
-            state="disabled",
+        return (
+            _ExportAction(
+                "blank-crossword",
+                "Křížovku bez písmen (PDF)…",
+                self.save_crossword_pdf,
+            ),
+            _ExportAction(
+                "solution",
+                "Řešení s písmeny (PDF)…",
+                self.save_solution_pdf,
+            ),
         )
 
     def _build_toolbar(self) -> None:
+        if sys.platform == "darwin":
+            self.export_button = _create_macos_toolbar(
+                self.root,
+                self._export_actions(),
+            )
+            return
         self.toolbar = ttk.Frame(self, padding=(14, 0, 14, 10))
         self.toolbar.grid(row=0, column=0, sticky="ew")
         self.export_button = ttk.Menubutton(
@@ -1186,7 +1231,11 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _build_content(self) -> None:
         document_frame = ttk.Frame(self, padding=14)
-        document_frame.grid(row=1, column=0, sticky="nsew")
+        document_frame.grid(
+            row=self._content_row,
+            column=0,
+            sticky="nsew",
+        )
         if self._document_kind == "template":
             self.template_tab = document_frame
             self._build_template_document()

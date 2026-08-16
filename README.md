@@ -64,12 +64,13 @@ deset naposledy otevřených nebo uložených dokumentů. Neexistující soubor
 při pokusu o otevření ze seznamu odstraní; celý seznam smaže volba **Vymazat
 nabídku**.
 
-Panel nástrojů nad dokumentem zatím obsahuje rozbalovací tlačítko
-**Exportovat**. Nabízí stejné výstupy jako podnabídka **Soubor →
-Exportovat** podle právě otevřeného dokumentu. Formát stránky se volí
-přímo v dialogu vybraného exportu; poté naváže systémový dialog pro výběr
-umístění PDF. U křížovky se tisková podoba i řešení zpřístupní až po
-vyplnění všech hesel.
+Panel nástrojů dokumentového okna zatím obsahuje rozbalovací akci
+**Exportovat**. Na macOS je součástí systémového záhlaví okna; na ostatních
+systémech zůstává nad pracovní plochou. Nabízí stejné výstupy jako
+podnabídka **Soubor → Exportovat** podle právě otevřeného dokumentu. Formát
+stránky se volí přímo v dialogu vybraného exportu; poté naváže systémový
+dialog pro výběr umístění PDF. U křížovky se tisková podoba i řešení
+zpřístupní až po vyplnění všech hesel.
 
 Ve švédské podobě jsou místa pro nápovědy součástí předem vytvořené mřížky.
 Číslovaná podoba ponechá všechna pole pro písmena a nápovědy vysází pod

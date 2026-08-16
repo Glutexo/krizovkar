@@ -811,10 +811,16 @@ class GuiTest(unittest.TestCase):
         )
 
     def test_export_actions_follow_window_document(self) -> None:
-        template_window = Mock()
+        template_window = CrosswordDocumentWindow.__new__(
+            CrosswordDocumentWindow
+        )
         template_window._document_kind = "template"
-        crossword_window = Mock()
+        template_window.export_menu = Mock()
+        crossword_window = CrosswordDocumentWindow.__new__(
+            CrosswordDocumentWindow
+        )
         crossword_window._document_kind = "crossword"
+        crossword_window.export_menu = Mock()
 
         CrosswordDocumentWindow._add_export_actions(template_window)
         CrosswordDocumentWindow._add_export_actions(crossword_window)
@@ -845,7 +851,11 @@ class GuiTest(unittest.TestCase):
         export_button = Mock()
 
         with (
-            patch("krizovkar.gui.ttk.Frame", return_value=toolbar) as frame_type,
+            patch("krizovkar.gui.sys.platform", "linux"),
+            patch(
+                "krizovkar.gui.ttk.Frame",
+                return_value=toolbar,
+            ) as frame_type,
             patch(
                 "krizovkar.gui.ttk.Menubutton",
                 return_value=export_button,
@@ -863,6 +873,35 @@ class GuiTest(unittest.TestCase):
         export_button.pack.assert_called_once_with(side="left")
         self.assertIs(toolbar, window.toolbar)
         self.assertIs(export_button, window.export_button)
+
+    def test_macos_toolbar_is_attached_to_window_chrome(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window.root = Mock()
+        window._document_kind = "crossword"
+        native_toolbar = Mock()
+
+        with (
+            patch("krizovkar.gui.sys.platform", "darwin"),
+            patch(
+                "krizovkar.gui._create_macos_toolbar",
+                return_value=native_toolbar,
+            ) as create_toolbar,
+            patch("krizovkar.gui.ttk.Frame") as frame_type,
+        ):
+            window._build_toolbar()
+
+        root, actions = create_toolbar.call_args.args
+        self.assertIs(window.root, root)
+        self.assertEqual(
+            ["blank-crossword", "solution"],
+            [action.identifier for action in actions],
+        )
+        self.assertEqual(
+            ["Křížovku bez písmen (PDF)…", "Řešení s písmeny (PDF)…"],
+            [action.label for action in actions],
+        )
+        self.assertIs(native_toolbar, window.export_button)
+        frame_type.assert_not_called()
 
     def test_file_menu_follows_template_document(self) -> None:
         application = Mock()
