@@ -605,12 +605,11 @@ class CrosswordApplication(ttk.Frame):
         self.root.rowconfigure(0, weight=1)
         self.grid(row=0, column=0, sticky="nsew")
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(2, weight=1)
+        self.rowconfigure(1, weight=1)
         self.root.protocol("WM_DELETE_WINDOW", self.root.destroy)
 
     def _configure_styles(self) -> None:
         style = ttk.Style(self.root)
-        style.configure("Title.TLabel", font=("TkDefaultFont", 22, "bold"))
         style.configure(
             "Step.TLabel",
             foreground="#175cd3",
@@ -648,11 +647,6 @@ class CrosswordApplication(ttk.Frame):
         self.root.bind("<Command-s>", self._save_event)
 
     def _build_content(self) -> None:
-        ttk.Label(self, text="Křížovkář", style="Title.TLabel").grid(
-            row=0,
-            column=0,
-            sticky="w",
-        )
         ttk.Label(
             self,
             text=(
@@ -660,10 +654,10 @@ class CrosswordApplication(ttk.Frame):
                 "hesel, nebo prázdnou šablonu k dalšímu vyplnění."
             ),
             style="Muted.TLabel",
-        ).grid(row=1, column=0, sticky="ew", pady=(2, 14))
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 14))
 
         self.notebook = ttk.Notebook(self)
-        self.notebook.grid(row=2, column=0, sticky="nsew")
+        self.notebook.grid(row=1, column=0, sticky="nsew")
 
         self.crossword_tab = ttk.Frame(self.notebook, padding=14)
         self.blank_template_tab = ttk.Frame(self.notebook, padding=14)
