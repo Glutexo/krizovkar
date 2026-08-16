@@ -618,7 +618,7 @@ class GuiTest(unittest.TestCase):
             patch("krizovkar.gui.tk.Tk", side_effect=tk.TclError("bez displeje")),
             redirect_stderr(error_output),
         ):
-            exit_code = main()
+            exit_code = main([])
 
         self.assertEqual(2, exit_code)
         self.assertIn("grafické rozhraní nelze spustit", error_output.getvalue())
@@ -633,11 +633,53 @@ class GuiTest(unittest.TestCase):
                 return_value=application,
             ),
         ):
-            exit_code = main()
+            exit_code = main([])
 
         self.assertEqual(0, exit_code)
         application.new_template_document.assert_called_once_with()
+        application.open_document.assert_not_called()
         root.mainloop.assert_called_once_with()
+
+    def test_main_opens_each_given_yaml_in_its_own_document_window(self) -> None:
+        root = Mock()
+        application = Mock()
+        application.open_document.side_effect = (Mock(), Mock())
+        with (
+            patch("krizovkar.gui.tk.Tk", return_value=root),
+            patch(
+                "krizovkar.gui.CrosswordApplication",
+                return_value=application,
+            ),
+        ):
+            exit_code = main(["prvni.yaml", "druhy.yml"])
+
+        self.assertEqual(0, exit_code)
+        self.assertEqual(
+            [
+                call(Path("prvni.yaml"), parent=root),
+                call(Path("druhy.yml"), parent=root),
+            ],
+            application.open_document.call_args_list,
+        )
+        application.new_template_document.assert_not_called()
+        root.mainloop.assert_called_once_with()
+
+    def test_main_exits_when_no_given_yaml_can_be_opened(self) -> None:
+        root = Mock()
+        application = Mock()
+        application.open_document.return_value = None
+        with (
+            patch("krizovkar.gui.tk.Tk", return_value=root),
+            patch(
+                "krizovkar.gui.CrosswordApplication",
+                return_value=application,
+            ),
+        ):
+            exit_code = main(["neplatny.yaml"])
+
+        self.assertEqual(2, exit_code)
+        root.destroy.assert_called_once_with()
+        root.mainloop.assert_not_called()
 
 
 if __name__ == "__main__":

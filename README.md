@@ -14,16 +14,25 @@ automatické plnění.
 
 ## Grafické rozhraní
 
-Grafické rozhraní se spustí samostatným příkazem:
+Grafické rozhraní bez existujícího souboru se spustí samostatným
+příkazem:
 
 ```shell
 uv run krizovkar-gui
 ```
 
-Po spuštění se otevře nový neuložený dokument šablony. Každé viditelné
-okno představuje právě jeden YAML soubor a v titulku ukazuje jeho název,
-případně **Nová šablona** nebo **Nová křížovka**. Hvězdička před
-názvem označuje neuložené změny.
+Tím se otevře nový neuložený dokument šablony. Existující šablonu
+nebo křížovku lze otevřít přímo při spuštění; každá zadaná cesta
+dostane vlastní okno a nová prázdná šablona se navíc nevytvoří:
+
+```shell
+uv run krizovkar-gui examples/template-minimal.yaml \
+  examples/crossword-minimal.yaml
+```
+
+Každé viditelné okno představuje právě jeden YAML soubor a v titulku ukazuje
+jeho název, případně **Nová šablona** nebo **Nová křížovka**. Hvězdička
+před názvem označuje neuložené změny.
 
 Podle kořenového klíče `kind` má okno jednu ze dvou podob:
 

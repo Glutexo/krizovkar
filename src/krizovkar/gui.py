@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import tkinter as tk
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from io import StringIO
 from pathlib import Path
@@ -1912,9 +1912,12 @@ class CrosswordDocumentWindow(ttk.Frame):
         return "break"
 
 
-def main() -> int:
-    """Spustí grafické rozhraní a vrátí návratový kód procesu."""
+def main(argv: Sequence[str] | None = None) -> int:
+    """Otevře zadané dokumenty, nebo novou šablonu, a spustí GUI."""
 
+    document_paths = tuple(
+        Path(argument) for argument in (sys.argv[1:] if argv is None else argv)
+    )
     _configure_tk_runtime()
     try:
         root = tk.Tk()
@@ -1922,7 +1925,16 @@ def main() -> int:
         print(f"chyba: grafické rozhraní nelze spustit: {error}", file=sys.stderr)
         return 2
     application = CrosswordApplication(root)
-    application.new_template_document()
+    if document_paths:
+        opened_any = False
+        for source in document_paths:
+            window = application.open_document(source, parent=root)
+            opened_any = window is not None or opened_any
+        if not opened_any:
+            root.destroy()
+            return 2
+    else:
+        application.new_template_document()
     root.mainloop()
     return 0
 
