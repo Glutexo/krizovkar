@@ -620,24 +620,27 @@ class CrosswordApplication(ttk.Frame):
 
     def _build_menu(self) -> None:
         menu = tk.Menu(self.root)
-        file_menu = tk.Menu(menu)
-        file_menu.add_command(
-            label="Uložit dokument (YAML)…",
+        self.file_menu = tk.Menu(menu)
+        self.file_menu.add_command(
+            label="Uložit šablonu (YAML)…",
             accelerator="Ctrl+S",
             command=self.save_current_document_data,
+            state="disabled",
         )
-        file_menu.add_command(
-            label="Uložit dokument jako PDF…",
+        self.file_menu.add_command(
+            label="Uložit šablonu k tisku (PDF)…",
             command=self.save_current_document_pdf,
+            state="disabled",
         )
-        file_menu.add_separator()
-        file_menu.add_command(
+        self.file_menu.add_separator()
+        self.file_menu.add_command(
             label="Uložit řešení křížovky (PDF)…",
             command=self.save_solution_pdf,
+            state="disabled",
         )
-        file_menu.add_separator()
-        file_menu.add_command(label="Konec", command=self.root.destroy)
-        menu.add_cascade(label="Soubor", menu=file_menu)
+        self.file_menu.add_separator()
+        self.file_menu.add_command(label="Konec", command=self.root.destroy)
+        menu.add_cascade(label="Soubor", menu=self.file_menu)
         self.root.configure(menu=menu)
         self.root.bind("<Control-s>", self._save_event)
         self.root.bind("<Command-s>", self._save_event)
@@ -1176,6 +1179,40 @@ class CrosswordApplication(ttk.Frame):
     ) -> None:
         document = "Šablona" if self.notebook.index("current") == 0 else "Křížovka"
         self.root.title(f"{document} — Křížovkář")
+        self._refresh_file_menu()
+
+    def _refresh_file_menu(self) -> None:
+        if self.notebook.index("current") == 0:
+            available = self._base_template is not None
+            state = "normal" if available else "disabled"
+            self.file_menu.entryconfigure(
+                0,
+                label="Uložit šablonu (YAML)…",
+                state=state,
+            )
+            self.file_menu.entryconfigure(
+                1,
+                label="Uložit šablonu k tisku (PDF)…",
+                state=state,
+            )
+            self.file_menu.entryconfigure(3, state="disabled")
+            return
+
+        template = self._template
+        available = template is not None
+        complete = template is not None and template_is_complete(template)
+        self.file_menu.entryconfigure(
+            0,
+            label="Uložit křížovku (YAML)…",
+            state="normal" if available else "disabled",
+        )
+        result_state = "normal" if complete else "disabled"
+        self.file_menu.entryconfigure(
+            1,
+            label="Uložit křížovku bez písmen (PDF)…",
+            state=result_state,
+        )
+        self.file_menu.entryconfigure(3, state=result_state)
 
     def _refresh_template_view(self) -> None:
         if self._base_template is None:
@@ -1184,6 +1221,7 @@ class CrosswordApplication(ttk.Frame):
             self.blank_data_button.configure(state="disabled")
             self.create_crossword_button.configure(state="disabled")
             self.replace_crossword_template_button.configure(state="disabled")
+            self._refresh_file_menu()
             return
         self.template_preview.show_crossword(
             create_grid_from_template(self._base_template),
@@ -1193,6 +1231,7 @@ class CrosswordApplication(ttk.Frame):
         self.blank_data_button.configure(state="normal")
         self.create_crossword_button.configure(state="normal")
         self.replace_crossword_template_button.configure(state="normal")
+        self._refresh_file_menu()
 
     def _slot_label(self, selected: WordSlot) -> str:
         assert self._template is not None
@@ -1386,6 +1425,7 @@ class CrosswordApplication(ttk.Frame):
             self.answer_value.set("")
             self.clue_value.set("")
             self._set_slot_form_state("disabled")
+            self._refresh_file_menu()
             return
         self.replace_crossword_template_button.configure(
             text="Nahradit aktuální šablonou"
@@ -1406,6 +1446,7 @@ class CrosswordApplication(ttk.Frame):
             self.progress_value.set(
                 document + f"Všech {_word_count_text(filled)} je vyplněno."
             )
+        self._refresh_file_menu()
 
     def _refresh_crossword_preview(self) -> None:
         template = self._template

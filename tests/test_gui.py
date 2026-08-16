@@ -365,6 +365,46 @@ class GuiTest(unittest.TestCase):
         application.save_blank_template_pdf.assert_called_once_with()
         application.save_crossword_pdf.assert_called_once_with()
 
+    def test_file_menu_follows_template_document(self) -> None:
+        application = Mock()
+        application.notebook.index.return_value = 0
+        application._base_template = Mock()
+
+        CrosswordApplication._refresh_file_menu(application)
+
+        self.assertEqual(
+            [
+                call(0, label="Uložit šablonu (YAML)…", state="normal"),
+                call(
+                    1,
+                    label="Uložit šablonu k tisku (PDF)…",
+                    state="normal",
+                ),
+                call(3, state="disabled"),
+            ],
+            application.file_menu.entryconfigure.call_args_list,
+        )
+
+    def test_file_menu_enables_complete_crossword_outputs(self) -> None:
+        application = Mock()
+        application.notebook.index.return_value = 1
+        application._template = _filled_numbered_template()
+
+        CrosswordApplication._refresh_file_menu(application)
+
+        self.assertEqual(
+            [
+                call(0, label="Uložit křížovku (YAML)…", state="normal"),
+                call(
+                    1,
+                    label="Uložit křížovku bez písmen (PDF)…",
+                    state="normal",
+                ),
+                call(3, state="normal"),
+            ],
+            application.file_menu.entryconfigure.call_args_list,
+        )
+
     def test_saves_pdf_through_renderer_without_manual_dialog(self) -> None:
         template = _filled_numbered_template()
         grid = create_grid_from_template(template)

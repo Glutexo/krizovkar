@@ -36,7 +36,8 @@ Oba dokumenty jsou na sobě po vytvoření křížovky nezávislé. Změna rozm�
 nebo podoby šablony proto nerozbije rozpracovanou křížovku; tu nahradí až
 výslovná akce **Nahradit aktuální šablonou**, která si při existujících
 heslech vyžádá potvrzení. Klávesová zkratka `Ctrl+S` ukládá do YAML právě
-otevřený dokument a nabídka **Soubor** směruje PDF stejně podle aktivní karty.
+otevřený dokument. Nabídka **Soubor** podle aktivní karty pojmenuje a
+zpřístupní jen výstupy, které jsou pro daný dokument právě dostupné.
 
 Ve švédské podobě jsou místa pro nápovědy součástí předem vytvořené mřížky.
 Číslovaná podoba ponechá všechna pole pro písmena a nápovědy vysází pod
