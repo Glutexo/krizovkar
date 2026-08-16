@@ -804,11 +804,99 @@ class CrosswordApplication:
             if recent_documents is not None
             else _RecentDocuments()
         )
+        self._configure_no_document_window()
+        self._build_menu()
         self.root.withdraw()
 
     @property
     def recent_document_paths(self) -> tuple[Path, ...]:
         return self._recent_documents.paths
+
+    def _configure_no_document_window(self) -> None:
+        self.root.title("Křížovkář")
+        self.root.geometry("560x260")
+        self.root.minsize(440, 220)
+        self.root.option_add("*tearOff", False)
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
+        content = ttk.Frame(self.root, padding=32)
+        content.grid(row=0, column=0, sticky="nsew")
+        content.columnconfigure(0, weight=1)
+        content.rowconfigure(0, weight=1)
+        ttk.Label(
+            content,
+            text="Není otevřený žádný dokument.",
+            anchor="center",
+        ).grid(row=0, column=0, sticky="nsew")
+
+    def _build_menu(self) -> None:
+        new_shortcut = _keyboard_shortcut("n")
+        open_shortcut = _keyboard_shortcut("o")
+        menu = tk.Menu(self.root)
+        self.file_menu = tk.Menu(menu)
+        self.file_menu.add_command(
+            label="Nová šablona",
+            accelerator=new_shortcut.accelerator,
+            command=self.new_template_document,
+        )
+        self.file_menu.add_command(
+            label="Otevřít…",
+            accelerator=open_shortcut.accelerator,
+            command=lambda: self.choose_document(
+                parent=self._no_document_dialog_parent()
+            ),
+        )
+        self.recent_documents_menu = tk.Menu(
+            self.file_menu,
+            postcommand=self._refresh_recent_documents_menu,
+        )
+        self.file_menu.add_cascade(
+            label="Otevřít poslední",
+            menu=self.recent_documents_menu,
+        )
+        menu.add_cascade(label="Soubor", menu=self.file_menu)
+        self.root.configure(menu=menu)
+        self.root.bind(new_shortcut.sequence, self._new_event)
+        self.root.bind(open_shortcut.sequence, self._open_event)
+
+    def _refresh_recent_documents_menu(self) -> None:
+        self.recent_documents_menu.delete(0, "end")
+        paths = self.recent_document_paths
+        if not paths:
+            self.recent_documents_menu.add_command(
+                label="Žádné nedávné dokumenty",
+                state="disabled",
+            )
+            return
+        for path in paths:
+            self.recent_documents_menu.add_command(
+                label=_recent_document_label(path, paths),
+                command=lambda recent_path=path: self.open_recent_document(
+                    recent_path,
+                    parent=self._no_document_dialog_parent(),
+                ),
+            )
+        self.recent_documents_menu.add_separator()
+        self.recent_documents_menu.add_command(
+            label="Vymazat nabídku",
+            command=self.clear_recent_documents,
+        )
+
+    def _no_document_dialog_parent(self) -> tk.Misc | None:
+        return None if sys.platform == "darwin" else self.root
+
+    def show_no_document_state(self) -> None:
+        if sys.platform != "darwin":
+            self.root.deiconify()
+            self.root.lift()
+
+    def _new_event(self, _event: tk.Event[tk.Misc]) -> str:
+        self.new_template_document()
+        return "break"
+
+    def _open_event(self, _event: tk.Event[tk.Misc]) -> str:
+        self.choose_document(parent=self._no_document_dialog_parent())
+        return "break"
 
     def new_template_document(self) -> CrosswordDocumentWindow:
         template = create_blank_template(
@@ -847,7 +935,7 @@ class CrosswordApplication:
         self,
         source: Path,
         *,
-        parent: tk.Misc,
+        parent: tk.Misc | None,
     ) -> CrosswordDocumentWindow | None:
         source = source.expanduser().absolute()
         try:
@@ -867,7 +955,7 @@ class CrosswordApplication:
         self,
         source: Path,
         *,
-        parent: tk.Misc,
+        parent: tk.Misc | None,
     ) -> CrosswordDocumentWindow | None:
         if not source.exists():
             self._recent_documents.remove(source)
@@ -893,6 +981,7 @@ class CrosswordApplication:
         path: Path | None = None,
         dirty: bool,
     ) -> CrosswordDocumentWindow:
+        self.root.withdraw()
         window_root = tk.Toplevel(self.root)
         window = CrosswordDocumentWindow(
             window_root,
@@ -909,7 +998,7 @@ class CrosswordApplication:
             self._windows.remove(window)
         window.root.destroy()
         if not self._windows:
-            self.root.destroy()
+            self.show_no_document_state()
 
 
 class CrosswordDocumentWindow(ttk.Frame):
@@ -2097,8 +2186,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
     else:
         if application.choose_document(parent=None) is None:
-            root.destroy()
-            return 0
+            application.show_no_document_state()
     root.mainloop()
     return 0
 

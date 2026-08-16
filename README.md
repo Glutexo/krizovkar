@@ -22,10 +22,11 @@ uv run krizovkar-gui
 ```
 
 Tím se otevře systémový dialog pro výběr existující šablony nebo
-křížovky. Jeho zavření ukončí aplikaci bez vytvoření dokumentu.
-Existující soubor lze také otevřít přímo při spuštění; každá zadaná
-cesta dostane vlastní okno a systémový dialog se v tom případě
-nezobrazí:
+křížovky. Po jeho zavření zůstane aplikace spuštěná bez otevřeného
+dokumentu; z nabídky **Soubor** lze vytvořit novou šablonu, otevřít
+soubor nebo vybrat některý z posledních dokumentů. Existující soubor
+lze také otevřít přímo při spuštění; každá zadaná cesta dostane vlastní
+okno a systémový dialog se v tom případě nezobrazí:
 
 ```shell
 uv run krizovkar-gui examples/template-minimal.yaml \
@@ -54,8 +55,9 @@ Nabídka **Soubor** umí otevřít existující `kind: template` nebo
 `⌘S`, `⇧⌘S` a `⌘W`; na ostatních systémech odpovídající `Ctrl+N`,
 `Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+S` a `Ctrl+W`. Poslední z nich zavře pouze
 dané okno; pokud obsahuje neuložené změny, editor se zeptá na jejich
-uložení. Otevřená šablona a křížovka jsou po vytvoření nezávislé; změna
-jednoho okna proto obsah druhého neovlivní.
+uložení. Po zavření posledního okna zůstane aplikace spuštěná bez
+dokumentu. Otevřená šablona a křížovka jsou po vytvoření nezávislé;
+změna jednoho okna proto obsah druhého neovlivní.
 
 Podnabídka **Soubor → Otevřít poslední** uchovává mezi spuštěními až
 deset naposledy otevřených nebo uložených dokumentů. Neexistující soubor

@@ -214,6 +214,74 @@ class GuiTest(unittest.TestCase):
             menu=recent_documents_menu,
         )
 
+    def test_application_menu_is_available_without_document(self) -> None:
+        application = CrosswordApplication.__new__(CrosswordApplication)
+        application.root = Mock()
+        application.choose_document = Mock()
+        menu = Mock()
+        file_menu = Mock()
+        recent_documents_menu = Mock()
+
+        with (
+            patch("krizovkar.gui.sys.platform", "darwin"),
+            patch(
+                "krizovkar.gui.tk.Menu",
+                side_effect=(menu, file_menu, recent_documents_menu),
+            ),
+        ):
+            application._build_menu()
+
+        commands = file_menu.add_command.call_args_list
+        self.assertEqual(
+            ["Nová šablona", "Otevřít…"],
+            [item.kwargs["label"] for item in commands],
+        )
+        self.assertEqual(
+            ["Command-N", "Command-O"],
+            [item.kwargs["accelerator"] for item in commands],
+        )
+        commands[1].kwargs["command"]()
+        application.choose_document.assert_called_once_with(parent=None)
+        file_menu.add_cascade.assert_called_once_with(
+            label="Otevřít poslední",
+            menu=recent_documents_menu,
+        )
+        menu.add_cascade.assert_called_once_with(
+            label="Soubor",
+            menu=file_menu,
+        )
+        application.root.configure.assert_called_once_with(menu=menu)
+        self.assertEqual(
+            [
+                call("<Command-n>", application._new_event),
+                call("<Command-o>", application._open_event),
+            ],
+            application.root.bind.call_args_list,
+        )
+
+    def test_application_recent_menu_works_without_document(self) -> None:
+        application = CrosswordApplication.__new__(CrosswordApplication)
+        recent_document = Path("sablona.yaml")
+        application._recent_documents = Mock(paths=(recent_document,))
+        application.recent_documents_menu = Mock()
+        application.open_recent_document = Mock()
+        application.clear_recent_documents = Mock()
+
+        with patch("krizovkar.gui.sys.platform", "darwin"):
+            application._refresh_recent_documents_menu()
+
+        commands = application.recent_documents_menu.add_command.call_args_list
+        self.assertEqual(
+            ["sablona.yaml", "Vymazat nabídku"],
+            [item.kwargs["label"] for item in commands],
+        )
+        commands[0].kwargs["command"]()
+        application.open_recent_document.assert_called_once_with(
+            recent_document,
+            parent=None,
+        )
+        application.recent_documents_menu.add_separator.assert_called_once_with()
+
     def test_recent_documents_menu_opens_files_and_can_be_cleared(self) -> None:
         window = Mock()
         first = Path("prvni") / "sablona.yaml"
@@ -512,27 +580,61 @@ class GuiTest(unittest.TestCase):
     def test_application_owner_stays_hidden_behind_document_windows(self) -> None:
         root = Mock()
 
-        application = CrosswordApplication(root)
+        with (
+            patch.object(
+                CrosswordApplication,
+                "_configure_no_document_window",
+            ),
+            patch.object(CrosswordApplication, "_build_menu"),
+        ):
+            application = CrosswordApplication(root)
 
         root.withdraw.assert_called_once_with()
         self.assertEqual([], application._windows)
 
-    def test_application_exits_after_last_document_window_closes(self) -> None:
+    def test_application_stays_open_after_last_document_window_closes(self) -> None:
         root = Mock()
-        application = CrosswordApplication(root)
+        with (
+            patch.object(
+                CrosswordApplication,
+                "_configure_no_document_window",
+            ),
+            patch.object(CrosswordApplication, "_build_menu"),
+        ):
+            application = CrosswordApplication(root)
         first = Mock()
         second = Mock()
         application._windows = [first, second]
+        application.show_no_document_state = Mock()
 
         application.close_window(first)
 
         first.root.destroy.assert_called_once_with()
         root.destroy.assert_not_called()
+        application.show_no_document_state.assert_not_called()
 
         application.close_window(second)
 
         second.root.destroy.assert_called_once_with()
-        root.destroy.assert_called_once_with()
+        root.destroy.assert_not_called()
+        application.show_no_document_state.assert_called_once_with()
+
+    def test_application_shows_owner_window_without_document_off_macos(self) -> None:
+        application = CrosswordApplication.__new__(CrosswordApplication)
+        application.root = Mock()
+
+        with patch("krizovkar.gui.sys.platform", "linux"):
+            application.show_no_document_state()
+
+        application.root.deiconify.assert_called_once_with()
+        application.root.lift.assert_called_once_with()
+
+        application.root.reset_mock()
+        with patch("krizovkar.gui.sys.platform", "darwin"):
+            application.show_no_document_state()
+
+        application.root.deiconify.assert_not_called()
+        application.root.lift.assert_not_called()
 
     def test_application_opens_yaml_in_new_document_window(self) -> None:
         application = Mock()
@@ -961,11 +1063,12 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual(0, exit_code)
         application.choose_document.assert_called_once_with(parent=None)
+        application.show_no_document_state.assert_not_called()
         application.new_template_document.assert_not_called()
         application.open_document.assert_not_called()
         root.mainloop.assert_called_once_with()
 
-    def test_main_exits_cleanly_when_system_file_dialog_is_cancelled(self) -> None:
+    def test_main_stays_open_when_system_file_dialog_is_cancelled(self) -> None:
         root = Mock()
         application = Mock()
         application.choose_document.return_value = None
@@ -980,8 +1083,9 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual(0, exit_code)
         application.choose_document.assert_called_once_with(parent=None)
-        root.destroy.assert_called_once_with()
-        root.mainloop.assert_not_called()
+        application.show_no_document_state.assert_called_once_with()
+        root.destroy.assert_not_called()
+        root.mainloop.assert_called_once_with()
 
     def test_main_opens_each_given_yaml_in_its_own_document_window(self) -> None:
         root = Mock()
