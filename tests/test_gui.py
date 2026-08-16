@@ -9,9 +9,10 @@ import unittest
 from contextlib import redirect_stderr
 from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
 from krizovkar.gui import (
+    CrosswordApplication,
     GuiInputError,
     SpecificationSettings,
     _configure_tk_runtime,
@@ -32,6 +33,19 @@ from krizovkar.model import (
     load_crossword_specification,
     write_crossword_specification,
 )
+from krizovkar.renderer import RenderError
+
+
+PDF_BYTES = b"%PDF-1.7\n%%EOF\n"
+
+
+def _fake_lualatex(source: Path, output_directory: Path) -> Path:
+    assert source.read_text(encoding="utf-8").startswith(
+        "% Automaticky vytvořil Křížovkář."
+    )
+    output = output_directory / f"{source.stem}.pdf"
+    output.write_bytes(PDF_BYTES)
+    return output
 
 
 class GuiTest(unittest.TestCase):
@@ -225,6 +239,146 @@ class GuiTest(unittest.TestCase):
         self.assertIsInstance(first_letter, LetterCell)
         assert isinstance(first_letter, LetterCell)
         self.assertEqual("L", first_letter.value)
+
+    def test_crossword_pdf_actions_choose_puzzle_and_solution(self) -> None:
+        application = Mock()
+        prepared = Mock()
+        application._prepared_crossword_or_error.return_value = prepared
+        application.page_format_value.get.return_value = "A5"
+
+        CrosswordApplication.save_crossword_pdf(application)
+        CrosswordApplication.save_solution_pdf(application)
+
+        self.assertEqual(
+            [
+                call(
+                    prepared.grid,
+                    filled=False,
+                    title="Uložit křížovku bez písmen",
+                    initialfile="krizovka.pdf",
+                    success_message="Křížovka bez písmen byla uložena",
+                    page_format="A5",
+                    template_tab=False,
+                ),
+                call(
+                    prepared.grid,
+                    filled=True,
+                    title="Uložit řešení křížovky",
+                    initialfile="reseni.pdf",
+                    success_message="Řešení bylo uloženo",
+                    page_format="A5",
+                    template_tab=False,
+                ),
+            ],
+            application._save_pdf.call_args_list,
+        )
+
+    def test_blank_template_pdf_action_uses_current_template(self) -> None:
+        application = Mock()
+        application.refresh_blank_template.return_value = True
+        application.template_page_format_value.get.return_value = "Letter"
+
+        CrosswordApplication.save_blank_template_pdf(application)
+
+        application._save_pdf.assert_called_once_with(
+            application._blank_grid,
+            filled=False,
+            title="Uložit prázdnou šablonu",
+            initialfile="prazdna-sablona.pdf",
+            success_message="Prázdná šablona byla uložena",
+            page_format="Letter",
+            template_tab=True,
+        )
+
+    def test_saves_pdf_through_renderer_without_manual_dialog(self) -> None:
+        word = parse_word_placement(
+            "LABE",
+            "Česká řeka",
+            "2",
+            "2",
+            "horizontal",
+            False,
+        )
+        specification = create_specification(
+            SpecificationSettings(width=7, height=6),
+            (word,),
+        )
+        crossword = prepare_crossword(specification, "swedish").grid
+        application = Mock()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "krizovka.pdf"
+            application._choose_output.return_value = (output, False)
+
+            with patch(
+                "krizovkar.renderer._run_lualatex",
+                side_effect=_fake_lualatex,
+            ):
+                CrosswordApplication._save_pdf(
+                    application,
+                    crossword,
+                    filled=False,
+                    title="Uložit křížovku bez písmen",
+                    initialfile="krizovka.pdf",
+                    success_message="Křížovka bez písmen byla uložena",
+                    page_format="A5",
+                    template_tab=False,
+                )
+
+            self.assertEqual(PDF_BYTES, output.read_bytes())
+
+        application._choose_output.assert_called_once_with(
+            title="Uložit křížovku bez písmen",
+            initialfile="krizovka.pdf",
+            extension=".pdf",
+            filetypes=(("PDF soubory", "*.pdf"), ("Všechny soubory", "*")),
+            overwrite_title="Přepsat PDF?",
+        )
+        self.assertEqual(
+            [
+                call("Vytvářím PDF…"),
+                call(
+                    f"Křížovka bez písmen byla uložena: {output}",
+                    success=True,
+                ),
+            ],
+            application._set_crossword_status.call_args_list,
+        )
+        self.assertEqual(
+            [call(cursor="watch"), call(cursor="")],
+            application.root.configure.call_args_list,
+        )
+        application.root.update_idletasks.assert_called_once_with()
+        application._show_action_error.assert_not_called()
+
+    def test_pdf_render_error_is_shown_and_restores_cursor(self) -> None:
+        application = Mock()
+        application._choose_output.return_value = (Path("sablona.pdf"), False)
+
+        with patch(
+            "krizovkar.gui.render_pdf",
+            side_effect=RenderError("nainstalujte TeX Live"),
+        ):
+            CrosswordApplication._save_pdf(
+                application,
+                Mock(),
+                filled=False,
+                title="Uložit prázdnou šablonu",
+                initialfile="prazdna-sablona.pdf",
+                success_message="Prázdná šablona byla uložena",
+                page_format="A4",
+                template_tab=True,
+            )
+
+        application._show_action_error.assert_called_once_with(
+            "PDF nelze vytvořit",
+            "nainstalujte TeX Live",
+            template_tab=True,
+        )
+        application._set_template_status.assert_called_once_with("Vytvářím PDF…")
+        self.assertEqual(
+            [call(cursor="watch"), call(cursor="")],
+            application.root.configure.call_args_list,
+        )
 
     def test_creates_blank_numbered_template_without_words(self) -> None:
         template = create_blank_template(
