@@ -46,12 +46,12 @@ Podle kořenového klíče `kind` má okno jednu ze dvou podob:
   vyplnění všech míst také jako tiskovou křížovku a samostatné řešení v PDF.
 
 Nabídka **Soubor** umí otevřít existující `kind: template` nebo
-`kind: crossword` v dalším okně. `Ctrl+N` otevře novou šablonu, `Ctrl+O`
-vybere existující dokument, `Ctrl+S` uloží aktuální soubor a
-`Ctrl+Shift+S` zvolí novou cestu. `Ctrl+W` zavře pouze dané okno; pokud
-obsahuje neuložené změny, editor se zeptá na jejich uložení. Otevřená
-šablona a křížovka jsou po vytvoření nezávislé; změna jednoho okna proto
-obsah druhého neovlivní.
+`kind: crossword` v dalším okně. Na macOS používá zkratky `⌘N`, `⌘O`,
+`⌘S`, `⇧⌘S` a `⌘W`; na ostatních systémech odpovídající `Ctrl+N`,
+`Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+S` a `Ctrl+W`. Poslední z nich zavře pouze
+dané okno; pokud obsahuje neuložené změny, editor se zeptá na jejich
+uložení. Otevřená šablona a křížovka jsou po vytvoření nezávislé; změna
+jednoho okna proto obsah druhého neovlivní.
 
 PDF výstupy nejsou součástí pracovního panelu. Podnabídka **Soubor →
 Exportovat** nabízí výstupy dostupné pro daný dokument. Formát stránky

@@ -18,6 +18,7 @@ from krizovkar.gui import (
     GuiInputError,
     TemplateSettings,
     _configure_tk_runtime,
+    _keyboard_shortcut,
     clear_template_slot,
     create_blank_template,
     fill_template_slot,
@@ -71,6 +72,58 @@ def _filled_numbered_crossword():
 
 
 class GuiTest(unittest.TestCase):
+    def test_keyboard_shortcuts_follow_operating_system_conventions(self) -> None:
+        with patch("krizovkar.gui.sys.platform", "darwin"):
+            new_shortcut = _keyboard_shortcut("n")
+            save_as_shortcut = _keyboard_shortcut("s", shift=True)
+
+        self.assertEqual("⌘N", new_shortcut.accelerator)
+        self.assertEqual("<Command-n>", new_shortcut.sequence)
+        self.assertEqual("⇧⌘S", save_as_shortcut.accelerator)
+        self.assertEqual("<Command-Shift-S>", save_as_shortcut.sequence)
+
+        with patch("krizovkar.gui.sys.platform", "linux"):
+            new_shortcut = _keyboard_shortcut("n")
+            save_as_shortcut = _keyboard_shortcut("s", shift=True)
+
+        self.assertEqual("Ctrl+N", new_shortcut.accelerator)
+        self.assertEqual("<Control-n>", new_shortcut.sequence)
+        self.assertEqual("Ctrl+Shift+S", save_as_shortcut.accelerator)
+        self.assertEqual("<Control-Shift-S>", save_as_shortcut.sequence)
+
+    def test_menu_uses_only_command_shortcuts_on_macos(self) -> None:
+        window = Mock()
+        menu = Mock()
+        file_menu = Mock()
+        export_menu = Mock()
+
+        with (
+            patch("krizovkar.gui.sys.platform", "darwin"),
+            patch(
+                "krizovkar.gui.tk.Menu",
+                side_effect=(menu, file_menu, export_menu),
+            ),
+        ):
+            CrosswordDocumentWindow._build_menu(window)
+
+        self.assertEqual(
+            ["⌘N", "⌘O", "⌘S", "⇧⌘S", "⌘W"],
+            [
+                item.kwargs["accelerator"]
+                for item in file_menu.add_command.call_args_list
+            ],
+        )
+        self.assertEqual(
+            [
+                call("<Command-n>", window._new_event),
+                call("<Command-o>", window._open_event),
+                call("<Command-s>", window._save_event),
+                call("<Command-Shift-S>", window._save_as_event),
+                call("<Command-w>", window._close_event),
+            ],
+            window.root.bind.call_args_list,
+        )
+
     def test_configures_bundled_tk_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             library_root = Path(directory) / "lib"

@@ -70,6 +70,27 @@ class TemplateSettings:
     height: int
 
 
+@dataclass(frozen=True, slots=True)
+class _KeyboardShortcut:
+    """Popisek nabídky a odpovídající vazba kláves podle platformy."""
+
+    accelerator: str
+    sequence: str
+
+
+def _keyboard_shortcut(key: str, *, shift: bool = False) -> _KeyboardShortcut:
+    normalized_key = key.lower()
+    if sys.platform == "darwin":
+        accelerator = f"{'⇧' if shift else ''}⌘{normalized_key.upper()}"
+        modifier = "Command"
+    else:
+        accelerator = f"Ctrl+{'Shift+' if shift else ''}{normalized_key.upper()}"
+        modifier = "Control"
+    sequence_key = normalized_key.upper() if shift else normalized_key
+    sequence = f"<{modifier}-{'Shift-' if shift else ''}{sequence_key}>"
+    return _KeyboardShortcut(accelerator, sequence)
+
+
 class PdfExportDialog(simpledialog.Dialog):
     """Vybere formát PDF před systémovým dialogem pro uložení."""
 
@@ -815,27 +836,32 @@ class CrosswordDocumentWindow(ttk.Frame):
         style.configure("Success.TLabel", foreground="#067647")
 
     def _build_menu(self) -> None:
+        new_shortcut = _keyboard_shortcut("n")
+        open_shortcut = _keyboard_shortcut("o")
+        save_shortcut = _keyboard_shortcut("s")
+        save_as_shortcut = _keyboard_shortcut("s", shift=True)
+        close_shortcut = _keyboard_shortcut("w")
         menu = tk.Menu(self.root)
         self.file_menu = tk.Menu(menu)
         self.file_menu.add_command(
             label="Nová šablona",
-            accelerator="Ctrl+N",
+            accelerator=new_shortcut.accelerator,
             command=self.application.new_template_document,
         )
         self.file_menu.add_command(
             label="Otevřít…",
-            accelerator="Ctrl+O",
+            accelerator=open_shortcut.accelerator,
             command=lambda: self.application.choose_document(parent=self.root),
         )
         self.file_menu.add_separator()
         self.file_menu.add_command(
             label="Uložit",
-            accelerator="Ctrl+S",
+            accelerator=save_shortcut.accelerator,
             command=self.save_current_document_data,
         )
         self.file_menu.add_command(
             label="Uložit jako…",
-            accelerator="Ctrl+Shift+S",
+            accelerator=save_as_shortcut.accelerator,
             command=self.save_document_as,
         )
         self.file_menu.add_separator()
@@ -845,21 +871,16 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.file_menu.add_separator()
         self.file_menu.add_command(
             label="Zavřít okno",
-            accelerator="Ctrl+W",
+            accelerator=close_shortcut.accelerator,
             command=self.request_close,
         )
         menu.add_cascade(label="Soubor", menu=self.file_menu)
         self.root.configure(menu=menu)
-        self.root.bind("<Control-n>", self._new_event)
-        self.root.bind("<Command-n>", self._new_event)
-        self.root.bind("<Control-o>", self._open_event)
-        self.root.bind("<Command-o>", self._open_event)
-        self.root.bind("<Control-s>", self._save_event)
-        self.root.bind("<Command-s>", self._save_event)
-        self.root.bind("<Control-Shift-S>", self._save_as_event)
-        self.root.bind("<Command-Shift-S>", self._save_as_event)
-        self.root.bind("<Control-w>", self._close_event)
-        self.root.bind("<Command-w>", self._close_event)
+        self.root.bind(new_shortcut.sequence, self._new_event)
+        self.root.bind(open_shortcut.sequence, self._open_event)
+        self.root.bind(save_shortcut.sequence, self._save_event)
+        self.root.bind(save_as_shortcut.sequence, self._save_as_event)
+        self.root.bind(close_shortcut.sequence, self._close_event)
 
     def _add_export_actions(self) -> None:
         if self._document_kind == "template":
