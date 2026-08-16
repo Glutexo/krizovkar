@@ -230,10 +230,48 @@ class GuiTest(unittest.TestCase):
 
             self.assertEqual(template, load_crossword_template(output))
 
+    def test_updating_template_keeps_crossword_document(self) -> None:
+        application = Mock()
+        crossword = Mock()
+        new_template = create_blank_template(TemplateSettings(3, 3), "numbered")
+        application._template = crossword
+        application.width_value.get.return_value = "3"
+        application.height_value.get.return_value = "3"
+        application.layout_value.get.return_value = "numbered"
+
+        with patch(
+            "krizovkar.gui.create_blank_template",
+            return_value=new_template,
+        ):
+            CrosswordApplication.create_new_template(application)
+
+        self.assertIs(new_template, application._base_template)
+        self.assertIs(crossword, application._template)
+        application.create_crossword_from_template.assert_not_called()
+
+    def test_crossword_is_created_explicitly_from_template(self) -> None:
+        application = Mock()
+        template = create_blank_template(TemplateSettings(3, 3), "numbered")
+        application._base_template = template
+        application._template = None
+        application._layout = "numbered"
+
+        CrosswordApplication.create_crossword_from_template(
+            application,
+            select_document=False,
+        )
+
+        self.assertIs(template, application._template)
+        self.assertEqual("numbered", application._crossword_layout)
+        application._rebuild_slot_tree.assert_called_once_with()
+        application._refresh_crossword_view.assert_called_once_with()
+        application.notebook.select.assert_not_called()
+
     def test_crossword_pdf_actions_choose_puzzle_and_solution(self) -> None:
         application = Mock()
         grid = Mock()
         application._complete_grid_or_error.return_value = grid
+        application.crossword_page_format_value.get.return_value = "A5"
 
         CrosswordApplication.save_crossword_pdf(application)
         CrosswordApplication.save_solution_pdf(application)
@@ -246,6 +284,8 @@ class GuiTest(unittest.TestCase):
                     title="Uložit křížovku bez písmen",
                     initialfile="krizovka.pdf",
                     success_message="Křížovka bez písmen byla uložena",
+                    page_format="A5",
+                    document="crossword",
                 ),
                 call(
                     grid,
@@ -253,6 +293,8 @@ class GuiTest(unittest.TestCase):
                     title="Uložit řešení křížovky",
                     initialfile="reseni.pdf",
                     success_message="Řešení bylo uloženo",
+                    page_format="A5",
+                    document="crossword",
                 ),
             ],
             application._save_pdf.call_args_list,
@@ -264,6 +306,7 @@ class GuiTest(unittest.TestCase):
             TemplateSettings(3, 3),
             "numbered",
         )
+        application.template_page_format_value.get.return_value = "Letter"
 
         with patch("krizovkar.gui.create_grid_from_template") as create_grid:
             CrosswordApplication.save_blank_template_pdf(application)
@@ -272,16 +315,31 @@ class GuiTest(unittest.TestCase):
         application._save_pdf.assert_called_once_with(
             create_grid.return_value,
             filled=False,
-            title="Uložit prázdnou šablonu",
-            initialfile="prazdna-sablona.pdf",
-            success_message="Prázdná šablona byla uložena",
+            title="Uložit šablonu k tisku",
+            initialfile="sablona.pdf",
+            success_message="Šablona k tisku byla uložena",
+            page_format="Letter",
+            document="template",
         )
+
+    def test_current_document_actions_follow_selected_tab(self) -> None:
+        application = Mock()
+        application.notebook.index.side_effect = (0, 1, 0, 1)
+
+        CrosswordApplication.save_current_document_data(application)
+        CrosswordApplication.save_current_document_data(application)
+        CrosswordApplication.save_current_document_pdf(application)
+        CrosswordApplication.save_current_document_pdf(application)
+
+        application.save_blank_template_data.assert_called_once_with()
+        application.save_current_template_data.assert_called_once_with()
+        application.save_blank_template_pdf.assert_called_once_with()
+        application.save_crossword_pdf.assert_called_once_with()
 
     def test_saves_pdf_through_renderer_without_manual_dialog(self) -> None:
         template = _filled_numbered_template()
         grid = create_grid_from_template(template)
         application = Mock()
-        application.page_format_value.get.return_value = "A5"
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "krizovka.pdf"
             application._choose_output.return_value = (output, False)
@@ -297,6 +355,8 @@ class GuiTest(unittest.TestCase):
                     title="Uložit křížovku bez písmen",
                     initialfile="krizovka.pdf",
                     success_message="Křížovka bez písmen byla uložena",
+                    page_format="A5",
+                    document="crossword",
                 )
 
             self.assertEqual(PDF_BYTES, output.read_bytes())
@@ -310,13 +370,14 @@ class GuiTest(unittest.TestCase):
         )
         self.assertEqual(
             [
-                call("Vytvářím PDF…"),
+                call("crossword", "Vytvářím PDF…"),
                 call(
+                    "crossword",
                     f"Křížovka bez písmen byla uložena: {output}",
                     success=True,
                 ),
             ],
-            application._set_status.call_args_list,
+            application._set_document_status.call_args_list,
         )
         self.assertEqual(
             [call(cursor="watch"), call(cursor="")],
@@ -327,7 +388,6 @@ class GuiTest(unittest.TestCase):
 
     def test_pdf_render_error_is_shown_and_restores_cursor(self) -> None:
         application = Mock()
-        application.page_format_value.get.return_value = "A4"
         application._choose_output.return_value = (Path("sablona.pdf"), False)
 
         with patch(
@@ -338,16 +398,22 @@ class GuiTest(unittest.TestCase):
                 application,
                 Mock(),
                 filled=False,
-                title="Uložit prázdnou šablonu",
-                initialfile="prazdna-sablona.pdf",
-                success_message="Prázdná šablona byla uložena",
+                title="Uložit šablonu k tisku",
+                initialfile="sablona.pdf",
+                success_message="Šablona k tisku byla uložena",
+                page_format="A4",
+                document="template",
             )
 
         application._show_action_error.assert_called_once_with(
             "PDF nelze vytvořit",
             "nainstalujte TeX Live",
+            document="template",
         )
-        application._set_status.assert_called_once_with("Vytvářím PDF…")
+        application._set_document_status.assert_called_once_with(
+            "template",
+            "Vytvářím PDF…",
+        )
         self.assertEqual(
             [call(cursor="watch"), call(cursor="")],
             application.root.configure.call_args_list,
