@@ -581,7 +581,9 @@ class CrosswordApplication(ttk.Frame):
         self.layout_help_value = tk.StringVar()
         self.answer_value = tk.StringVar()
         self.clue_value = tk.StringVar()
-        self.slot_title_value = tk.StringVar(value="Nejprve vytvořte rozvržení.")
+        self.slot_title_value = tk.StringVar(
+            value="Křížovka zatím není vytvořená."
+        )
         self.slot_pattern_value = tk.StringVar(value="Vzor z křížení: —")
         self.progress_value = tk.StringVar(value="Křížovka zatím není vytvořená.")
         self.template_page_format_value = tk.StringVar(value=DEFAULT_PAGE_FORMAT)
@@ -594,6 +596,7 @@ class CrosswordApplication(ttk.Frame):
         self._build_menu()
         self._build_content()
         self._watch_inputs()
+        self._refresh_crossword_view()
         self.root.after_idle(self.create_new_template)
 
     def _configure_window(self) -> None:
@@ -884,7 +887,11 @@ class CrosswordApplication(ttk.Frame):
             column=0,
             sticky="w",
         )
-        self.answer_entry = ttk.Entry(parent, textvariable=self.answer_value)
+        self.answer_entry = ttk.Entry(
+            parent,
+            textvariable=self.answer_value,
+            state="disabled",
+        )
         self.answer_entry.grid(
             row=3,
             column=0,
@@ -896,7 +903,11 @@ class CrosswordApplication(ttk.Frame):
             column=0,
             sticky="w",
         )
-        self.clue_entry = ttk.Entry(parent, textvariable=self.clue_value)
+        self.clue_entry = ttk.Entry(
+            parent,
+            textvariable=self.clue_value,
+            state="disabled",
+        )
         self.clue_entry.grid(
             row=5,
             column=0,
@@ -1118,8 +1129,6 @@ class CrosswordApplication(ttk.Frame):
             f"{_word_count_text(len(template.slots))}.",
             success=True,
         )
-        if self._template is None:
-            self.create_crossword_from_template(select_document=False)
 
     def create_crossword_from_template(
         self,
@@ -1368,7 +1377,19 @@ class CrosswordApplication(ttk.Frame):
         self.solution_pdf_button.configure(state=result_state)
         if template is None:
             self.progress_value.set("Křížovka zatím není vytvořená.")
+            self.replace_crossword_template_button.configure(
+                text="Vytvořit podle aktuální šablony"
+            )
+            self._selected_slot_identifier = None
+            self.slot_title_value.set("Křížovka zatím není vytvořená.")
+            self.slot_pattern_value.set("Vzor z křížení: —")
+            self.answer_value.set("")
+            self.clue_value.set("")
+            self._set_slot_form_state("disabled")
             return
+        self.replace_crossword_template_button.configure(
+            text="Nahradit aktuální šablonou"
+        )
         filled = self._filled_slot_count()
         remaining = len(template.slots) - filled
         layout = "číslovaná" if self._crossword_layout == "numbered" else "švédská"

@@ -249,6 +249,35 @@ class GuiTest(unittest.TestCase):
         self.assertIs(crossword, application._template)
         application.create_crossword_from_template.assert_not_called()
 
+    def test_creating_first_template_keeps_crossword_document_empty(self) -> None:
+        application = Mock()
+        new_template = create_blank_template(TemplateSettings(3, 3), "numbered")
+        application._template = None
+        application.width_value.get.return_value = "3"
+        application.height_value.get.return_value = "3"
+        application.layout_value.get.return_value = "numbered"
+
+        with patch(
+            "krizovkar.gui.create_blank_template",
+            return_value=new_template,
+        ):
+            CrosswordApplication.create_new_template(application)
+
+        self.assertIs(new_template, application._base_template)
+        self.assertIsNone(application._template)
+        application.create_crossword_from_template.assert_not_called()
+
+    def test_empty_crossword_offers_creation_from_current_template(self) -> None:
+        application = Mock()
+        application._template = None
+
+        CrosswordApplication._refresh_crossword_view(application)
+
+        application.replace_crossword_template_button.configure.assert_called_once_with(
+            text="Vytvořit podle aktuální šablony"
+        )
+        application._set_slot_form_state.assert_called_once_with("disabled")
+
     def test_crossword_is_created_explicitly_from_template(self) -> None:
         application = Mock()
         template = create_blank_template(TemplateSettings(3, 3), "numbered")

@@ -20,7 +20,8 @@ Grafické rozhraní se spustí samostatným příkazem:
 uv run krizovkar-gui
 ```
 
-Po otevření zobrazuje dva samostatné dokumenty:
+Po otevření zobrazuje dva samostatné dokumenty. Aplikace připraví
+výchozí šablonu, ale křížovku z ní automaticky nevytváří:
 
 - **Šablona** určuje rozměr, švédskou nebo číslovanou podobu a všechna místa
   pro vodorovná a svislá hesla. Má vlastní náhled, formát stránky a uložení
