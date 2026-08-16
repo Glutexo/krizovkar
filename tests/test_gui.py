@@ -77,9 +77,9 @@ class GuiTest(unittest.TestCase):
             new_shortcut = _keyboard_shortcut("n")
             save_as_shortcut = _keyboard_shortcut("s", shift=True)
 
-        self.assertEqual("⌘N", new_shortcut.accelerator)
+        self.assertEqual("Command-N", new_shortcut.accelerator)
         self.assertEqual("<Command-n>", new_shortcut.sequence)
-        self.assertEqual("⇧⌘S", save_as_shortcut.accelerator)
+        self.assertEqual("Command-Shift-S", save_as_shortcut.accelerator)
         self.assertEqual("<Command-Shift-S>", save_as_shortcut.sequence)
 
         with patch("krizovkar.gui.sys.platform", "linux"):
@@ -91,7 +91,7 @@ class GuiTest(unittest.TestCase):
         self.assertEqual("Ctrl+Shift+S", save_as_shortcut.accelerator)
         self.assertEqual("<Control-Shift-S>", save_as_shortcut.sequence)
 
-    def test_menu_uses_only_command_shortcuts_on_macos(self) -> None:
+    def test_menu_uses_macos_tk_command_accelerators(self) -> None:
         window = Mock()
         menu = Mock()
         file_menu = Mock()
@@ -107,7 +107,13 @@ class GuiTest(unittest.TestCase):
             CrosswordDocumentWindow._build_menu(window)
 
         self.assertEqual(
-            ["⌘N", "⌘O", "⌘S", "⇧⌘S", "⌘W"],
+            [
+                "Command-N",
+                "Command-O",
+                "Command-S",
+                "Command-Shift-S",
+                "Command-W",
+            ],
             [
                 item.kwargs["accelerator"]
                 for item in file_menu.add_command.call_args_list

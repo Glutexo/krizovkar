@@ -81,7 +81,10 @@ class _KeyboardShortcut:
 def _keyboard_shortcut(key: str, *, shift: bool = False) -> _KeyboardShortcut:
     normalized_key = key.lower()
     if sys.platform == "darwin":
-        accelerator = f"{'⇧' if shift else ''}⌘{normalized_key.upper()}"
+        # Aqua převede pojmenované modifikátory na systémové symboly samo.
+        accelerator = (
+            f"Command-{'Shift-' if shift else ''}{normalized_key.upper()}"
+        )
         modifier = "Command"
     else:
         accelerator = f"Ctrl+{'Shift+' if shift else ''}{normalized_key.upper()}"
