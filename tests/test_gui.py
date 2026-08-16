@@ -11,30 +11,28 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock, call, patch
 
+from krizovkar.generator import create_grid_from_template
 from krizovkar.gui import (
     CrosswordApplication,
     GuiInputError,
-    SpecificationSettings,
+    TemplateSettings,
     _configure_tk_runtime,
+    clear_template_slot,
     create_blank_template,
-    create_specification,
-    create_template,
+    fill_template_slot,
     main,
-    parse_specification_settings,
+    parse_slot_content,
     parse_template_settings,
-    parse_word_placement,
-    prepare_crossword,
+    slot_coordinates,
+    template_is_complete,
+    template_slot_pattern,
 )
 from krizovkar.model import (
-    Coordinate,
-    LegendCell,
     LetterCell,
-    WordPlacement,
-    load_crossword_specification,
-    write_crossword_specification,
+    load_crossword_template,
+    write_crossword_template,
 )
 from krizovkar.renderer import RenderError
-
 
 PDF_BYTES = b"%PDF-1.7\n%%EOF\n"
 
@@ -46,6 +44,21 @@ def _fake_lualatex(source: Path, output_directory: Path) -> Path:
     output = output_directory / f"{source.stem}.pdf"
     output.write_bytes(PDF_BYTES)
     return output
+
+
+def _filled_numbered_template():
+    template = create_blank_template(TemplateSettings(3, 3), "numbered")
+    entries = {
+        "h1": ("ABC", "První řádek"),
+        "h2": ("DEF", "Druhý řádek"),
+        "h3": ("GHI", "Třetí řádek"),
+        "v1": ("ADG", "První sloupec"),
+        "v2": ("BEH", "Druhý sloupec"),
+        "v3": ("CFI", "Třetí sloupec"),
+    }
+    for identifier, (answer, clue) in entries.items():
+        template = fill_template_slot(template, identifier, answer, clue)
+    return template
 
 
 class GuiTest(unittest.TestCase):
@@ -65,186 +78,162 @@ class GuiTest(unittest.TestCase):
                 self.assertEqual(str(tcl_library), os.environ["TCL_LIBRARY"])
                 self.assertEqual(str(tk_library), os.environ["TK_LIBRARY"])
 
-    def test_parses_specification_settings(self) -> None:
+    def test_parses_template_settings(self) -> None:
         self.assertEqual(
-            SpecificationSettings(width=15, height=10),
-            parse_specification_settings(" 15 ", "10"),
+            TemplateSettings(width=15, height=10),
+            parse_template_settings(" 15 ", "10"),
         )
 
     def test_rejects_non_integer_dimension(self) -> None:
         with self.assertRaisesRegex(GuiInputError, "Počet sloupců musí být celé"):
-            parse_specification_settings("patnáct", "10")
+            parse_template_settings("patnáct", "10")
 
     def test_rejects_non_positive_dimension(self) -> None:
-        with self.assertRaisesRegex(GuiInputError, "Počet řádků musí být kladný"):
-            parse_specification_settings("15", "0")
+        with self.assertRaisesRegex(
+            GuiInputError,
+            "Počet řádků musí být kladný",
+        ):
+            parse_template_settings("15", "0")
 
     def test_limits_automatically_generated_template_size(self) -> None:
         with self.assertRaisesRegex(GuiInputError, "nejvýše 50"):
             parse_template_settings("51", "10")
 
-    def test_parses_and_normalizes_word(self) -> None:
+    def test_parses_and_normalizes_slot_content(self) -> None:
         self.assertEqual(
-            WordPlacement(
-                answer="CHATA",
-                start=Coordinate(row=2, column=3),
-                direction="vertical",
-                legend="Stavení",
-                in_help=True,
-            ),
-            parse_word_placement(
-                " chata ",
-                " Stavení ",
-                "2",
-                "3",
-                "vertical",
-                True,
-            ),
+            ("CHATA", "Stavení"),
+            parse_slot_content(" chata ", " Stavení ", 4),
         )
 
-    def test_rejects_empty_word_legend(self) -> None:
-        with self.assertRaisesRegex(GuiInputError, "Vyplňte legendu"):
-            parse_word_placement("LABE", "  ", "1", "1", "horizontal", False)
+    def test_rejects_answer_with_wrong_slot_length(self) -> None:
+        with self.assertRaisesRegex(
+            GuiInputError,
+            "místo má 5 polí, ale heslo má 4 pole",
+        ):
+            parse_slot_content("CHATA", "Stavení", 5)
 
-    def test_creates_specification_from_placed_words(self) -> None:
-        word = parse_word_placement(
-            "LABE",
-            "Česká řeka",
-            "2",
-            "2",
-            "horizontal",
-            False,
+    def test_rejects_empty_clue(self) -> None:
+        with self.assertRaisesRegex(GuiInputError, "Vyplňte nápovědu"):
+            parse_slot_content("CHATA", "  ", 4)
+
+    def test_creates_swedish_template_before_words(self) -> None:
+        template = create_blank_template(
+            TemplateSettings(width=7, height=6),
+            "swedish",
         )
 
-        specification = create_specification(
-            SpecificationSettings(width=7, height=6),
-            (word,),
+        self.assertEqual("template", template.kind)
+        self.assertTrue(template.slots)
+        self.assertTrue(all(slot.answer is None for slot in template.slots))
+        self.assertTrue(
+            any(slot.legend_position is not None for slot in template.slots)
         )
 
-        self.assertEqual("specification", specification.kind)
-        self.assertEqual((word,), specification.words)
-        self.assertEqual(7, specification.grid.width)
-        self.assertEqual(6, specification.grid.height)
+    def test_creates_numbered_template_before_words(self) -> None:
+        template = create_blank_template(
+            TemplateSettings(width=7, height=6),
+            "numbered",
+        )
 
-    def test_refuses_specification_without_words(self) -> None:
-        with self.assertRaisesRegex(GuiInputError, "alespoň jedno heslo"):
-            create_specification(
-                SpecificationSettings(width=15, height=10),
-                (),
+        self.assertTrue(template.slots)
+        self.assertTrue(all(slot.legend_position is None for slot in template.slots))
+
+    def test_reports_too_small_template_as_gui_error(self) -> None:
+        with self.assertRaisesRegex(GuiInputError, "nelze rozdělit"):
+            create_blank_template(
+                TemplateSettings(width=2, height=2),
+                "swedish",
             )
 
-    def test_refuses_word_outside_grid(self) -> None:
-        word = parse_word_placement(
-            "LABE",
-            "Česká řeka",
-            "3",
-            "2",
-            "horizontal",
-            False,
+    def test_returns_slot_coordinates_in_answer_order(self) -> None:
+        template = create_blank_template(TemplateSettings(7, 6), "swedish")
+        vertical = next(slot for slot in template.slots if slot.direction == "vertical")
+
+        coordinates = slot_coordinates(vertical)
+
+        self.assertEqual(vertical.length, len(coordinates))
+        self.assertEqual(vertical.start, coordinates[0])
+        self.assertEqual(vertical.start.row + 1, coordinates[1].row)
+        self.assertEqual(vertical.start.column, coordinates[1].column)
+
+    def test_fills_selected_template_slot(self) -> None:
+        template = create_blank_template(TemplateSettings(7, 6), "swedish")
+
+        filled = fill_template_slot(
+            template,
+            "h1",
+            "abcdef",
+            "Prvních šest písmen",
         )
 
-        with self.assertRaisesRegex(GuiInputError, "přesahuje mřížku"):
-            create_specification(
-                SpecificationSettings(width=3, height=3),
-                (word,),
-            )
-
-    def test_refuses_conflicting_intersection(self) -> None:
-        horizontal = parse_word_placement(
-            "ABC",
-            "Abeceda",
-            "2",
-            "1",
-            "horizontal",
-            False,
-        )
-        vertical = parse_word_placement(
-            "AX",
-            "Zkratka",
-            "1",
-            "2",
-            "vertical",
-            False,
-        )
-
-        with self.assertRaisesRegex(GuiInputError, "v rozporu"):
-            create_specification(
-                SpecificationSettings(width=3, height=3),
-                (horizontal, vertical),
-            )
-
-    def test_saves_created_specification_in_project_format(self) -> None:
-        word = parse_word_placement(
-            "LABE",
-            "Česká řeka",
-            "2",
-            "2",
-            "horizontal",
-            False,
-        )
-        specification = create_specification(
-            SpecificationSettings(width=7, height=6),
-            (word,),
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "zadani.yaml"
-
-            write_crossword_specification(specification, output)
-
-            self.assertEqual(
-                specification,
-                load_crossword_specification(output),
-            )
-
-    def test_creates_selected_template_from_gui_specification(self) -> None:
-        word = parse_word_placement(
-            "LABE",
-            "Česká řeka",
-            "2",
-            "2",
-            "horizontal",
-            False,
-        )
-        specification = create_specification(
-            SpecificationSettings(width=7, height=6),
-            (word,),
-        )
-
-        template = create_template(specification, "swedish")
-
-        self.assertEqual("LABE", template.slots[0].answer)
-        self.assertIsNotNone(template.slots[0].legend_position)
-
-    def test_prepares_printable_crossword_from_placed_words(self) -> None:
-        word = parse_word_placement(
-            "LABE",
-            "Česká řeka",
-            "2",
-            "2",
-            "horizontal",
-            False,
-        )
-        specification = create_specification(
-            SpecificationSettings(width=7, height=6),
-            (word,),
-        )
-
-        prepared = prepare_crossword(specification, "swedish")
-
-        self.assertEqual("template", prepared.template.kind)
-        self.assertEqual("grid", prepared.grid.kind)
-        assert prepared.grid.grid.cells is not None
-        self.assertIsInstance(prepared.grid.grid.cells[1][0], LegendCell)
-        first_letter = prepared.grid.grid.cells[1][1]
+        slot = next(slot for slot in filled.slots if slot.identifier == "h1")
+        self.assertEqual("ABCDEF", slot.answer)
+        self.assertEqual("Prvních šest písmen", slot.clue)
+        grid = create_grid_from_template(filled)
+        assert grid.grid.cells is not None
+        first_letter = grid.grid.cells[slot.start.row - 1][slot.start.column - 1]
         self.assertIsInstance(first_letter, LetterCell)
         assert isinstance(first_letter, LetterCell)
-        self.assertEqual("L", first_letter.value)
+        self.assertEqual("A", first_letter.value)
+
+    def test_shows_letters_known_from_crossings(self) -> None:
+        template = create_blank_template(TemplateSettings(7, 6), "swedish")
+        template = fill_template_slot(template, "h1", "ABCDEF", "Abeceda")
+
+        self.assertEqual(
+            ("A", None, None, None, None),
+            template_slot_pattern(template, "v1"),
+        )
+
+    def test_rejects_conflicting_crossing(self) -> None:
+        template = create_blank_template(TemplateSettings(7, 6), "swedish")
+        template = fill_template_slot(template, "h1", "ABCDEF", "Abeceda")
+
+        with self.assertRaisesRegex(
+            GuiInputError,
+            "musí být v 1. poli písmeno 'A', ne 'Z'",
+        ):
+            fill_template_slot(template, "v1", "ZABAK", "Obojživelník")
+
+    def test_rejects_duplicate_answer(self) -> None:
+        template = create_blank_template(TemplateSettings(7, 6), "swedish")
+        template = fill_template_slot(template, "h1", "ABCDEF", "Abeceda")
+
+        with self.assertRaisesRegex(GuiInputError, "už je použité"):
+            fill_template_slot(template, "h2", "ABCDEF", "Totéž heslo")
+
+    def test_clears_selected_template_slot(self) -> None:
+        template = create_blank_template(TemplateSettings(7, 6), "swedish")
+        template = fill_template_slot(template, "h1", "ABCDEF", "Abeceda")
+
+        cleared = clear_template_slot(template, "h1")
+
+        slot = next(slot for slot in cleared.slots if slot.identifier == "h1")
+        self.assertIsNone(slot.answer)
+        self.assertIsNone(slot.clue)
+
+    def test_recognizes_complete_crossword(self) -> None:
+        template = _filled_numbered_template()
+
+        self.assertTrue(template_is_complete(template))
+
+        template = clear_template_slot(template, "v3")
+        self.assertFalse(template_is_complete(template))
+
+    def test_saves_partially_filled_template_in_project_format(self) -> None:
+        template = create_blank_template(TemplateSettings(7, 6), "swedish")
+        template = fill_template_slot(template, "h1", "ABCDEF", "Abeceda")
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "krizovka.yaml"
+
+            write_crossword_template(template, output)
+
+            self.assertEqual(template, load_crossword_template(output))
 
     def test_crossword_pdf_actions_choose_puzzle_and_solution(self) -> None:
         application = Mock()
-        prepared = Mock()
-        application._prepared_crossword_or_error.return_value = prepared
-        application.page_format_value.get.return_value = "A5"
+        grid = Mock()
+        application._complete_grid_or_error.return_value = grid
 
         CrosswordApplication.save_crossword_pdf(application)
         CrosswordApplication.save_solution_pdf(application)
@@ -252,59 +241,47 @@ class GuiTest(unittest.TestCase):
         self.assertEqual(
             [
                 call(
-                    prepared.grid,
+                    grid,
                     filled=False,
                     title="Uložit křížovku bez písmen",
                     initialfile="krizovka.pdf",
                     success_message="Křížovka bez písmen byla uložena",
-                    page_format="A5",
-                    template_tab=False,
                 ),
                 call(
-                    prepared.grid,
+                    grid,
                     filled=True,
                     title="Uložit řešení křížovky",
                     initialfile="reseni.pdf",
                     success_message="Řešení bylo uloženo",
-                    page_format="A5",
-                    template_tab=False,
                 ),
             ],
             application._save_pdf.call_args_list,
         )
 
-    def test_blank_template_pdf_action_uses_current_template(self) -> None:
+    def test_blank_template_pdf_action_uses_unfilled_template(self) -> None:
         application = Mock()
-        application.refresh_blank_template.return_value = True
-        application.template_page_format_value.get.return_value = "Letter"
+        application._base_template = create_blank_template(
+            TemplateSettings(3, 3),
+            "numbered",
+        )
 
-        CrosswordApplication.save_blank_template_pdf(application)
+        with patch("krizovkar.gui.create_grid_from_template") as create_grid:
+            CrosswordApplication.save_blank_template_pdf(application)
 
+        create_grid.assert_called_once_with(application._base_template)
         application._save_pdf.assert_called_once_with(
-            application._blank_grid,
+            create_grid.return_value,
             filled=False,
             title="Uložit prázdnou šablonu",
             initialfile="prazdna-sablona.pdf",
             success_message="Prázdná šablona byla uložena",
-            page_format="Letter",
-            template_tab=True,
         )
 
     def test_saves_pdf_through_renderer_without_manual_dialog(self) -> None:
-        word = parse_word_placement(
-            "LABE",
-            "Česká řeka",
-            "2",
-            "2",
-            "horizontal",
-            False,
-        )
-        specification = create_specification(
-            SpecificationSettings(width=7, height=6),
-            (word,),
-        )
-        crossword = prepare_crossword(specification, "swedish").grid
+        template = _filled_numbered_template()
+        grid = create_grid_from_template(template)
         application = Mock()
+        application.page_format_value.get.return_value = "A5"
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "krizovka.pdf"
             application._choose_output.return_value = (output, False)
@@ -315,13 +292,11 @@ class GuiTest(unittest.TestCase):
             ):
                 CrosswordApplication._save_pdf(
                     application,
-                    crossword,
+                    grid,
                     filled=False,
                     title="Uložit křížovku bez písmen",
                     initialfile="krizovka.pdf",
                     success_message="Křížovka bez písmen byla uložena",
-                    page_format="A5",
-                    template_tab=False,
                 )
 
             self.assertEqual(PDF_BYTES, output.read_bytes())
@@ -341,7 +316,7 @@ class GuiTest(unittest.TestCase):
                     success=True,
                 ),
             ],
-            application._set_crossword_status.call_args_list,
+            application._set_status.call_args_list,
         )
         self.assertEqual(
             [call(cursor="watch"), call(cursor="")],
@@ -352,6 +327,7 @@ class GuiTest(unittest.TestCase):
 
     def test_pdf_render_error_is_shown_and_restores_cursor(self) -> None:
         application = Mock()
+        application.page_format_value.get.return_value = "A4"
         application._choose_output.return_value = (Path("sablona.pdf"), False)
 
         with patch(
@@ -365,56 +341,17 @@ class GuiTest(unittest.TestCase):
                 title="Uložit prázdnou šablonu",
                 initialfile="prazdna-sablona.pdf",
                 success_message="Prázdná šablona byla uložena",
-                page_format="A4",
-                template_tab=True,
             )
 
         application._show_action_error.assert_called_once_with(
             "PDF nelze vytvořit",
             "nainstalujte TeX Live",
-            template_tab=True,
         )
-        application._set_template_status.assert_called_once_with("Vytvářím PDF…")
+        application._set_status.assert_called_once_with("Vytvářím PDF…")
         self.assertEqual(
             [call(cursor="watch"), call(cursor="")],
             application.root.configure.call_args_list,
         )
-
-    def test_creates_blank_numbered_template_without_words(self) -> None:
-        template = create_blank_template(
-            SpecificationSettings(width=7, height=6),
-            "numbered",
-        )
-
-        self.assertEqual("template", template.kind)
-        self.assertEqual(7, template.grid.width)
-        self.assertEqual(6, template.grid.height)
-        self.assertTrue(template.slots)
-        self.assertTrue(all(slot.legend_position is None for slot in template.slots))
-
-    def test_reports_too_small_blank_template_as_gui_error(self) -> None:
-        with self.assertRaisesRegex(GuiInputError, "nelze rozdělit"):
-            create_blank_template(
-                SpecificationSettings(width=2, height=2),
-                "swedish",
-            )
-
-    def test_reports_template_layout_error_as_gui_input_error(self) -> None:
-        word = parse_word_placement(
-            "LABE",
-            "Česká řeka",
-            "1",
-            "1",
-            "horizontal",
-            False,
-        )
-        specification = create_specification(
-            SpecificationSettings(width=7, height=6),
-            (word,),
-        )
-
-        with self.assertRaisesRegex(GuiInputError, "vepsaná legenda"):
-            create_template(specification, "swedish")
 
     def test_main_reports_unavailable_tk(self) -> None:
         error_output = StringIO()

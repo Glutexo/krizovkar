@@ -8,8 +8,9 @@ Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu,
 experimentální generátory švédské a číslované mřížky z JSON slovníku,
 automatický převod umístěného zadání na šablonu, převod výsledku do
 upravitelné LaTeXové sazební šablony, její překlad do PDF a grafické
-rozhraní pro křížovku z vlastních hesel i prázdnou šablonu. Další rozšíření
-editoru budou postupně zpřístupňovat například tajenky a automatické plnění.
+rozhraní, které nejprve připraví šablonu a potom do jejích míst doplňuje
+vlastní hesla. Další rozšíření editoru budou postupně zpřístupňovat například
+tajenky a automatické plnění.
 
 ## Grafické rozhraní
 
@@ -19,27 +20,30 @@ Grafické rozhraní se spustí samostatným příkazem:
 uv run krizovkar-gui
 ```
 
-Po otevření nabízí dvě samostatné cesty:
+Po otevření vede jedním společným postupem:
 
-1. **Křížovka z vlastních hesel** – zvolte rozměr, ke každé odpovědi
-   napište nápovědu, souřadnici prvního písmene a směr a heslo přidejte do
-   mřížky. Potom vyberte švédskou nebo číslovanou podobu. Z náhledu lze
-   uložit tiskovou křížovku bez písmen, samostatné řešení s písmeny nebo
-   datovou šablonu v YAML.
-2. **Prázdná šablona** – zvolte pouze rozměr a podobu. Aplikace sama
-   rozvrhne místa pro budoucí hesla a nabídne prázdnou tiskovou šablonu v PDF
-   i datovou šablonu v YAML pro pozdější automatické vyplnění.
+1. **Nastavte šablonu** – zvolte rozměr a švédskou nebo číslovanou podobu
+   a vytvořte rozvržení. Aplikace předem určí všechna místa pro vodorovná
+   a svislá hesla. Už v tomto kroku lze uložit prázdnou tiskovou šablonu
+   v PDF nebo datovou šablonu v YAML.
+2. **Doplňte hesla** – místo vyberte kliknutím v náhledu nebo v seznamu.
+   Formulář ukáže jeho délku a písmena známá z křížení; zadává se už jen
+   odpověď a nápověda. Nesprávnou délku, opakované heslo nebo rozporné
+   písmeno aplikace odmítne konkrétní zprávou.
+3. **Uložte hotovou křížovku** – po vyplnění všech míst lze uložit tiskovou
+   křížovku bez písmen, samostatné řešení s písmeny a průběžnou nebo hotovou
+   datovou podobu v YAML.
 
-Souřadnice se počítají od 1 z levého horního rohu. Ve švédské podobě
-potřebuje každé vodorovné heslo volnou buňku vlevo a každé svislé heslo
-volnou buňku nad sebou; rozhraní chybné umístění vysvětlí pod náhledem.
-Číslovaná podoba samostatné buňky pro nápovědy nepotřebuje a vysází je
-pod mřížkou. Editor vlastních hesel zatím nezadává tajenky ani vlastní
-polohu pomůcky.
+Ve švédské podobě jsou místa pro nápovědy součástí předem vytvořené mřížky.
+Číslovaná podoba ponechá všechna pole pro písmena a nápovědy vysází pod
+mřížkou. Ruční zadávání souřadnic ani směru proto není potřeba. Vytvoření
+nového rozvržení po doplnění prvního hesla vyžaduje potvrzení, protože dosud
+zadaný obsah nahradí. Editor zatím nezadává tajenky, vlastní pomůcku ani
+automatické vyplnění ze slovníku.
 
 Přímé uložení PDF používá LuaLaTeX a vyžaduje stejnou instalaci TeX Live
-jako příkaz `render`. Zdrojové zadání a datovou šablonu lze uložit také z
-nabídky **Soubor → Zdrojová data (YAML)**.
+jako příkaz `render`. Prázdnou i průběžně vyplněnou datovou šablonu lze
+uložit také z nabídky **Soubor → Zdrojová data (YAML)**.
 
 GUI vyžaduje Python s podporou Tk 8.6 nebo novější. Modul `tkinter` je součástí
 standardní knihovny Pythonu, některé systémové distribuce jej ale instalují jako
