@@ -14,22 +14,29 @@ from unittest.mock import Mock, call, patch
 from krizovkar.generator import create_grid_from_template
 from krizovkar.gui import (
     CrosswordApplication,
+    CrosswordDocumentWindow,
     GuiInputError,
     TemplateSettings,
     _configure_tk_runtime,
     clear_template_slot,
     create_blank_template,
     fill_template_slot,
+    load_editable_document,
     main,
     parse_slot_content,
     parse_template_settings,
     slot_coordinates,
     template_is_complete,
+    template_layout,
     template_slot_pattern,
 )
 from krizovkar.model import (
+    CrosswordDocument,
     LetterCell,
+    create_crossword_document,
+    load_crossword_document,
     load_crossword_template,
+    write_crossword_document,
     write_crossword_template,
 )
 from krizovkar.renderer import RenderError
@@ -46,8 +53,10 @@ def _fake_lualatex(source: Path, output_directory: Path) -> Path:
     return output
 
 
-def _filled_numbered_template():
-    template = create_blank_template(TemplateSettings(3, 3), "numbered")
+def _filled_numbered_crossword():
+    template = create_crossword_document(
+        create_blank_template(TemplateSettings(3, 3), "numbered")
+    )
     entries = {
         "h1": ("ABC", "První řádek"),
         "h2": ("DEF", "Druhý řádek"),
@@ -213,7 +222,7 @@ class GuiTest(unittest.TestCase):
         self.assertIsNone(slot.clue)
 
     def test_recognizes_complete_crossword(self) -> None:
-        template = _filled_numbered_template()
+        template = _filled_numbered_crossword()
 
         self.assertTrue(template_is_complete(template))
 
@@ -230,71 +239,185 @@ class GuiTest(unittest.TestCase):
 
             self.assertEqual(template, load_crossword_template(output))
 
-    def test_updating_template_keeps_crossword_document(self) -> None:
-        application = Mock()
-        crossword = Mock()
-        new_template = create_blank_template(TemplateSettings(3, 3), "numbered")
-        application._template = crossword
-        application.width_value.get.return_value = "3"
-        application.height_value.get.return_value = "3"
-        application.layout_value.get.return_value = "numbered"
+    def test_recognizes_layout_stored_in_document(self) -> None:
+        swedish = create_blank_template(TemplateSettings(7, 6), "swedish")
+        numbered = create_blank_template(TemplateSettings(7, 6), "numbered")
 
-        with patch(
-            "krizovkar.gui.create_blank_template",
-            return_value=new_template,
-        ):
-            CrosswordApplication.create_new_template(application)
+        self.assertEqual("swedish", template_layout(swedish))
+        self.assertEqual("numbered", template_layout(numbered))
 
-        self.assertIs(new_template, application._base_template)
-        self.assertIs(crossword, application._template)
-        application.create_crossword_from_template.assert_not_called()
-
-    def test_creating_first_template_keeps_crossword_document_empty(self) -> None:
-        application = Mock()
-        new_template = create_blank_template(TemplateSettings(3, 3), "numbered")
-        application._template = None
-        application.width_value.get.return_value = "3"
-        application.height_value.get.return_value = "3"
-        application.layout_value.get.return_value = "numbered"
-
-        with patch(
-            "krizovkar.gui.create_blank_template",
-            return_value=new_template,
-        ):
-            CrosswordApplication.create_new_template(application)
-
-        self.assertIs(new_template, application._base_template)
-        self.assertIsNone(application._template)
-        application.create_crossword_from_template.assert_not_called()
-
-    def test_empty_crossword_offers_creation_from_current_template(self) -> None:
-        application = Mock()
-        application._template = None
-
-        CrosswordApplication._refresh_crossword_view(application)
-
-        application.replace_crossword_template_button.configure.assert_called_once_with(
-            text="Vytvořit podle aktuální šablony"
+    def test_filling_crossword_preserves_document_kind(self) -> None:
+        crossword = create_crossword_document(
+            create_blank_template(TemplateSettings(7, 6), "swedish")
         )
-        application._set_slot_form_state.assert_called_once_with("disabled")
 
-    def test_crossword_is_created_explicitly_from_template(self) -> None:
+        filled = fill_template_slot(
+            crossword,
+            "h1",
+            "ABCDEF",
+            "Abeceda",
+        )
+
+        self.assertIsInstance(filled, CrosswordDocument)
+        self.assertEqual("crossword", filled.kind)
+
+    def test_gui_loader_selects_editor_from_yaml_kind(self) -> None:
+        template = create_blank_template(TemplateSettings(3, 3), "numbered")
+        crossword = create_crossword_document(template)
+        with tempfile.TemporaryDirectory() as directory:
+            template_path = Path(directory) / "sablona.yaml"
+            crossword_path = Path(directory) / "krizovka.yaml"
+            write_crossword_template(template, template_path)
+            write_crossword_document(crossword, crossword_path)
+
+            loaded_template = load_editable_document(template_path)
+            loaded_crossword = load_editable_document(crossword_path)
+
+        self.assertEqual("template", loaded_template.kind)
+        self.assertIsInstance(loaded_crossword, CrosswordDocument)
+
+    def test_template_update_changes_only_its_document_window(self) -> None:
+        window = Mock()
+        new_template = create_blank_template(TemplateSettings(3, 3), "numbered")
+        window.width_value.get.return_value = "3"
+        window.height_value.get.return_value = "3"
+        window.layout_value.get.return_value = "numbered"
+
+        with patch(
+            "krizovkar.gui.create_blank_template",
+            return_value=new_template,
+        ):
+            CrosswordDocumentWindow.create_new_template(window)
+
+        self.assertIs(new_template, window._base_template)
+        window._set_dirty.assert_called_once_with(True)
+        window._refresh_template_view.assert_called_once_with()
+
+    def test_template_opens_crossword_in_new_document_window(self) -> None:
+        window = Mock()
+        template = create_blank_template(TemplateSettings(3, 3), "numbered")
+        window._base_template = template
+
+        CrosswordDocumentWindow.create_crossword_from_template(window)
+
+        window.application.new_crossword_document.assert_called_once_with(template)
+        window._set_template_status.assert_called_once_with(
+            "Křížovka podle této šablony byla otevřena v novém okně.",
+            success=True,
+        )
+
+    def test_application_creates_crossword_as_new_document(self) -> None:
         application = Mock()
         template = create_blank_template(TemplateSettings(3, 3), "numbered")
-        application._base_template = template
-        application._template = None
-        application._layout = "numbered"
+        expected_window = Mock()
+        application._open_window.return_value = expected_window
 
-        CrosswordApplication.create_crossword_from_template(
+        result = CrosswordApplication.new_crossword_document(
             application,
-            select_document=False,
+            template,
         )
 
-        self.assertIs(template, application._template)
-        self.assertEqual("numbered", application._crossword_layout)
-        application._rebuild_slot_tree.assert_called_once_with()
-        application._refresh_crossword_view.assert_called_once_with()
-        application.notebook.select.assert_not_called()
+        document = application._open_window.call_args.args[0]
+        self.assertIsInstance(document, CrosswordDocument)
+        self.assertEqual("crossword", document.kind)
+        application._open_window.assert_called_once_with(document, dirty=True)
+        self.assertIs(expected_window, result)
+
+    def test_application_owner_stays_hidden_behind_document_windows(self) -> None:
+        root = Mock()
+
+        application = CrosswordApplication(root)
+
+        root.withdraw.assert_called_once_with()
+        self.assertEqual([], application._windows)
+
+    def test_application_exits_after_last_document_window_closes(self) -> None:
+        root = Mock()
+        application = CrosswordApplication(root)
+        first = Mock()
+        second = Mock()
+        application._windows = [first, second]
+
+        application.close_window(first)
+
+        first.root.destroy.assert_called_once_with()
+        root.destroy.assert_not_called()
+
+        application.close_window(second)
+
+        second.root.destroy.assert_called_once_with()
+        root.destroy.assert_called_once_with()
+
+    def test_application_opens_yaml_in_new_document_window(self) -> None:
+        application = Mock()
+        parent = Mock()
+        template = create_blank_template(TemplateSettings(3, 3), "numbered")
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "sablona.yaml"
+            write_crossword_template(template, source)
+
+            result = CrosswordApplication.open_document(
+                application,
+                source,
+                parent=parent,
+            )
+
+        loaded = application._open_window.call_args.args[0]
+        self.assertEqual(template, loaded)
+        application._open_window.assert_called_once_with(
+            loaded,
+            path=source,
+            dirty=False,
+        )
+        self.assertIs(application._open_window.return_value, result)
+
+    def test_crossword_window_writes_its_document_kind(self) -> None:
+        window = Mock()
+        crossword = create_crossword_document(
+            create_blank_template(TemplateSettings(3, 3), "numbered")
+        )
+        window._document.return_value = crossword
+        window._document_kind = "crossword"
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "krizovka.yaml"
+
+            saved = CrosswordDocumentWindow._write_document(
+                window,
+                output,
+                overwrite=False,
+            )
+
+            self.assertEqual(crossword, load_crossword_document(output))
+
+        self.assertTrue(saved)
+        self.assertEqual(output, window._path)
+        window._set_dirty.assert_called_once_with(False)
+
+    def test_window_title_identifies_file_and_unsaved_changes(self) -> None:
+        window = Mock()
+        window._path = Path("krizovka.yaml")
+        window._dirty = True
+        window._document_kind = "crossword"
+
+        CrosswordDocumentWindow._update_title(window)
+
+        window.root.title.assert_called_once_with(
+            "*krizovka.yaml — Křížovkář"
+        )
+
+    def test_closing_dirty_window_can_discard_document_changes(self) -> None:
+        window = Mock()
+        window._dirty = True
+        window._path = Path("sablona.yaml")
+
+        with patch(
+            "krizovkar.gui.messagebox.askyesnocancel",
+            return_value=False,
+        ):
+            CrosswordDocumentWindow.request_close(window)
+
+        window.save_document.assert_not_called()
+        window.application.close_window.assert_called_once_with(window)
 
     def test_crossword_pdf_actions_choose_puzzle_and_solution(self) -> None:
         application = Mock()
@@ -302,8 +425,8 @@ class GuiTest(unittest.TestCase):
         application._complete_grid_or_error.return_value = grid
         application.crossword_page_format_value.get.return_value = "A5"
 
-        CrosswordApplication.save_crossword_pdf(application)
-        CrosswordApplication.save_solution_pdf(application)
+        CrosswordDocumentWindow.save_crossword_pdf(application)
+        CrosswordDocumentWindow.save_solution_pdf(application)
 
         self.assertEqual(
             [
@@ -338,7 +461,7 @@ class GuiTest(unittest.TestCase):
         application.template_page_format_value.get.return_value = "Letter"
 
         with patch("krizovkar.gui.create_grid_from_template") as create_grid:
-            CrosswordApplication.save_blank_template_pdf(application)
+            CrosswordDocumentWindow.save_blank_template_pdf(application)
 
         create_grid.assert_called_once_with(application._base_template)
         application._save_pdf.assert_called_once_with(
@@ -351,62 +474,63 @@ class GuiTest(unittest.TestCase):
             document="template",
         )
 
-    def test_current_document_actions_follow_selected_tab(self) -> None:
-        application = Mock()
-        application.notebook.index.side_effect = (0, 1, 0, 1)
+    def test_current_pdf_action_follows_window_document(self) -> None:
+        template_window = Mock()
+        template_window._document_kind = "template"
+        crossword_window = Mock()
+        crossword_window._document_kind = "crossword"
 
-        CrosswordApplication.save_current_document_data(application)
-        CrosswordApplication.save_current_document_data(application)
-        CrosswordApplication.save_current_document_pdf(application)
-        CrosswordApplication.save_current_document_pdf(application)
+        CrosswordDocumentWindow.save_current_document_pdf(template_window)
+        CrosswordDocumentWindow.save_current_document_pdf(crossword_window)
 
-        application.save_blank_template_data.assert_called_once_with()
-        application.save_current_template_data.assert_called_once_with()
-        application.save_blank_template_pdf.assert_called_once_with()
-        application.save_crossword_pdf.assert_called_once_with()
+        template_window.save_blank_template_pdf.assert_called_once_with()
+        template_window.save_crossword_pdf.assert_not_called()
+        crossword_window.save_crossword_pdf.assert_called_once_with()
+        crossword_window.save_blank_template_pdf.assert_not_called()
 
     def test_file_menu_follows_template_document(self) -> None:
         application = Mock()
-        application.notebook.index.return_value = 0
-        application._base_template = Mock()
+        application._document_kind = "template"
 
-        CrosswordApplication._refresh_file_menu(application)
+        CrosswordDocumentWindow._refresh_file_menu(application)
 
         self.assertEqual(
             [
-                call(0, label="Uložit šablonu (YAML)…", state="normal"),
+                call(3, label="Uložit šablonu"),
+                call(4, label="Uložit šablonu jako…"),
                 call(
-                    1,
+                    6,
                     label="Uložit šablonu k tisku (PDF)…",
                     state="normal",
                 ),
-                call(3, state="disabled"),
+                call(7, state="disabled"),
             ],
             application.file_menu.entryconfigure.call_args_list,
         )
 
     def test_file_menu_enables_complete_crossword_outputs(self) -> None:
         application = Mock()
-        application.notebook.index.return_value = 1
-        application._template = _filled_numbered_template()
+        application._document_kind = "crossword"
+        application._template = _filled_numbered_crossword()
 
-        CrosswordApplication._refresh_file_menu(application)
+        CrosswordDocumentWindow._refresh_file_menu(application)
 
         self.assertEqual(
             [
-                call(0, label="Uložit křížovku (YAML)…", state="normal"),
+                call(3, label="Uložit křížovku"),
+                call(4, label="Uložit křížovku jako…"),
                 call(
-                    1,
+                    6,
                     label="Uložit křížovku bez písmen (PDF)…",
                     state="normal",
                 ),
-                call(3, state="normal"),
+                call(7, state="normal"),
             ],
             application.file_menu.entryconfigure.call_args_list,
         )
 
     def test_saves_pdf_through_renderer_without_manual_dialog(self) -> None:
-        template = _filled_numbered_template()
+        template = _filled_numbered_crossword()
         grid = create_grid_from_template(template)
         application = Mock()
         with tempfile.TemporaryDirectory() as directory:
@@ -417,7 +541,7 @@ class GuiTest(unittest.TestCase):
                 "krizovkar.renderer._run_lualatex",
                 side_effect=_fake_lualatex,
             ):
-                CrosswordApplication._save_pdf(
+                CrosswordDocumentWindow._save_pdf(
                     application,
                     grid,
                     filled=False,
@@ -463,7 +587,7 @@ class GuiTest(unittest.TestCase):
             "krizovkar.gui.render_pdf",
             side_effect=RenderError("nainstalujte TeX Live"),
         ):
-            CrosswordApplication._save_pdf(
+            CrosswordDocumentWindow._save_pdf(
                 application,
                 Mock(),
                 filled=False,
@@ -498,6 +622,22 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual(2, exit_code)
         self.assertIn("grafické rozhraní nelze spustit", error_output.getvalue())
+
+    def test_main_opens_new_template_document_window(self) -> None:
+        root = Mock()
+        application = Mock()
+        with (
+            patch("krizovkar.gui.tk.Tk", return_value=root),
+            patch(
+                "krizovkar.gui.CrosswordApplication",
+                return_value=application,
+            ),
+        ):
+            exit_code = main()
+
+        self.assertEqual(0, exit_code)
+        application.new_template_document.assert_called_once_with()
+        root.mainloop.assert_called_once_with()
 
 
 if __name__ == "__main__":

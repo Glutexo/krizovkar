@@ -25,6 +25,7 @@ from krizovkar.generator import (
 from krizovkar.localization import ngettext
 from krizovkar.model import (
     Coordinate,
+    CrosswordDocument,
     CrosswordGrid,
     CrosswordTemplate,
     EmptyCell,
@@ -34,7 +35,13 @@ from krizovkar.model import (
     ModelError,
     SecretCell,
     WordSlot,
+    create_crossword_document as make_crossword_document,
+    dump_crossword_document,
     dump_crossword_template,
+    load_crossword_document,
+    load_crossword_document_kind,
+    load_crossword_template,
+    write_crossword_document,
     write_crossword_template,
 )
 from krizovkar.renderer import (
@@ -165,7 +172,7 @@ def fill_template_slot(
     answer: str,
     clue: str,
 ) -> CrosswordTemplate:
-    """Zapíše ručně zadané heslo do vybraného slotu šablony."""
+    """Zapíše ručně zadané heslo do vybraného slotu dokumentu."""
 
     slot_index, slot = _template_slot(template, identifier)
     normalized_answer, normalized_clue = parse_slot_content(
@@ -210,7 +217,10 @@ def fill_template_slot(
     )
     result = replace(template, slots=tuple(slots))
     try:
-        dump_crossword_template(result, StringIO())
+        if isinstance(result, CrosswordDocument):
+            dump_crossword_document(result, StringIO())
+        else:
+            dump_crossword_template(result, StringIO())
     except ModelError as error:
         raise GuiInputError(str(error)) from error
     return result
@@ -220,7 +230,7 @@ def clear_template_slot(
     template: CrosswordTemplate,
     identifier: str,
 ) -> CrosswordTemplate:
-    """Odstraní ručně zadaný obsah jednoho slotu."""
+    """Odstraní ručně zadaný obsah jednoho slotu dokumentu."""
 
     slot_index, slot = _template_slot(template, identifier)
     slots = list(template.slots)
@@ -260,6 +270,14 @@ def template_is_complete(template: CrosswordTemplate) -> bool:
     return all(
         slot.answer is not None and slot.clue is not None for slot in template.slots
     )
+
+
+def template_layout(template: CrosswordTemplate) -> SpecificationLayout:
+    """Odvodí podobu dokumentu z umístění jeho legend."""
+
+    if any(slot.legend_position is not None for slot in template.slots):
+        return "swedish"
+    return "numbered"
 
 
 def _word_count_text(count: int) -> str:
@@ -562,45 +580,164 @@ class ScrollablePanel(ttk.Frame):
         self.canvas.yview_scroll(direction, "units")
 
 
-class CrosswordApplication(ttk.Frame):
-    """Hlavní okno se samostatnými dokumenty šablony a křížovky."""
+def load_editable_document(
+    source: str | Path,
+) -> CrosswordTemplate | CrosswordDocument:
+    """Načte druh editovatelného dokumentu určený jeho klíčem ``kind``."""
+
+    kind = load_crossword_document_kind(source)
+    if kind == "template":
+        return load_crossword_template(source)
+    if kind == "crossword":
+        return load_crossword_document(source)
+    raise ModelError(
+        "grafické rozhraní otevírá pouze šablonu kind: template nebo "
+        f"křížovku kind: crossword; soubor má kind: {kind!r}"
+    )
+
+
+class CrosswordApplication:
+    """Spravuje životní cyklus samostatných dokumentových oken."""
 
     def __init__(self, root: tk.Tk) -> None:
+        self.root = root
+        self._windows: list[CrosswordDocumentWindow] = []
+        self.root.withdraw()
+
+    def new_template_document(self) -> CrosswordDocumentWindow:
+        template = create_blank_template(
+            TemplateSettings(DEFAULT_GRID_WIDTH, DEFAULT_GRID_HEIGHT),
+            "swedish",
+        )
+        return self._open_window(template, dirty=True)
+
+    def new_crossword_document(
+        self,
+        template: CrosswordTemplate,
+    ) -> CrosswordDocumentWindow:
+        return self._open_window(
+            make_crossword_document(template),
+            dirty=True,
+        )
+
+    def choose_document(
+        self,
+        *,
+        parent: tk.Misc,
+    ) -> CrosswordDocumentWindow | None:
+        filename = filedialog.askopenfilename(
+            parent=parent,
+            title="Otevřít dokument Křížovkáře",
+            filetypes=(
+                ("YAML soubory", "*.yaml *.yml"),
+                ("Všechny soubory", "*"),
+            ),
+        )
+        if not filename:
+            return None
+        return self.open_document(Path(filename), parent=parent)
+
+    def open_document(
+        self,
+        source: Path,
+        *,
+        parent: tk.Misc,
+    ) -> CrosswordDocumentWindow | None:
+        try:
+            document = load_editable_document(source)
+        except ModelError as error:
+            messagebox.showerror(
+                "Dokument nelze otevřít",
+                str(error),
+                parent=parent,
+            )
+            return None
+        return self._open_window(document, path=source, dirty=False)
+
+    def _open_window(
+        self,
+        document: CrosswordTemplate | CrosswordDocument,
+        *,
+        path: Path | None = None,
+        dirty: bool,
+    ) -> CrosswordDocumentWindow:
+        window_root = tk.Toplevel(self.root)
+        window = CrosswordDocumentWindow(
+            window_root,
+            application=self,
+            document=document,
+            path=path,
+            dirty=dirty,
+        )
+        self._windows.append(window)
+        return window
+
+    def close_window(self, window: CrosswordDocumentWindow) -> None:
+        if window in self._windows:
+            self._windows.remove(window)
+        window.root.destroy()
+        if not self._windows:
+            self.root.destroy()
+
+
+class CrosswordDocumentWindow(ttk.Frame):
+    """Jedno viditelné okno svázané s jedním YAML dokumentem."""
+
+    def __init__(
+        self,
+        root: tk.Toplevel,
+        *,
+        application: CrosswordApplication,
+        document: CrosswordTemplate | CrosswordDocument,
+        path: Path | None,
+        dirty: bool,
+    ) -> None:
         super().__init__(root, padding=(24, 18))
         self.root = root
-        self._base_template: CrosswordTemplate | None = None
-        self._template: CrosswordTemplate | None = None
+        self.application = application
+        self._document_kind = document.kind
+        self._path = path
+        self._dirty = dirty
+        self._base_template = document if document.kind == "template" else None
+        self._template = document if document.kind == "crossword" else None
         self._grid: CrosswordGrid | None = None
-        self._layout: SpecificationLayout | None = None
-        self._crossword_layout: SpecificationLayout | None = None
+        layout = template_layout(document)
+        self._layout = layout if document.kind == "template" else None
+        self._crossword_layout = (
+            layout if document.kind == "crossword" else None
+        )
         self._selected_slot_identifier: str | None = None
 
-        self.width_value = tk.StringVar(value=str(DEFAULT_GRID_WIDTH))
-        self.height_value = tk.StringVar(value=str(DEFAULT_GRID_HEIGHT))
-        self.layout_value = tk.StringVar(value="swedish")
+        self.width_value = tk.StringVar(value=str(document.grid.width))
+        self.height_value = tk.StringVar(value=str(document.grid.height))
+        self.layout_value = tk.StringVar(value=layout)
         self.layout_help_value = tk.StringVar()
         self.answer_value = tk.StringVar()
         self.clue_value = tk.StringVar()
-        self.slot_title_value = tk.StringVar(
-            value="Křížovka zatím není vytvořená."
-        )
+        self.slot_title_value = tk.StringVar(value="Vyberte heslo.")
         self.slot_pattern_value = tk.StringVar(value="Vzor z křížení: —")
-        self.progress_value = tk.StringVar(value="Křížovka zatím není vytvořená.")
-        self.template_page_format_value = tk.StringVar(value=DEFAULT_PAGE_FORMAT)
-        self.crossword_page_format_value = tk.StringVar(value=DEFAULT_PAGE_FORMAT)
-        self.template_status_value = tk.StringVar(value="Připravuji šablonu…")
-        self.crossword_status_value = tk.StringVar(value="Křížovka zatím nemá šablonu.")
+        self.progress_value = tk.StringVar()
+        self.page_format_value = tk.StringVar(value=DEFAULT_PAGE_FORMAT)
+        self.template_page_format_value = self.page_format_value
+        self.crossword_page_format_value = self.page_format_value
+        self.template_status_value = tk.StringVar(value="Šablona je otevřená.")
+        self.crossword_status_value = tk.StringVar(
+            value="Křížovka je otevřená."
+        )
 
         self._configure_window()
         self._configure_styles()
         self._build_menu()
         self._build_content()
-        self._watch_inputs()
-        self._refresh_crossword_view()
-        self.root.after_idle(self.create_new_template)
+        if self._document_kind == "template":
+            self._watch_inputs()
+            self._refresh_template_view()
+        else:
+            self._rebuild_slot_tree()
+            self._refresh_crossword_view()
+        self._update_title()
 
     def _configure_window(self) -> None:
-        self.root.title("Šablona — Křížovkář")
         self.root.geometry("1220x850")
         self.root.minsize(980, 700)
         self.root.option_add("*tearOff", False)
@@ -609,7 +746,7 @@ class CrosswordApplication(ttk.Frame):
         self.grid(row=0, column=0, sticky="nsew")
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
-        self.root.protocol("WM_DELETE_WINDOW", self.root.destroy)
+        self.root.protocol("WM_DELETE_WINDOW", self.request_close)
 
     def _configure_styles(self) -> None:
         style = ttk.Style(self.root)
@@ -622,40 +759,64 @@ class CrosswordApplication(ttk.Frame):
         menu = tk.Menu(self.root)
         self.file_menu = tk.Menu(menu)
         self.file_menu.add_command(
-            label="Uložit šablonu (YAML)…",
-            accelerator="Ctrl+S",
-            command=self.save_current_document_data,
-            state="disabled",
+            label="Nová šablona",
+            accelerator="Ctrl+N",
+            command=self.application.new_template_document,
         )
         self.file_menu.add_command(
-            label="Uložit šablonu k tisku (PDF)…",
-            command=self.save_current_document_pdf,
-            state="disabled",
+            label="Otevřít…",
+            accelerator="Ctrl+O",
+            command=lambda: self.application.choose_document(parent=self.root),
         )
         self.file_menu.add_separator()
+        self.file_menu.add_command(
+            label="Uložit",
+            accelerator="Ctrl+S",
+            command=self.save_current_document_data,
+        )
+        self.file_menu.add_command(
+            label="Uložit jako…",
+            accelerator="Ctrl+Shift+S",
+            command=self.save_document_as,
+        )
+        self.file_menu.add_separator()
+        self.file_menu.add_command(
+            label="Uložit dokument jako PDF…",
+            command=self.save_current_document_pdf,
+        )
         self.file_menu.add_command(
             label="Uložit řešení křížovky (PDF)…",
             command=self.save_solution_pdf,
             state="disabled",
         )
         self.file_menu.add_separator()
-        self.file_menu.add_command(label="Konec", command=self.root.destroy)
+        self.file_menu.add_command(
+            label="Zavřít okno",
+            accelerator="Ctrl+W",
+            command=self.request_close,
+        )
         menu.add_cascade(label="Soubor", menu=self.file_menu)
         self.root.configure(menu=menu)
+        self.root.bind("<Control-n>", self._new_event)
+        self.root.bind("<Command-n>", self._new_event)
+        self.root.bind("<Control-o>", self._open_event)
+        self.root.bind("<Command-o>", self._open_event)
         self.root.bind("<Control-s>", self._save_event)
         self.root.bind("<Command-s>", self._save_event)
+        self.root.bind("<Control-Shift-S>", self._save_as_event)
+        self.root.bind("<Command-Shift-S>", self._save_as_event)
+        self.root.bind("<Control-w>", self._close_event)
+        self.root.bind("<Command-w>", self._close_event)
 
     def _build_content(self) -> None:
-        self.notebook = ttk.Notebook(self)
-        self.notebook.grid(row=0, column=0, sticky="nsew")
-        self.template_tab = ttk.Frame(self.notebook, padding=14)
-        self.crossword_tab = ttk.Frame(self.notebook, padding=14)
-        self.notebook.add(self.template_tab, text="Šablona")
-        self.notebook.add(self.crossword_tab, text="Křížovka")
-        self.notebook.bind("<<NotebookTabChanged>>", self._document_changed)
-
-        self._build_template_document()
-        self._build_crossword_document()
+        document_frame = ttk.Frame(self, padding=14)
+        document_frame.grid(row=0, column=0, sticky="nsew")
+        if self._document_kind == "template":
+            self.template_tab = document_frame
+            self._build_template_document()
+        else:
+            self.crossword_tab = document_frame
+            self._build_crossword_document()
 
     def _build_template_document(self) -> None:
         tab = self.template_tab
@@ -822,18 +983,6 @@ class CrosswordApplication(ttk.Frame):
             style="Muted.TLabel",
             wraplength=310,
         ).grid(row=0, column=0, sticky="w")
-        self.replace_crossword_template_button = ttk.Button(
-            document,
-            text="Nahradit aktuální šablonou",
-            command=self.create_crossword_from_template,
-            state="disabled",
-        )
-        self.replace_crossword_template_button.grid(
-            row=1,
-            column=0,
-            sticky="ew",
-            pady=(9, 0),
-        )
 
         editor = ttk.LabelFrame(
             controls,
@@ -1126,6 +1275,7 @@ class CrosswordApplication(ttk.Frame):
 
         self._base_template = template
         self._layout = layout
+        self._set_dirty(True)
         self._refresh_template_view()
         self._set_template_status(
             f"Šablona {settings.width} × {settings.height} · "
@@ -1133,11 +1283,7 @@ class CrosswordApplication(ttk.Frame):
             success=True,
         )
 
-    def create_crossword_from_template(
-        self,
-        *,
-        select_document: bool = True,
-    ) -> None:
+    def create_crossword_from_template(self) -> None:
         if self._base_template is None:
             self._show_action_error(
                 "Křížovku nelze vytvořit",
@@ -1145,74 +1291,47 @@ class CrosswordApplication(ttk.Frame):
                 document="template",
             )
             return
-        if (
-            self._template is not None
-            and self._filled_slot_count() > 0
-            and not messagebox.askyesno(
-                "Nahradit dokument křížovky?",
-                "Křížovka podle aktuální šablony nahradí všechna doplněná "
-                "hesla. Chcete pokračovat?",
-                parent=self.root,
-            )
-        ):
-            return
-
-        self._template = self._base_template
-        self._crossword_layout = self._layout
-        self._selected_slot_identifier = None
-        self.answer_value.set("")
-        self.clue_value.set("")
-        self._rebuild_slot_tree()
-        self._refresh_crossword_view()
-        self._set_crossword_status(
-            f"Křížovka {self._template.grid.width} × "
-            f"{self._template.grid.height} · "
-            f"{_word_count_text(len(self._template.slots))}.",
+        self.application.new_crossword_document(self._base_template)
+        self._set_template_status(
+            "Křížovka podle této šablony byla otevřena v novém okně.",
             success=True,
         )
-        if select_document:
-            self.notebook.select(self.crossword_tab)
-
-    def _document_changed(
-        self,
-        _event: tk.Event[tk.Misc] | None = None,
-    ) -> None:
-        document = "Šablona" if self.notebook.index("current") == 0 else "Křížovka"
-        self.root.title(f"{document} — Křížovkář")
-        self._refresh_file_menu()
 
     def _refresh_file_menu(self) -> None:
-        if self.notebook.index("current") == 0:
-            available = self._base_template is not None
-            state = "normal" if available else "disabled"
+        if self._document_kind == "template":
             self.file_menu.entryconfigure(
-                0,
-                label="Uložit šablonu (YAML)…",
-                state=state,
+                3,
+                label="Uložit šablonu",
             )
             self.file_menu.entryconfigure(
-                1,
+                4,
+                label="Uložit šablonu jako…",
+            )
+            self.file_menu.entryconfigure(
+                6,
                 label="Uložit šablonu k tisku (PDF)…",
-                state=state,
+                state="normal",
             )
-            self.file_menu.entryconfigure(3, state="disabled")
+            self.file_menu.entryconfigure(7, state="disabled")
             return
 
         template = self._template
-        available = template is not None
         complete = template is not None and template_is_complete(template)
         self.file_menu.entryconfigure(
-            0,
-            label="Uložit křížovku (YAML)…",
-            state="normal" if available else "disabled",
+            3,
+            label="Uložit křížovku",
+        )
+        self.file_menu.entryconfigure(
+            4,
+            label="Uložit křížovku jako…",
         )
         result_state = "normal" if complete else "disabled"
         self.file_menu.entryconfigure(
-            1,
+            6,
             label="Uložit křížovku bez písmen (PDF)…",
             state=result_state,
         )
-        self.file_menu.entryconfigure(3, state=result_state)
+        self.file_menu.entryconfigure(7, state=result_state)
 
     def _refresh_template_view(self) -> None:
         if self._base_template is None:
@@ -1220,7 +1339,6 @@ class CrosswordApplication(ttk.Frame):
             self.blank_pdf_button.configure(state="disabled")
             self.blank_data_button.configure(state="disabled")
             self.create_crossword_button.configure(state="disabled")
-            self.replace_crossword_template_button.configure(state="disabled")
             self._refresh_file_menu()
             return
         self.template_preview.show_crossword(
@@ -1230,7 +1348,6 @@ class CrosswordApplication(ttk.Frame):
         self.blank_pdf_button.configure(state="normal")
         self.blank_data_button.configure(state="normal")
         self.create_crossword_button.configure(state="normal")
-        self.replace_crossword_template_button.configure(state="normal")
         self._refresh_file_menu()
 
     def _slot_label(self, selected: WordSlot) -> str:
@@ -1379,6 +1496,7 @@ class CrosswordApplication(ttk.Frame):
                 document="crossword",
             )
             return
+        self._set_dirty(True)
         self._rebuild_slot_tree()
         self._refresh_crossword_view()
         slot = self._selected_slot()
@@ -1396,6 +1514,7 @@ class CrosswordApplication(ttk.Frame):
         if template is None or identifier is None:
             return
         self._template = clear_template_slot(template, identifier)
+        self._set_dirty(True)
         self._rebuild_slot_tree()
         self._refresh_crossword_view()
         self._set_crossword_status("Heslo bylo z vybraného místa odstraněno.")
@@ -1416,9 +1535,6 @@ class CrosswordApplication(ttk.Frame):
         self.solution_pdf_button.configure(state=result_state)
         if template is None:
             self.progress_value.set("Křížovka zatím není vytvořená.")
-            self.replace_crossword_template_button.configure(
-                text="Vytvořit podle aktuální šablony"
-            )
             self._selected_slot_identifier = None
             self.slot_title_value.set("Křížovka zatím není vytvořená.")
             self.slot_pattern_value.set("Vzor z křížení: —")
@@ -1427,12 +1543,11 @@ class CrosswordApplication(ttk.Frame):
             self._set_slot_form_state("disabled")
             self._refresh_file_menu()
             return
-        self.replace_crossword_template_button.configure(
-            text="Nahradit aktuální šablonou"
-        )
         filled = self._filled_slot_count()
         remaining = len(template.slots) - filled
-        layout = "číslovaná" if self._crossword_layout == "numbered" else "švédská"
+        layout = (
+            "číslovaná" if self._crossword_layout == "numbered" else "švédská"
+        )
         document = (
             f"Křížovka {template.grid.width} × {template.grid.height} · {layout}. "
         )
@@ -1606,49 +1721,30 @@ class CrosswordApplication(ttk.Frame):
             success=True,
         )
 
-    def save_blank_template_data(self) -> None:
-        if self._base_template is None:
-            self._show_action_error(
-                "Datovou šablonu nelze uložit",
-                "Dokument šablony zatím není vytvořený.",
-                document="template",
-            )
-            return
-        self._save_template_data(
-            self._base_template,
-            title="Uložit šablonu",
-            initialfile="sablona.yaml",
-            success_message="Šablona byla uložena",
-            document="template",
-        )
+    def _document(self) -> CrosswordTemplate | CrosswordDocument:
+        if self._document_kind == "template":
+            assert self._base_template is not None
+            return self._base_template
+        assert isinstance(self._template, CrosswordDocument)
+        return self._template
 
-    def save_current_template_data(self) -> None:
-        if self._template is None:
-            self._show_action_error(
-                "Data křížovky nelze uložit",
-                "Dokument křížovky zatím není vytvořený.",
-                document="crossword",
-            )
-            return
-        self._save_template_data(
-            self._template,
-            title="Uložit křížovku",
-            initialfile="krizovka.yaml",
-            success_message="Křížovka byla uložena",
-            document="crossword",
-        )
+    def save_document(self) -> bool:
+        if self._path is None:
+            return self.save_document_as()
+        return self._write_document(self._path, overwrite=True)
 
-    def _save_template_data(
-        self,
-        template: CrosswordTemplate,
-        *,
-        title: str,
-        initialfile: str,
-        success_message: str,
-        document: str,
-    ) -> None:
+    def save_document_as(self) -> bool:
+        document_label = (
+            "šablonu" if self._document_kind == "template" else "křížovku"
+        )
+        if self._path is not None:
+            initialfile = self._path.name
+        elif self._document_kind == "template":
+            initialfile = "sablona.yaml"
+        else:
+            initialfile = "krizovka.yaml"
         selected = self._choose_output(
-            title=title,
+            title=f"Uložit {document_label} jako",
             initialfile=initialfile,
             extension=".yaml",
             filetypes=(
@@ -1658,31 +1754,55 @@ class CrosswordApplication(ttk.Frame):
             overwrite_title="Přepsat datový soubor?",
         )
         if selected is None:
-            return
+            return False
         output, overwrite = selected
+        return self._write_document(output, overwrite=overwrite)
+
+    def _write_document(self, output: Path, *, overwrite: bool) -> bool:
+        document = self._document()
         try:
-            write_crossword_template(template, output, overwrite=overwrite)
+            if isinstance(document, CrosswordDocument):
+                write_crossword_document(
+                    document,
+                    output,
+                    overwrite=overwrite,
+                )
+            else:
+                write_crossword_template(
+                    document,
+                    output,
+                    overwrite=overwrite,
+                )
         except ModelError as error:
             self._show_action_error(
                 "Dokument nelze uložit",
                 str(error),
-                document=document,
+                document=self._document_kind,
             )
-            return
+            return False
+        self._path = output
+        self._set_dirty(False)
+        subject = (
+            "Šablona" if self._document_kind == "template" else "Křížovka"
+        )
         self._set_document_status(
-            document,
-            f"{success_message}: {output}",
+            self._document_kind,
+            f"{subject} byla uložena: {output}",
             success=True,
         )
+        return True
 
-    def save_current_document_data(self) -> None:
-        if self.notebook.index("current") == 0:
-            self.save_blank_template_data()
-        else:
-            self.save_current_template_data()
+    def save_blank_template_data(self) -> bool:
+        return self.save_document()
+
+    def save_current_template_data(self) -> bool:
+        return self.save_document()
+
+    def save_current_document_data(self) -> bool:
+        return self.save_document()
 
     def save_current_document_pdf(self) -> None:
-        if self.notebook.index("current") == 0:
+        if self._document_kind == "template":
             self.save_blank_template_pdf()
         else:
             self.save_crossword_pdf()
@@ -1742,8 +1862,53 @@ class CrosswordApplication(ttk.Frame):
         else:
             self._set_crossword_status(message, error=error, success=success)
 
+    def _update_title(self) -> None:
+        if self._path is not None:
+            name = self._path.name
+        elif self._document_kind == "template":
+            name = "Nová šablona"
+        else:
+            name = "Nová křížovka"
+        marker = "*" if self._dirty else ""
+        self.root.title(f"{marker}{name} — Křížovkář")
+
+    def _set_dirty(self, dirty: bool) -> None:
+        self._dirty = dirty
+        self._update_title()
+
+    def request_close(self) -> None:
+        if self._dirty:
+            name = self._path.name if self._path is not None else "nový dokument"
+            save = messagebox.askyesnocancel(
+                "Uložit změny?",
+                f"Dokument {name} obsahuje neuložené změny. "
+                "Chcete je před zavřením uložit?",
+                parent=self.root,
+            )
+            if save is None:
+                return
+            if save and not self.save_document():
+                return
+        self.application.close_window(self)
+
+    def _new_event(self, _event: tk.Event[tk.Misc]) -> str:
+        self.application.new_template_document()
+        return "break"
+
+    def _open_event(self, _event: tk.Event[tk.Misc]) -> str:
+        self.application.choose_document(parent=self.root)
+        return "break"
+
     def _save_event(self, _event: tk.Event[tk.Misc]) -> str:
         self.save_current_document_data()
+        return "break"
+
+    def _save_as_event(self, _event: tk.Event[tk.Misc]) -> str:
+        self.save_document_as()
+        return "break"
+
+    def _close_event(self, _event: tk.Event[tk.Misc]) -> str:
+        self.request_close()
         return "break"
 
 
@@ -1756,7 +1921,8 @@ def main() -> int:
     except tk.TclError as error:
         print(f"chyba: grafické rozhraní nelze spustit: {error}", file=sys.stderr)
         return 2
-    CrosswordApplication(root)
+    application = CrosswordApplication(root)
+    application.new_template_document()
     root.mainloop()
     return 0
 

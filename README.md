@@ -8,9 +8,9 @@ Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu,
 experimentální generátory švédské a číslované mřížky z JSON slovníku,
 automatický převod umístěného zadání na šablonu, převod výsledku do
 upravitelné LaTeXové sazební šablony, její překlad do PDF a grafické
-rozhraní se samostatným dokumentem šablony a dokumentem křížovky z vlastních
-hesel. Další rozšíření editoru budou postupně zpřístupňovat například tajenky
-a automatické plnění.
+rozhraní se samostatnými okny YAML šablon a křížovek z vlastních hesel.
+Další rozšíření editoru budou postupně zpřístupňovat například tajenky a
+automatické plnění.
 
 ## Grafické rozhraní
 
@@ -20,24 +20,29 @@ Grafické rozhraní se spustí samostatným příkazem:
 uv run krizovkar-gui
 ```
 
-Po otevření zobrazuje dva samostatné dokumenty. Aplikace připraví
-výchozí šablonu, ale křížovku z ní automaticky nevytváří:
+Po spuštění se otevře nový neuložený dokument šablony. Každé viditelné
+okno představuje právě jeden YAML soubor a v titulku ukazuje jeho název,
+případně **Nová šablona** nebo **Nová křížovka**. Hvězdička před
+názvem označuje neuložené změny.
+
+Podle kořenového klíče `kind` má okno jednu ze dvou podob:
 
 - **Šablona** určuje rozměr, švédskou nebo číslovanou podobu a všechna místa
   pro vodorovná a svislá hesla. Má vlastní náhled, formát stránky a uložení
   do YAML nebo tiskového PDF. Tlačítko **Vytvořit křížovku podle této
-  šablony** její aktuální podobu výslovně převezme do druhého dokumentu.
+  šablony** otevře nové okno s nezávislým dokumentem `kind: crossword`.
 - **Křížovka** drží vlastní kopii zvolené šablony a doplněná hesla. Místo se
   vybírá kliknutím v náhledu nebo v seznamu; formulář ukazuje jeho délku a
   písmena známá z křížení. Dokument lze průběžně ukládat do YAML a po
   vyplnění všech míst také jako tiskovou křížovku a samostatné řešení v PDF.
 
-Oba dokumenty jsou na sobě po vytvoření křížovky nezávislé. Změna rozměru
-nebo podoby šablony proto nerozbije rozpracovanou křížovku; tu nahradí až
-výslovná akce **Nahradit aktuální šablonou**, která si při existujících
-heslech vyžádá potvrzení. Klávesová zkratka `Ctrl+S` ukládá do YAML právě
-otevřený dokument. Nabídka **Soubor** podle aktivní karty pojmenuje a
-zpřístupní jen výstupy, které jsou pro daný dokument právě dostupné.
+Nabídka **Soubor** umí otevřít existující `kind: template` nebo
+`kind: crossword` v dalším okně. `Ctrl+N` otevře novou šablonu, `Ctrl+O`
+vybere existující dokument, `Ctrl+S` uloží aktuální soubor a
+`Ctrl+Shift+S` zvolí novou cestu. `Ctrl+W` zavře pouze dané okno; pokud
+obsahuje neuložené změny, editor se zeptá na jejich uložení. Otevřená
+šablona a křížovka jsou po vytvoření nezávislé; změna jednoho okna proto
+obsah druhého neovlivní.
 
 Ve švédské podobě jsou místa pro nápovědy součástí předem vytvořené mřížky.
 Číslovaná podoba ponechá všechna pole pro písmena a nápovědy vysází pod
