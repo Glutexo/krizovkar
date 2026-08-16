@@ -17,8 +17,11 @@ from krizovkar.gui import (
     CrosswordDocumentWindow,
     GuiInputError,
     TemplateSettings,
+    _RecentDocuments,
     _configure_tk_runtime,
     _keyboard_shortcut,
+    _recent_document_label,
+    _recent_documents_storage_path,
     clear_template_slot,
     create_blank_template,
     fill_template_slot,
@@ -72,6 +75,77 @@ def _filled_numbered_crossword():
 
 
 class GuiTest(unittest.TestCase):
+    def test_recent_documents_use_macos_application_support(self) -> None:
+        with (
+            patch("krizovkar.gui.sys.platform", "darwin"),
+            patch(
+                "krizovkar.gui.Path.home",
+                return_value=Path("/Users/test"),
+            ),
+        ):
+            storage_path = _recent_documents_storage_path()
+
+        self.assertEqual(
+            Path(
+                "/Users/test/Library/Application Support/krizovkar/"
+                "recent-documents.json"
+            ),
+            storage_path,
+        )
+
+    def test_recent_documents_are_deduplicated_limited_and_persisted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            storage_path = Path(directory) / "recent-documents.json"
+            paths = [
+                Path(directory) / f"dokument-{index}.yaml"
+                for index in range(12)
+            ]
+            recent_documents = _RecentDocuments(storage_path)
+
+            for path in paths:
+                recent_documents.add(path)
+
+            expected = tuple(reversed(paths[-10:]))
+            self.assertEqual(expected, recent_documents.paths)
+            self.assertEqual(
+                expected,
+                _RecentDocuments(storage_path).paths,
+            )
+
+            recent_documents.add(paths[5])
+
+            self.assertEqual(paths[5], recent_documents.paths[0])
+            self.assertEqual(10, len(recent_documents.paths))
+
+            recent_documents.clear()
+
+            self.assertFalse(storage_path.exists())
+            self.assertEqual((), recent_documents.paths)
+
+    def test_recent_documents_ignore_invalid_storage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            storage_path = Path(directory) / "recent-documents.json"
+            storage_path.write_text("{neplatný json", encoding="utf-8")
+
+            recent_documents = _RecentDocuments(storage_path)
+
+        self.assertEqual((), recent_documents.paths)
+
+    def test_duplicate_recent_document_names_include_their_directories(self) -> None:
+        first = Path("prvni") / "sablona.yaml"
+        second = Path("druha") / "sablona.yaml"
+        unique = Path("treti") / "krizovka.yaml"
+        paths = (first, second, unique)
+
+        self.assertEqual(
+            f"sablona.yaml — {first.parent}",
+            _recent_document_label(first, paths),
+        )
+        self.assertEqual(
+            "krizovka.yaml",
+            _recent_document_label(unique, paths),
+        )
+
     def test_keyboard_shortcuts_follow_operating_system_conventions(self) -> None:
         with patch("krizovkar.gui.sys.platform", "darwin"):
             new_shortcut = _keyboard_shortcut("n")
@@ -95,13 +169,19 @@ class GuiTest(unittest.TestCase):
         window = Mock()
         menu = Mock()
         file_menu = Mock()
+        recent_documents_menu = Mock()
         export_menu = Mock()
 
         with (
             patch("krizovkar.gui.sys.platform", "darwin"),
             patch(
                 "krizovkar.gui.tk.Menu",
-                side_effect=(menu, file_menu, export_menu),
+                side_effect=(
+                    menu,
+                    file_menu,
+                    recent_documents_menu,
+                    export_menu,
+                ),
             ),
         ):
             CrosswordDocumentWindow._build_menu(window)
@@ -129,6 +209,53 @@ class GuiTest(unittest.TestCase):
             ],
             window.root.bind.call_args_list,
         )
+        file_menu.add_cascade.assert_any_call(
+            label="Otevřít poslední",
+            menu=recent_documents_menu,
+        )
+
+    def test_recent_documents_menu_opens_files_and_can_be_cleared(self) -> None:
+        window = Mock()
+        first = Path("prvni") / "sablona.yaml"
+        second = Path("druha") / "sablona.yaml"
+        crossword = Path("treti") / "krizovka.yaml"
+        window.application.recent_document_paths = (first, second, crossword)
+
+        CrosswordDocumentWindow._refresh_recent_documents_menu(window)
+
+        window.recent_documents_menu.delete.assert_called_once_with(0, "end")
+        calls = window.recent_documents_menu.add_command.call_args_list
+        self.assertEqual(
+            [
+                f"sablona.yaml — {first.parent}",
+                f"sablona.yaml — {second.parent}",
+                "krizovka.yaml",
+                "Vymazat nabídku",
+            ],
+            [item.kwargs["label"] for item in calls],
+        )
+        calls[0].kwargs["command"]()
+        window.application.open_recent_document.assert_called_once_with(
+            first,
+            parent=window.root,
+        )
+        self.assertIs(
+            window.application.clear_recent_documents,
+            calls[-1].kwargs["command"],
+        )
+        window.recent_documents_menu.add_separator.assert_called_once_with()
+
+    def test_empty_recent_documents_menu_has_disabled_placeholder(self) -> None:
+        window = Mock()
+        window.application.recent_document_paths = ()
+
+        CrosswordDocumentWindow._refresh_recent_documents_menu(window)
+
+        window.recent_documents_menu.add_command.assert_called_once_with(
+            label="Žádné nedávné dokumenty",
+            state="disabled",
+        )
+        window.recent_documents_menu.add_separator.assert_not_called()
 
     def test_configures_bundled_tk_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -428,7 +555,30 @@ class GuiTest(unittest.TestCase):
             path=source,
             dirty=False,
         )
+        application.remember_recent_document.assert_called_once_with(source)
         self.assertIs(application._open_window.return_value, result)
+
+    def test_missing_recent_document_is_removed(self) -> None:
+        application = Mock()
+        parent = Mock()
+        source = Path("/neexistujici/krizovka.yaml")
+
+        with patch("krizovkar.gui.messagebox.showerror") as show_error:
+            result = CrosswordApplication.open_recent_document(
+                application,
+                source,
+                parent=parent,
+            )
+
+        self.assertIsNone(result)
+        application._recent_documents.remove.assert_called_once_with(source)
+        application.open_document.assert_not_called()
+        show_error.assert_called_once_with(
+            "Dokument nelze otevřít",
+            f"Soubor {source} už neexistuje a byl odebrán "
+            "z nabídky posledních dokumentů.",
+            parent=parent,
+        )
 
     def test_crossword_window_writes_its_document_kind(self) -> None:
         window = Mock()
@@ -451,6 +601,7 @@ class GuiTest(unittest.TestCase):
         self.assertTrue(saved)
         self.assertEqual(output, window._path)
         window._set_dirty.assert_called_once_with(False)
+        window.application.remember_recent_document.assert_called_once_with(output)
 
     def test_window_title_identifies_file_and_unsaved_changes(self) -> None:
         window = Mock()
@@ -589,13 +740,15 @@ class GuiTest(unittest.TestCase):
     def test_file_menu_follows_template_document(self) -> None:
         application = Mock()
         application._document_kind = "template"
+        application._save_menu_index = 4
+        application._save_as_menu_index = 5
 
         CrosswordDocumentWindow._refresh_file_menu(application)
 
         self.assertEqual(
             [
-                call(3, label="Uložit šablonu"),
-                call(4, label="Uložit šablonu jako…"),
+                call(4, label="Uložit šablonu"),
+                call(5, label="Uložit šablonu jako…"),
             ],
             application.file_menu.entryconfigure.call_args_list,
         )
@@ -609,14 +762,16 @@ class GuiTest(unittest.TestCase):
     def test_file_menu_enables_complete_crossword_outputs(self) -> None:
         application = Mock()
         application._document_kind = "crossword"
+        application._save_menu_index = 4
+        application._save_as_menu_index = 5
         application._template = _filled_numbered_crossword()
 
         CrosswordDocumentWindow._refresh_file_menu(application)
 
         self.assertEqual(
             [
-                call(3, label="Uložit křížovku"),
-                call(4, label="Uložit křížovku jako…"),
+                call(4, label="Uložit křížovku"),
+                call(5, label="Uložit křížovku jako…"),
             ],
             application.file_menu.entryconfigure.call_args_list,
         )
@@ -631,6 +786,8 @@ class GuiTest(unittest.TestCase):
     def test_file_menu_disables_incomplete_crossword_outputs(self) -> None:
         application = Mock()
         application._document_kind = "crossword"
+        application._save_menu_index = 4
+        application._save_as_menu_index = 5
         application._template = create_crossword_document(
             create_blank_template(TemplateSettings(3, 3), "numbered")
         )

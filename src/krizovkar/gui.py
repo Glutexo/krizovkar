@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tkinter as tk
@@ -52,6 +53,7 @@ from krizovkar.renderer import (
 )
 
 _MAX_TEMPLATE_DIMENSION = 50
+_MAX_RECENT_DOCUMENTS = 10
 _DIRECTION_LABELS = {
     "horizontal": "Vodorovně",
     "vertical": "Svisle",
@@ -92,6 +94,110 @@ def _keyboard_shortcut(key: str, *, shift: bool = False) -> _KeyboardShortcut:
     sequence_key = normalized_key.upper() if shift else normalized_key
     sequence = f"<{modifier}-{'Shift-' if shift else ''}{sequence_key}>"
     return _KeyboardShortcut(accelerator, sequence)
+
+
+def _recent_documents_storage_path() -> Path:
+    if sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    elif os.name == "nt":
+        configured = os.environ.get("APPDATA")
+        base = (
+            Path(configured)
+            if configured
+            else Path.home() / "AppData" / "Roaming"
+        )
+    else:
+        configured = os.environ.get("XDG_STATE_HOME")
+        base = (
+            Path(configured)
+            if configured
+            else Path.home() / ".local" / "state"
+        )
+    return base / "krizovkar" / "recent-documents.json"
+
+
+class _RecentDocuments:
+    """Udržuje malý trvalý seznam naposledy použitých dokumentů."""
+
+    def __init__(self, storage_path: Path | None = None) -> None:
+        self._storage_path = storage_path or _recent_documents_storage_path()
+        self._paths = list(self._load())
+
+    @property
+    def paths(self) -> tuple[Path, ...]:
+        return tuple(self._paths)
+
+    def add(self, path: Path) -> None:
+        normalized = path.expanduser().absolute()
+        paths = [normalized]
+        paths.extend(item for item in self._paths if item != normalized)
+        paths = paths[:_MAX_RECENT_DOCUMENTS]
+        if paths == self._paths:
+            return
+        self._paths = paths
+        self._persist()
+
+    def remove(self, path: Path) -> None:
+        normalized = path.expanduser().absolute()
+        paths = [item for item in self._paths if item != normalized]
+        if paths == self._paths:
+            return
+        self._paths = paths
+        self._persist()
+
+    def clear(self) -> None:
+        self._paths = []
+        try:
+            self._storage_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    def _load(self) -> tuple[Path, ...]:
+        try:
+            values = json.loads(self._storage_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return ()
+        if not isinstance(values, list):
+            return ()
+        paths: list[Path] = []
+        for value in values:
+            if not isinstance(value, str) or not value:
+                continue
+            path = Path(value)
+            if not path.is_absolute() or path in paths:
+                continue
+            paths.append(path)
+            if len(paths) == _MAX_RECENT_DOCUMENTS:
+                break
+        return tuple(paths)
+
+    def _persist(self) -> None:
+        temporary = self._storage_path.with_name(
+            f".{self._storage_path.name}.tmp"
+        )
+        try:
+            self._storage_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary.write_text(
+                json.dumps(
+                    [str(path) for path in self._paths],
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            os.replace(temporary, self._storage_path)
+        except OSError:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _recent_document_label(path: Path, paths: Sequence[Path]) -> str:
+    if sum(item.name == path.name for item in paths) == 1:
+        return path.name
+    return f"{path.name} — {path.parent}"
 
 
 class PdfExportDialog(simpledialog.Dialog):
@@ -685,10 +791,24 @@ def load_editable_document(
 class CrosswordApplication:
     """Spravuje životní cyklus samostatných dokumentových oken."""
 
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(
+        self,
+        root: tk.Tk,
+        *,
+        recent_documents: _RecentDocuments | None = None,
+    ) -> None:
         self.root = root
         self._windows: list[CrosswordDocumentWindow] = []
+        self._recent_documents = (
+            recent_documents
+            if recent_documents is not None
+            else _RecentDocuments()
+        )
         self.root.withdraw()
+
+    @property
+    def recent_document_paths(self) -> tuple[Path, ...]:
+        return self._recent_documents.paths
 
     def new_template_document(self) -> CrosswordDocumentWindow:
         template = create_blank_template(
@@ -729,6 +849,7 @@ class CrosswordApplication:
         *,
         parent: tk.Misc,
     ) -> CrosswordDocumentWindow | None:
+        source = source.expanduser().absolute()
         try:
             document = load_editable_document(source)
         except ModelError as error:
@@ -738,7 +859,32 @@ class CrosswordApplication:
                 parent=parent,
             )
             return None
-        return self._open_window(document, path=source, dirty=False)
+        window = self._open_window(document, path=source, dirty=False)
+        self.remember_recent_document(source)
+        return window
+
+    def open_recent_document(
+        self,
+        source: Path,
+        *,
+        parent: tk.Misc,
+    ) -> CrosswordDocumentWindow | None:
+        if not source.exists():
+            self._recent_documents.remove(source)
+            messagebox.showerror(
+                "Dokument nelze otevřít",
+                f"Soubor {source} už neexistuje a byl odebrán "
+                "z nabídky posledních dokumentů.",
+                parent=parent,
+            )
+            return None
+        return self.open_document(source, parent=parent)
+
+    def remember_recent_document(self, source: Path) -> None:
+        self._recent_documents.add(source)
+
+    def clear_recent_documents(self) -> None:
+        self._recent_documents.clear()
 
     def _open_window(
         self,
@@ -856,17 +1002,27 @@ class CrosswordDocumentWindow(ttk.Frame):
             accelerator=open_shortcut.accelerator,
             command=lambda: self.application.choose_document(parent=self.root),
         )
+        self.recent_documents_menu = tk.Menu(
+            self.file_menu,
+            postcommand=self._refresh_recent_documents_menu,
+        )
+        self.file_menu.add_cascade(
+            label="Otevřít poslední",
+            menu=self.recent_documents_menu,
+        )
         self.file_menu.add_separator()
         self.file_menu.add_command(
             label="Uložit",
             accelerator=save_shortcut.accelerator,
             command=self.save_current_document_data,
         )
+        self._save_menu_index = cast(int, self.file_menu.index("end"))
         self.file_menu.add_command(
             label="Uložit jako…",
             accelerator=save_as_shortcut.accelerator,
             command=self.save_document_as,
         )
+        self._save_as_menu_index = cast(int, self.file_menu.index("end"))
         self.file_menu.add_separator()
         self.export_menu = tk.Menu(self.file_menu)
         self._add_export_actions()
@@ -901,6 +1057,31 @@ class CrosswordDocumentWindow(ttk.Frame):
             label="Řešení s písmeny (PDF)…",
             command=self.save_solution_pdf,
             state="disabled",
+        )
+
+    def _refresh_recent_documents_menu(self) -> None:
+        self.recent_documents_menu.delete(0, "end")
+        paths = self.application.recent_document_paths
+        if not paths:
+            self.recent_documents_menu.add_command(
+                label="Žádné nedávné dokumenty",
+                state="disabled",
+            )
+            return
+        for path in paths:
+            self.recent_documents_menu.add_command(
+                label=_recent_document_label(path, paths),
+                command=lambda recent_path=path: (
+                    self.application.open_recent_document(
+                        recent_path,
+                        parent=self.root,
+                    )
+                ),
+            )
+        self.recent_documents_menu.add_separator()
+        self.recent_documents_menu.add_command(
+            label="Vymazat nabídku",
+            command=self.application.clear_recent_documents,
         )
 
     def _build_content(self) -> None:
@@ -1284,11 +1465,11 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _refresh_file_menu(self) -> None:
         if self._document_kind == "template":
             self.file_menu.entryconfigure(
-                3,
+                self._save_menu_index,
                 label="Uložit šablonu",
             )
             self.file_menu.entryconfigure(
-                4,
+                self._save_as_menu_index,
                 label="Uložit šablonu jako…",
             )
             template_state = (
@@ -1303,11 +1484,11 @@ class CrosswordDocumentWindow(ttk.Frame):
         template = self._template
         complete = template is not None and template_is_complete(template)
         self.file_menu.entryconfigure(
-            3,
+            self._save_menu_index,
             label="Uložit křížovku",
         )
         self.file_menu.entryconfigure(
-            4,
+            self._save_as_menu_index,
             label="Uložit křížovku jako…",
         )
         result_state = "normal" if complete else "disabled"
@@ -1769,6 +1950,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             return False
         self._path = output
         self._set_dirty(False)
+        self.application.remember_recent_document(output)
         subject = (
             "Šablona" if self._document_kind == "template" else "Křížovka"
         )

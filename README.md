@@ -55,6 +55,11 @@ dané okno; pokud obsahuje neuložené změny, editor se zeptá na jejich
 uložení. Otevřená šablona a křížovka jsou po vytvoření nezávislé; změna
 jednoho okna proto obsah druhého neovlivní.
 
+Podnabídka **Soubor → Otevřít poslední** uchovává mezi spuštěními až
+deset naposledy otevřených nebo uložených dokumentů. Neexistující soubor
+při pokusu o otevření ze seznamu odstraní; celý seznam smaže volba **Vymazat
+nabídku**.
+
 PDF výstupy nejsou součástí pracovního panelu. Podnabídka **Soubor →
 Exportovat** nabízí výstupy dostupné pro daný dokument. Formát stránky
 se volí přímo v dialogu vybraného exportu; poté naváže systémový dialog
