@@ -118,7 +118,6 @@ class PdfExportDialog(simpledialog.Dialog):
             text="Vybrat umístění…",
             command=self.ok,
             default="active",
-            style="Primary.TButton",
         ).pack(side="right")
         ttk.Button(
             buttons,
@@ -811,7 +810,6 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _configure_styles(self) -> None:
         style = ttk.Style(self.root)
-        style.configure("Primary.TButton", font=("TkDefaultFont", 10, "bold"))
         style.configure("Muted.TLabel", foreground="#667085")
         style.configure("Error.TLabel", foreground="#b42318")
         style.configure("Success.TLabel", foreground="#067647")
@@ -952,7 +950,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             properties,
             text="Aktualizovat šablonu",
             command=self.create_new_template,
-            style="Primary.TButton",
         )
         self.create_template_button.grid(
             row=4,
@@ -966,7 +963,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             text="Vytvořit křížovku podle této šablony",
             command=self.create_crossword_from_template,
             state="disabled",
-            style="Primary.TButton",
         )
         self.create_crossword_button.grid(
             row=1,
@@ -1104,7 +1100,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             text="Uložit heslo",
             command=self.save_selected_slot,
             state="disabled",
-            style="Primary.TButton",
         )
         self.save_slot_button.grid(row=0, column=0, sticky="ew")
         self.clear_slot_button = ttk.Button(
