@@ -1153,7 +1153,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         if self._document_kind == "template":
             self.file_menu.add_separator()
             self.file_menu.add_command(
-                label="Vytvořit křížovku podle této šablony",
+                label="Vytvořit křížovku",
                 command=self.create_crossword_from_template,
             )
             self._create_crossword_menu_index = cast(

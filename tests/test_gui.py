@@ -230,7 +230,7 @@ class GuiTest(unittest.TestCase):
             CrosswordDocumentWindow._build_menu(window)
 
         file_menu.add_command.assert_any_call(
-            label="Vytvořit křížovku podle této šablony",
+            label="Vytvořit křížovku",
             command=window.create_crossword_from_template,
         )
 
