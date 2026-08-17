@@ -20,6 +20,7 @@ from krizovkar.gui import (
     CrosswordSettings,
     GuiInputError,
     _configure_tk_runtime,
+    _create_help_menu,
     _create_window_menu,
     _minimum_generated_dimension,
     _template_generation_layout,
@@ -170,6 +171,7 @@ class GuiTest(unittest.TestCase):
         recent_documents_menu = Mock()
         export_menu = Mock()
         window_menu = Mock()
+        help_menu = Mock()
 
         with (
             patch("krizovkar.gui.sys.platform", "darwin"),
@@ -181,6 +183,7 @@ class GuiTest(unittest.TestCase):
                     recent_documents_menu,
                     export_menu,
                     window_menu,
+                    help_menu,
                 ),
             ) as menu_type,
         ):
@@ -214,10 +217,17 @@ class GuiTest(unittest.TestCase):
             menu=recent_documents_menu,
         )
         menu_type.assert_any_call(menu, name="window")
+        menu_type.assert_any_call(menu, name="help")
+        help_menu.add_command.assert_called_once()
+        self.assertEqual(
+            "Křížovkář na GitHubu",
+            help_menu.add_command.call_args.kwargs["label"],
+        )
         menu.add_cascade.assert_has_calls(
             [
                 call(label="Soubor", menu=file_menu),
                 call(label="Okno", menu=window_menu),
+                call(label="Nápověda", menu=help_menu),
             ]
         )
 
@@ -229,6 +239,7 @@ class GuiTest(unittest.TestCase):
         file_menu = Mock()
         recent_documents_menu = Mock()
         window_menu = Mock()
+        help_menu = Mock()
 
         with (
             patch("krizovkar.gui.sys.platform", "darwin"),
@@ -239,6 +250,7 @@ class GuiTest(unittest.TestCase):
                     file_menu,
                     recent_documents_menu,
                     window_menu,
+                    help_menu,
                 ),
             ) as menu_type,
         ):
@@ -260,10 +272,12 @@ class GuiTest(unittest.TestCase):
             menu=recent_documents_menu,
         )
         menu_type.assert_any_call(menu, name="window")
+        menu_type.assert_any_call(menu, name="help")
         menu.add_cascade.assert_has_calls(
             [
                 call(label="Soubor", menu=file_menu),
                 call(label="Okno", menu=window_menu),
+                call(label="Nápověda", menu=help_menu),
             ]
         )
         application.root.configure.assert_called_once_with(menu=menu)
@@ -273,6 +287,23 @@ class GuiTest(unittest.TestCase):
                 call("<Command-o>", application._open_event),
             ],
             application.root.bind.call_args_list,
+        )
+
+    def test_help_menu_opens_project_repository_on_github(self) -> None:
+        parent = Mock()
+        help_menu = Mock()
+
+        with (
+            patch("krizovkar.gui.tk.Menu", return_value=help_menu),
+            patch("krizovkar.gui.webbrowser.open_new_tab") as open_new_tab,
+        ):
+            created = _create_help_menu(parent)
+            command = help_menu.add_command.call_args.kwargs["command"]
+            command()
+
+        self.assertIs(help_menu, created)
+        open_new_tab.assert_called_once_with(
+            "https://github.com/Glutexo/krizovkar"
         )
 
     def test_other_platforms_refresh_window_menu_before_opening(self) -> None:

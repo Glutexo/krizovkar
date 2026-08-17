@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import tkinter as tk
+import webbrowser
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from io import StringIO
@@ -53,6 +54,7 @@ _CROSSWORD_RESIZE_DELAY_MS = 150
 _WINDOW_MENU_SELECTION_VARIABLE = "krizovkar_active_window"
 _DIMENSION_PANEL_BACKGROUND = "#d0d5dd"
 _DIMENSION_PANEL_FOREGROUND = "#1d2939"
+_PROJECT_REPOSITORY_URL = "https://github.com/Glutexo/krizovkar"
 _DIRECTION_LABELS = {
     "horizontal": "Vodorovně",
     "vertical": "Svisle",
@@ -248,6 +250,15 @@ def _create_window_menu(
     if sys.platform == "darwin":
         return tk.Menu(parent, name="window")
     return tk.Menu(parent, name="window", postcommand=refresh)
+
+
+def _create_help_menu(parent: tk.Menu) -> tk.Menu:
+    menu = tk.Menu(parent, name="help")
+    menu.add_command(
+        label="Křížovkář na GitHubu",
+        command=lambda: webbrowser.open_new_tab(_PROJECT_REPOSITORY_URL),
+    )
+    return menu
 
 
 class PdfExportDialog(simpledialog.Dialog):
@@ -862,6 +873,8 @@ class CrosswordApplication:
             self._refresh_window_menu,
         )
         menu.add_cascade(label="Okno", menu=self.window_menu)
+        self.help_menu = _create_help_menu(menu)
+        menu.add_cascade(label="Nápověda", menu=self.help_menu)
         self.root.configure(menu=menu)
         self.root.bind(new_shortcut.sequence, self._new_event)
         self.root.bind(open_shortcut.sequence, self._open_event)
@@ -1153,6 +1166,8 @@ class CrosswordDocumentWindow(ttk.Frame):
             self._refresh_window_menu,
         )
         menu.add_cascade(label="Okno", menu=self.window_menu)
+        self.help_menu = _create_help_menu(menu)
+        menu.add_cascade(label="Nápověda", menu=self.help_menu)
         self.root.configure(menu=menu)
         self.root.bind(new_shortcut.sequence, self._new_event)
         self.root.bind(open_shortcut.sequence, self._open_event)

@@ -70,6 +70,9 @@ druhého neovlivní.
 Nabídka **Okno** uvádí všechna otevřená dokumentová okna. Aktuální okno
 označí a výběrem jiné položky přenese příslušný dokument dopředu.
 
+Nabídka **Nápověda** otevře [repozitář Křížovkáře na GitHubu](https://github.com/Glutexo/krizovkar)
+ve výchozím webovém prohlížeči.
+
 Podnabídka **Soubor → Otevřít poslední** uchovává mezi spuštěními až
 deset naposledy otevřených nebo uložených dokumentů. Neexistující soubor
 při pokusu o otevření ze seznamu odstraní; celý seznam smaže volba **Vymazat
