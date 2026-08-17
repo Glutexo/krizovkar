@@ -291,12 +291,16 @@ def _append_secret_cell(
 def _append_empty_cell(lines: list[str], left: float, bottom: float) -> None:
     lines.extend(
         (
-            rf"\draw[gray!70,line width=0.65pt] "
-            rf"{_point(left + 0.3, bottom + 0.3)} -- "
-            rf"{_point(left + 0.7, bottom + 0.7)};",
-            rf"\draw[gray!70,line width=0.65pt] "
-            rf"{_point(left + 0.3, bottom + 0.7)} -- "
-            rf"{_point(left + 0.7, bottom + 0.3)};",
+            (
+                rf"\draw[gray!70,line width=0.65pt] "
+                rf"{_point(left + 0.3, bottom + 0.3)} -- "
+                rf"{_point(left + 0.7, bottom + 0.7)};"
+            ),
+            (
+                rf"\draw[gray!70,line width=0.65pt] "
+                rf"{_point(left + 0.3, bottom + 0.7)} -- "
+                rf"{_point(left + 0.7, bottom + 0.3)};"
+            ),
         )
     )
 
@@ -358,8 +362,10 @@ def _append_letter(
 def _grid_commands(crossword: CrosswordGrid, *, filled: bool) -> list[str]:
     grid = crossword.grid
     lines = [
-        rf"\begin{{tikzpicture}}[x={_millimetres(CELL_SIZE_MM)},"
-        rf"y={_millimetres(CELL_SIZE_MM)},line cap=butt,line join=miter]"
+        (
+            rf"\begin{{tikzpicture}}[x={_millimetres(CELL_SIZE_MM)},"
+            rf"y={_millimetres(CELL_SIZE_MM)},line cap=butt,line join=miter]"
+        )
     ]
     if grid.cells is not None:
         for row_index, row in enumerate(grid.cells):
@@ -422,8 +428,10 @@ def _grid_commands(crossword: CrosswordGrid, *, filled: bool) -> list[str]:
 
     lines.extend(
         (
-            rf"\draw[line width={_format_number(STRONG_LINE_WIDTH_PT)}pt] "
-            rf"{_point(0, 0)} rectangle {_point(grid.width, grid.height)};",
+            (
+                rf"\draw[line width={_format_number(STRONG_LINE_WIDTH_PT)}pt] "
+                rf"{_point(0, 0)} rectangle {_point(grid.width, grid.height)};"
+            ),
             r"\end{tikzpicture}",
         )
     )

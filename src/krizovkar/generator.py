@@ -811,6 +811,37 @@ def _select_slots_for_lengths(
     return tuple(selected) if search(0) else None
 
 
+def _select_slot_count_for_total_length(
+    slots: list[WordSlot],
+    total_length: int,
+    part_count: int,
+) -> tuple[WordSlot, ...] | None:
+    selected: list[WordSlot] = []
+    used_coordinates: set[GridCoordinate] = set()
+
+    def search(start_index: int, remaining: int) -> bool:
+        if len(selected) == part_count:
+            return remaining == 0
+        if remaining <= 0:
+            return False
+        for slot_index in range(start_index, len(slots)):
+            slot = slots[slot_index]
+            if slot.length > remaining:
+                continue
+            coordinates = set(_slot_coordinates(slot))
+            if coordinates & used_coordinates:
+                continue
+            selected.append(slot)
+            used_coordinates.update(coordinates)
+            if search(slot_index + 1, remaining - slot.length):
+                return True
+            used_coordinates.difference_update(coordinates)
+            selected.pop()
+        return False
+
+    return tuple(selected) if search(0, total_length) else None
+
+
 def _select_slots_for_total_length(
     slots: list[WordSlot],
     total_length: int,
@@ -818,31 +849,13 @@ def _select_slots_for_total_length(
     minimum_length = min(slot.length for slot in slots)
     maximum_parts = min(len(slots), total_length // minimum_length)
     for part_count in range(1, maximum_parts + 1):
-        selected: list[WordSlot] = []
-        used_coordinates: set[GridCoordinate] = set()
-
-        def search(start_index: int, remaining: int) -> bool:
-            if len(selected) == part_count:
-                return remaining == 0
-            if remaining <= 0:
-                return False
-            for slot_index in range(start_index, len(slots)):
-                slot = slots[slot_index]
-                if slot.length > remaining:
-                    continue
-                coordinates = set(_slot_coordinates(slot))
-                if coordinates & used_coordinates:
-                    continue
-                selected.append(slot)
-                used_coordinates.update(coordinates)
-                if search(slot_index + 1, remaining - slot.length):
-                    return True
-                used_coordinates.difference_update(coordinates)
-                selected.pop()
-            return False
-
-        if search(0, total_length):
-            return tuple(selected)
+        selected = _select_slot_count_for_total_length(
+            slots,
+            total_length,
+            part_count,
+        )
+        if selected is not None:
+            return selected
     return None
 
 

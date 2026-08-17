@@ -55,26 +55,26 @@ class _ToolbarDelegate(NSObject):
         self,
         items: Sequence[ToolbarItem],
     ) -> _ToolbarDelegate | None:
-        self = objc.super(_ToolbarDelegate, self).init()
-        if self is None:
+        delegate = objc.super(_ToolbarDelegate, self).init()
+        if delegate is None:
             return None
-        self._items = {item.identifier: item for item in items}
-        self._commands = {
+        delegate._items = {item.identifier: item for item in items}
+        delegate._commands = {
             action.identifier: action.command
             for item in items
             for action in item.menu_actions
         }
-        self._commands.update(
+        delegate._commands.update(
             {
                 item.identifier: item.command
                 for item in items
                 if item.command is not None
             }
         )
-        self._enabled = {item.identifier: True for item in items}
-        self._toolbar_items: dict[str, NSToolbarItem] = {}
-        self._menu_items: dict[str, list[NSMenuItem]] = {}
-        return self
+        delegate._enabled = {item.identifier: True for item in items}
+        delegate._toolbar_items: dict[str, NSToolbarItem] = {}
+        delegate._menu_items: dict[str, list[NSMenuItem]] = {}
+        return delegate
 
     def toolbarDefaultItemIdentifiers_(self, _toolbar: NSToolbar) -> list[str]:
         return list(self._items)

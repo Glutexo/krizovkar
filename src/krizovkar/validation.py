@@ -125,7 +125,7 @@ def _word_start_warnings(crossword: CrosswordGrid) -> list[ValidationIssue]:
             if not isinstance(cell, (LetterCell, SecretCell)):
                 continue
 
-            left_cell = cells[row][column - 1] if column > 0 else None
+            left_cell = cell_row[column - 1] if column > 0 else None
             continues_from_left = isinstance(
                 left_cell,
                 (LetterCell, SecretCell),

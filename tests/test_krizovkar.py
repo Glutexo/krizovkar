@@ -223,32 +223,34 @@ class ModelTest(unittest.TestCase):
             ("alignment", "center"),
         )
         for property_name, value in invalid_properties:
-            with self.subTest(property_name=property_name):
-                with tempfile.TemporaryDirectory() as directory:
-                    source = Path(directory) / "invalid-secret-prompt.yaml"
-                    prompt = (
-                        f"  - text: {value}\n"
-                        if property_name == "text"
-                        else (
-                            "  - text: Zadání tajenky\n"
-                            f"    {property_name}: {value}\n"
-                        )
+            with (
+                self.subTest(property_name=property_name),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                source = Path(directory) / "invalid-secret-prompt.yaml"
+                prompt = (
+                    f"  - text: {value}\n"
+                    if property_name == "text"
+                    else (
+                        "  - text: Zadání tajenky\n"
+                        f"    {property_name}: {value}\n"
                     )
-                    source.write_text(
-                        "format: krizovkar\n"
-                        "kind: grid\n"
-                        "version: 1\n"
-                        "grid: {width: 1, height: 1}\n"
-                        "secret_prompts:\n"
-                        f"{prompt}",
-                        encoding="utf-8",
-                    )
+                )
+                source.write_text(
+                    "format: krizovkar\n"
+                    "kind: grid\n"
+                    "version: 1\n"
+                    "grid: {width: 1, height: 1}\n"
+                    "secret_prompts:\n"
+                    f"{prompt}",
+                    encoding="utf-8",
+                )
 
-                    with self.assertRaisesRegex(
-                        ModelError,
-                        rf"\$\.secret_prompts\[0\]\.{property_name}",
-                    ):
-                        load_crossword_grid(source)
+                with self.assertRaisesRegex(
+                    ModelError,
+                    rf"\$\.secret_prompts\[0\]\.{property_name}",
+                ):
+                    load_crossword_grid(source)
 
     def test_rejects_duplicate_grid_cell_number(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -323,22 +325,26 @@ class ModelTest(unittest.TestCase):
         cases = (
             (
                 "horizontal",
-                "grid:\n"
-                "  width: 2\n"
-                "  height: 1\n"
-                "  cells:\n"
-                "    - [{type: letter, value: A}, "
-                "{type: letter, value: B, number: 2}]\n",
+                (
+                    "grid:\n"
+                    "  width: 2\n"
+                    "  height: 1\n"
+                    "  cells:\n"
+                    "    - [{type: letter, value: A}, "
+                    "{type: letter, value: B, number: 2}]\n"
+                ),
                 "pravý předěl",
             ),
             (
                 "vertical",
-                "grid:\n"
-                "  width: 1\n"
-                "  height: 2\n"
-                "  cells:\n"
-                "    - [{type: letter, value: A}]\n"
-                "    - [{type: letter, value: B, number: 2}]\n",
+                (
+                    "grid:\n"
+                    "  width: 1\n"
+                    "  height: 2\n"
+                    "  cells:\n"
+                    "    - [{type: letter, value: A}]\n"
+                    "    - [{type: letter, value: B, number: 2}]\n"
+                ),
                 "dolní předěl",
             ),
         )

@@ -260,7 +260,7 @@ def create_dense_swedish_layout_candidates(
     candidates = []
     for column_lengths in _segment_length_candidates(width):
         for row_lengths in _segment_length_candidates(height):
-            if not required <= set((*column_lengths, *row_lengths)):
+            if not required <= {*column_lengths, *row_lengths}:
                 continue
             candidates.append(
                 (
@@ -318,7 +318,7 @@ def create_dense_numbered_layout_candidates(
     candidates = []
     for column_lengths in _numbered_segment_length_candidates(width):
         for row_lengths in _numbered_segment_length_candidates(height):
-            if not required <= set((*column_lengths, *row_lengths)):
+            if not required <= {*column_lengths, *row_lengths}:
                 continue
             candidates.append(
                 (
