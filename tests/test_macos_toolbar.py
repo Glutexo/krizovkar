@@ -19,14 +19,14 @@ class MacToolbarTest(unittest.TestCase):
         create_command = Mock()
         export_command = Mock()
         export_action = SimpleNamespace(
-            identifier="blank-template",
-            label="Šablonu k tisku (PDF)…",
+            identifier="blank-crossword",
+            label="Křížovku bez písmen (PDF)…",
             command=export_command,
         )
         create_item = SimpleNamespace(
-            identifier="create-crossword",
-            label="Vytvořit křížovku",
-            tooltip="Vytvořit křížovku podle této šablony",
+            identifier="new-crossword",
+            label="Nová křížovka",
+            tooltip="Vytvořit novou křížovku",
             image_name="doc.badge.plus",
             command=create_command,
             menu_actions=(),

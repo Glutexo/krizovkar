@@ -11,35 +11,36 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock, call, patch
 
-from krizovkar.generator import create_grid_from_template
+from krizovkar.generator import (
+    create_grid_from_crossword,
+    generate_numbered_template,
+)
 from krizovkar.gui import (
+    CrosswordSettings,
     CrosswordApplication,
     CrosswordDocumentWindow,
     GuiInputError,
-    TemplateSettings,
     _RecentDocuments,
     _configure_tk_runtime,
+    _crossword_generation_layout,
     _keyboard_shortcut,
     _recent_document_label,
     _recent_documents_storage_path,
-    _template_generation_layout,
-    clear_template_slot,
-    create_blank_template,
-    fill_template_slot,
+    clear_crossword_slot,
+    create_blank_crossword,
+    crossword_is_complete,
+    crossword_slot_pattern,
+    fill_crossword_slot,
     load_editable_document,
     main,
+    parse_crossword_settings,
     parse_slot_content,
-    parse_template_settings,
     slot_coordinates,
-    template_is_complete,
-    template_slot_pattern,
 )
 from krizovkar.model import (
     CrosswordDocument,
     LetterCell,
-    create_crossword_document,
     load_crossword_document,
-    load_crossword_template,
     write_crossword_document,
     write_crossword_template,
 )
@@ -58,9 +59,7 @@ def _fake_lualatex(source: Path, output_directory: Path) -> Path:
 
 
 def _filled_numbered_crossword():
-    template = create_crossword_document(
-        create_blank_template(TemplateSettings(3, 3), "numbered")
-    )
+    crossword = create_blank_crossword(CrosswordSettings(3, 3), "numbered")
     entries = {
         "h1": ("ABC", "První řádek"),
         "h2": ("DEF", "Druhý řádek"),
@@ -70,8 +69,8 @@ def _filled_numbered_crossword():
         "v3": ("CFI", "Třetí sloupec"),
     }
     for identifier, (answer, clue) in entries.items():
-        template = fill_template_slot(template, identifier, answer, clue)
-    return template
+        crossword = fill_crossword_slot(crossword, identifier, answer, clue)
+    return crossword
 
 
 class GuiTest(unittest.TestCase):
@@ -167,7 +166,6 @@ class GuiTest(unittest.TestCase):
 
     def test_menu_uses_macos_tk_command_accelerators(self) -> None:
         window = Mock()
-        window._document_kind = "crossword"
         menu = Mock()
         file_menu = Mock()
         recent_documents_menu = Mock()
@@ -215,25 +213,6 @@ class GuiTest(unittest.TestCase):
             menu=recent_documents_menu,
         )
 
-    def test_template_menu_offers_create_crossword_action(self) -> None:
-        window = Mock()
-        window._document_kind = "template"
-        menu = Mock()
-        file_menu = Mock()
-        recent_documents_menu = Mock()
-        export_menu = Mock()
-
-        with patch(
-            "krizovkar.gui.tk.Menu",
-            side_effect=(menu, file_menu, recent_documents_menu, export_menu),
-        ):
-            CrosswordDocumentWindow._build_menu(window)
-
-        file_menu.add_command.assert_any_call(
-            label="Vytvořit křížovku",
-            command=window.create_crossword_from_template,
-        )
-
     def test_application_menu_is_available_without_document(self) -> None:
         application = CrosswordApplication.__new__(CrosswordApplication)
         application.root = Mock()
@@ -253,7 +232,7 @@ class GuiTest(unittest.TestCase):
 
         commands = file_menu.add_command.call_args_list
         self.assertEqual(
-            ["Nová šablona", "Otevřít…"],
+            ["Nová křížovka", "Otevřít…"],
             [item.kwargs["label"] for item in commands],
         )
         self.assertEqual(
@@ -361,26 +340,26 @@ class GuiTest(unittest.TestCase):
                 self.assertEqual(str(tcl_library), os.environ["TCL_LIBRARY"])
                 self.assertEqual(str(tk_library), os.environ["TK_LIBRARY"])
 
-    def test_parses_template_settings(self) -> None:
+    def test_parses_crossword_settings(self) -> None:
         self.assertEqual(
-            TemplateSettings(width=15, height=10),
-            parse_template_settings(" 15 ", "10"),
+            CrosswordSettings(width=15, height=10),
+            parse_crossword_settings(" 15 ", "10"),
         )
 
     def test_rejects_non_integer_dimension(self) -> None:
         with self.assertRaisesRegex(GuiInputError, "Počet sloupců musí být celé"):
-            parse_template_settings("patnáct", "10")
+            parse_crossword_settings("patnáct", "10")
 
     def test_rejects_non_positive_dimension(self) -> None:
         with self.assertRaisesRegex(
             GuiInputError,
             "Počet řádků musí být kladný",
         ):
-            parse_template_settings("15", "0")
+            parse_crossword_settings("15", "0")
 
-    def test_limits_automatically_generated_template_size(self) -> None:
+    def test_limits_automatically_generated_crossword_size(self) -> None:
         with self.assertRaisesRegex(GuiInputError, "nejvýše 50"):
-            parse_template_settings("51", "10")
+            parse_crossword_settings("51", "10")
 
     def test_parses_and_normalizes_slot_content(self) -> None:
         self.assertEqual(
@@ -399,38 +378,42 @@ class GuiTest(unittest.TestCase):
         with self.assertRaisesRegex(GuiInputError, "Vyplňte nápovědu"):
             parse_slot_content("CHATA", "  ", 4)
 
-    def test_creates_swedish_template_before_words(self) -> None:
-        template = create_blank_template(
-            TemplateSettings(width=7, height=6),
+    def test_creates_swedish_crossword_before_words(self) -> None:
+        crossword = create_blank_crossword(
+            CrosswordSettings(width=7, height=6),
             "swedish",
         )
 
-        self.assertEqual("template", template.kind)
-        self.assertTrue(template.slots)
-        self.assertTrue(all(slot.answer is None for slot in template.slots))
+        self.assertEqual("crossword", crossword.kind)
+        self.assertTrue(crossword.slots)
+        self.assertTrue(all(slot.answer is None for slot in crossword.slots))
         self.assertTrue(
-            any(slot.legend_position is not None for slot in template.slots)
+            any(slot.legend_position is not None for slot in crossword.slots)
         )
 
-    def test_creates_numbered_template_before_words(self) -> None:
-        template = create_blank_template(
-            TemplateSettings(width=7, height=6),
+    def test_creates_numbered_crossword_before_words(self) -> None:
+        crossword = create_blank_crossword(
+            CrosswordSettings(width=7, height=6),
             "numbered",
         )
 
-        self.assertTrue(template.slots)
-        self.assertTrue(all(slot.legend_position is None for slot in template.slots))
+        self.assertTrue(crossword.slots)
+        self.assertTrue(
+            all(slot.legend_position is None for slot in crossword.slots)
+        )
 
-    def test_reports_too_small_template_as_gui_error(self) -> None:
+    def test_reports_too_small_crossword_as_gui_error(self) -> None:
         with self.assertRaisesRegex(GuiInputError, "nelze rozdělit"):
-            create_blank_template(
-                TemplateSettings(width=2, height=2),
+            create_blank_crossword(
+                CrosswordSettings(width=2, height=2),
                 "swedish",
             )
 
     def test_returns_slot_coordinates_in_answer_order(self) -> None:
-        template = create_blank_template(TemplateSettings(7, 6), "swedish")
-        vertical = next(slot for slot in template.slots if slot.direction == "vertical")
+        crossword = create_blank_crossword(CrosswordSettings(7, 6), "swedish")
+        vertical = next(
+            slot for slot in crossword.slots if slot.direction == "vertical"
+        )
 
         coordinates = slot_coordinates(vertical)
 
@@ -439,11 +422,11 @@ class GuiTest(unittest.TestCase):
         self.assertEqual(vertical.start.row + 1, coordinates[1].row)
         self.assertEqual(vertical.start.column, coordinates[1].column)
 
-    def test_fills_selected_template_slot(self) -> None:
-        template = create_blank_template(TemplateSettings(7, 6), "swedish")
+    def test_fills_selected_crossword_slot(self) -> None:
+        crossword = create_blank_crossword(CrosswordSettings(7, 6), "swedish")
 
-        filled = fill_template_slot(
-            template,
+        filled = fill_crossword_slot(
+            crossword,
             "h1",
             "abcdef",
             "Prvních šest písmen",
@@ -452,7 +435,7 @@ class GuiTest(unittest.TestCase):
         slot = next(slot for slot in filled.slots if slot.identifier == "h1")
         self.assertEqual("ABCDEF", slot.answer)
         self.assertEqual("Prvních šest písmen", slot.clue)
-        grid = create_grid_from_template(filled)
+        grid = create_grid_from_crossword(filled)
         assert grid.grid.cells is not None
         first_letter = grid.grid.cells[slot.start.row - 1][slot.start.column - 1]
         self.assertIsInstance(first_letter, LetterCell)
@@ -460,72 +443,95 @@ class GuiTest(unittest.TestCase):
         self.assertEqual("A", first_letter.value)
 
     def test_shows_letters_known_from_crossings(self) -> None:
-        template = create_blank_template(TemplateSettings(7, 6), "swedish")
-        template = fill_template_slot(template, "h1", "ABCDEF", "Abeceda")
+        crossword = create_blank_crossword(CrosswordSettings(7, 6), "swedish")
+        crossword = fill_crossword_slot(
+            crossword,
+            "h1",
+            "ABCDEF",
+            "Abeceda",
+        )
 
         self.assertEqual(
             ("A", None, None, None, None),
-            template_slot_pattern(template, "v1"),
+            crossword_slot_pattern(crossword, "v1"),
         )
 
     def test_rejects_conflicting_crossing(self) -> None:
-        template = create_blank_template(TemplateSettings(7, 6), "swedish")
-        template = fill_template_slot(template, "h1", "ABCDEF", "Abeceda")
+        crossword = create_blank_crossword(CrosswordSettings(7, 6), "swedish")
+        crossword = fill_crossword_slot(
+            crossword,
+            "h1",
+            "ABCDEF",
+            "Abeceda",
+        )
 
         with self.assertRaisesRegex(
             GuiInputError,
             "musí být v 1. poli písmeno 'A', ne 'Z'",
         ):
-            fill_template_slot(template, "v1", "ZABAK", "Obojživelník")
+            fill_crossword_slot(crossword, "v1", "ZABAK", "Obojživelník")
 
     def test_rejects_duplicate_answer(self) -> None:
-        template = create_blank_template(TemplateSettings(7, 6), "swedish")
-        template = fill_template_slot(template, "h1", "ABCDEF", "Abeceda")
+        crossword = create_blank_crossword(CrosswordSettings(7, 6), "swedish")
+        crossword = fill_crossword_slot(
+            crossword,
+            "h1",
+            "ABCDEF",
+            "Abeceda",
+        )
 
         with self.assertRaisesRegex(GuiInputError, "už je použité"):
-            fill_template_slot(template, "h2", "ABCDEF", "Totéž heslo")
+            fill_crossword_slot(crossword, "h2", "ABCDEF", "Totéž heslo")
 
-    def test_clears_selected_template_slot(self) -> None:
-        template = create_blank_template(TemplateSettings(7, 6), "swedish")
-        template = fill_template_slot(template, "h1", "ABCDEF", "Abeceda")
+    def test_clears_selected_crossword_slot(self) -> None:
+        crossword = create_blank_crossword(CrosswordSettings(7, 6), "swedish")
+        crossword = fill_crossword_slot(
+            crossword,
+            "h1",
+            "ABCDEF",
+            "Abeceda",
+        )
 
-        cleared = clear_template_slot(template, "h1")
+        cleared = clear_crossword_slot(crossword, "h1")
 
         slot = next(slot for slot in cleared.slots if slot.identifier == "h1")
         self.assertIsNone(slot.answer)
         self.assertIsNone(slot.clue)
 
     def test_recognizes_complete_crossword(self) -> None:
-        template = _filled_numbered_crossword()
+        crossword = _filled_numbered_crossword()
 
-        self.assertTrue(template_is_complete(template))
+        self.assertTrue(crossword_is_complete(crossword))
 
-        template = clear_template_slot(template, "v3")
-        self.assertFalse(template_is_complete(template))
+        crossword = clear_crossword_slot(crossword, "v3")
+        self.assertFalse(crossword_is_complete(crossword))
 
-    def test_saves_partially_filled_template_in_project_format(self) -> None:
-        template = create_blank_template(TemplateSettings(7, 6), "swedish")
-        template = fill_template_slot(template, "h1", "ABCDEF", "Abeceda")
+    def test_saves_partially_filled_crossword_in_project_format(self) -> None:
+        crossword = create_blank_crossword(CrosswordSettings(7, 6), "swedish")
+        crossword = fill_crossword_slot(
+            crossword,
+            "h1",
+            "ABCDEF",
+            "Abeceda",
+        )
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "krizovka.yaml"
 
-            write_crossword_template(template, output)
+            write_crossword_document(crossword, output)
 
-            self.assertEqual(template, load_crossword_template(output))
+            self.assertEqual(crossword, load_crossword_document(output))
 
-    def test_selects_generator_for_rebuilding_template(self) -> None:
-        swedish = create_blank_template(TemplateSettings(7, 6), "swedish")
-        numbered = create_blank_template(TemplateSettings(7, 6), "numbered")
+    def test_selects_generator_for_rebuilding_crossword(self) -> None:
+        swedish = create_blank_crossword(CrosswordSettings(7, 6), "swedish")
+        numbered = create_blank_crossword(CrosswordSettings(7, 6), "numbered")
 
-        self.assertEqual("swedish", _template_generation_layout(swedish))
-        self.assertEqual("numbered", _template_generation_layout(numbered))
+        self.assertEqual("swedish", _crossword_generation_layout(swedish))
+        self.assertEqual("numbered", _crossword_generation_layout(numbered))
 
     def test_filling_crossword_preserves_document_kind(self) -> None:
-        crossword = create_crossword_document(
-            create_blank_template(TemplateSettings(7, 6), "swedish")
-        )
+        crossword = create_blank_crossword(CrosswordSettings(7, 6), "swedish")
 
-        filled = fill_template_slot(
+        filled = fill_crossword_slot(
             crossword,
             "h1",
             "ABCDEF",
@@ -535,27 +541,29 @@ class GuiTest(unittest.TestCase):
         self.assertIsInstance(filled, CrosswordDocument)
         self.assertEqual("crossword", filled.kind)
 
-    def test_gui_loader_selects_editor_from_yaml_kind(self) -> None:
-        template = create_blank_template(TemplateSettings(3, 3), "numbered")
-        crossword = create_crossword_document(template)
+    def test_gui_loader_converts_legacy_template_to_crossword(self) -> None:
+        legacy_template = generate_numbered_template(width=3, height=3)
+        crossword = create_blank_crossword(CrosswordSettings(3, 3), "numbered")
         with tempfile.TemporaryDirectory() as directory:
             template_path = Path(directory) / "sablona.yaml"
             crossword_path = Path(directory) / "krizovka.yaml"
-            write_crossword_template(template, template_path)
+            write_crossword_template(legacy_template, template_path)
             write_crossword_document(crossword, crossword_path)
 
-            loaded_template = load_editable_document(template_path)
+            converted_template = load_editable_document(template_path)
             loaded_crossword = load_editable_document(crossword_path)
 
-        self.assertEqual("template", loaded_template.kind)
+        self.assertIsInstance(converted_template, CrosswordDocument)
+        self.assertEqual("crossword", converted_template.kind)
         self.assertIsInstance(loaded_crossword, CrosswordDocument)
 
-    def test_template_controls_form_the_preview_heading(self) -> None:
+    def test_dimension_controls_form_the_crossword_preview_heading(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
-        window.template_tab = Mock()
+        parent = Mock()
         window.height_value = Mock()
         window.width_value = Mock()
-        window.template_input_error_value = Mock()
+        window.dimension_error_value = Mock()
+        window._preview_cell_clicked = Mock()
         preview_frame = Mock()
         controls = Mock()
         height_spinbox = Mock()
@@ -578,9 +586,9 @@ class GuiTest(unittest.TestCase):
                 return_value=preview,
             ) as preview_type,
         ):
-            window._build_template_document()
+            window._build_crossword_preview(parent)
 
-        label_frame_type.assert_called_once_with(window.template_tab, padding=12)
+        label_frame_type.assert_called_once_with(parent, padding=12)
         preview_frame.configure.assert_called_once_with(labelwidget=controls)
         self.assertEqual(
             [
@@ -601,24 +609,21 @@ class GuiTest(unittest.TestCase):
             ],
             spinbox_type.call_args_list,
         )
-        self.assertEqual(
-            ["Řádky", "Sloupce"],
-            [
-                widget_call.kwargs["text"]
-                for widget_call in label_type.call_args_list
-                if "text" in widget_call.kwargs
-            ],
-        )
+        self.assertEqual("Řádky", label_type.call_args_list[0].kwargs["text"])
+        self.assertEqual("Sloupce", label_type.call_args_list[1].kwargs["text"])
         preview_type.assert_called_once_with(
             preview_frame,
-            width=1080,
-            height=650,
+            width=620,
+            height=390,
         )
         self.assertIs(height_spinbox, window.height_spinbox)
         self.assertIs(width_spinbox, window.width_spinbox)
-        self.assertIs(preview, window.template_preview)
+        self.assertIs(preview, window.crossword_preview)
+        preview.set_cell_click_handler.assert_called_once_with(
+            window._preview_cell_clicked
+        )
 
-    def test_template_watches_all_values_for_live_updates(self) -> None:
+    def test_crossword_watches_dimensions_for_live_resizing(self) -> None:
         window = Mock()
 
         CrosswordDocumentWindow._watch_inputs(window)
@@ -629,120 +634,148 @@ class GuiTest(unittest.TestCase):
         ):
             value.trace_add.assert_called_once_with(
                 "write",
-                window._template_input_changed,
+                window._dimension_input_changed,
             )
 
-    def test_template_input_change_replaces_pending_live_update(self) -> None:
+    def test_dimension_change_replaces_pending_resize(self) -> None:
         window = Mock()
-        window._template_update_job = "předchozí"
+        window._changing_dimension_values = False
+        window._resize_job = "předchozí"
         window.after.return_value = "nová"
 
-        with patch("krizovkar.gui._TEMPLATE_UPDATE_DELAY_MS", 321):
-            CrosswordDocumentWindow._template_input_changed(window)
+        with patch("krizovkar.gui._CROSSWORD_RESIZE_DELAY_MS", 321):
+            CrosswordDocumentWindow._dimension_input_changed(window)
 
-        window.template_input_error_value.set.assert_called_once_with("")
+        window.dimension_error_value.set.assert_called_once_with("")
         window.after_cancel.assert_called_once_with("předchozí")
         window.after.assert_called_once_with(
             321,
-            window._update_template_from_inputs,
+            window._resize_crossword_from_inputs,
         )
-        self.assertEqual("nová", window._template_update_job)
+        self.assertEqual("nová", window._resize_job)
 
-    def test_live_template_update_changes_only_its_document_window(self) -> None:
+    def test_live_resize_changes_only_its_document_window(self) -> None:
         window = Mock()
-        window._base_template = create_blank_template(
-            TemplateSettings(4, 4),
+        window._crossword = create_blank_crossword(
+            CrosswordSettings(4, 4),
             "numbered",
         )
-        window._template_generation_layout = "numbered"
-        new_template = create_blank_template(TemplateSettings(3, 3), "numbered")
+        window._generation_layout = "numbered"
+        new_crossword = create_blank_crossword(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
         window.width_value.get.return_value = "3"
         window.height_value.get.return_value = "3"
 
         with patch(
-            "krizovkar.gui.create_blank_template",
-            return_value=new_template,
-        ) as create_template:
-            CrosswordDocumentWindow._update_template_from_inputs(window)
+            "krizovkar.gui.create_blank_crossword",
+            return_value=new_crossword,
+        ) as create_crossword:
+            CrosswordDocumentWindow._resize_crossword_from_inputs(window)
 
-        create_template.assert_called_once_with(
-            TemplateSettings(3, 3),
+        create_crossword.assert_called_once_with(
+            CrosswordSettings(3, 3),
             "numbered",
         )
-        self.assertIs(new_template, window._base_template)
-        self.assertEqual("numbered", window._template_generation_layout)
-        self.assertIsNone(window._template_update_job)
+        self.assertIs(new_crossword, window._crossword)
+        self.assertEqual("numbered", window._generation_layout)
+        self.assertIsNone(window._resize_job)
         window._set_dirty.assert_called_once_with(True)
-        window._refresh_template_view.assert_called_once_with()
+        window._rebuild_slot_tree.assert_called_once_with()
+        window._refresh_crossword_view.assert_called_once_with()
 
-    def test_live_template_update_preserves_matching_document(self) -> None:
+    def test_live_resize_preserves_matching_document(self) -> None:
         window = Mock()
-        template = create_blank_template(TemplateSettings(3, 3), "numbered")
-        window._base_template = template
-        window._template_generation_layout = "numbered"
+        crossword = create_blank_crossword(CrosswordSettings(3, 3), "numbered")
+        window._crossword = crossword
+        window._generation_layout = "numbered"
         window.width_value.get.return_value = "3"
         window.height_value.get.return_value = "3"
 
-        with patch("krizovkar.gui.create_blank_template") as create_template:
-            CrosswordDocumentWindow._update_template_from_inputs(window)
+        with patch("krizovkar.gui.create_blank_crossword") as create_crossword:
+            CrosswordDocumentWindow._resize_crossword_from_inputs(window)
 
-        create_template.assert_not_called()
-        self.assertIs(template, window._base_template)
+        create_crossword.assert_not_called()
+        self.assertIs(crossword, window._crossword)
         window._set_dirty.assert_not_called()
-        window._refresh_template_view.assert_not_called()
+        window._refresh_crossword_view.assert_not_called()
 
-    def test_live_template_update_keeps_last_preview_for_invalid_value(
+    def test_live_resize_keeps_last_preview_for_invalid_value(
         self,
     ) -> None:
         window = Mock()
-        template = create_blank_template(TemplateSettings(3, 3), "numbered")
-        window._base_template = template
-        window._template_generation_layout = "numbered"
+        crossword = create_blank_crossword(CrosswordSettings(3, 3), "numbered")
+        window._crossword = crossword
+        window._generation_layout = "numbered"
         window.width_value.get.return_value = ""
         window.height_value.get.return_value = "3"
 
-        with patch("krizovkar.gui.create_blank_template") as create_template:
-            CrosswordDocumentWindow._update_template_from_inputs(window)
+        with patch("krizovkar.gui.create_blank_crossword") as create_crossword:
+            CrosswordDocumentWindow._resize_crossword_from_inputs(window)
 
-        create_template.assert_not_called()
-        self.assertIs(template, window._base_template)
-        window.template_input_error_value.set.assert_called_once_with(
+        create_crossword.assert_not_called()
+        self.assertIs(crossword, window._crossword)
+        window.dimension_error_value.set.assert_called_once_with(
             "Počet sloupců musí být celé číslo."
         )
         window._show_action_error.assert_not_called()
         window._set_dirty.assert_not_called()
-        window._refresh_template_view.assert_not_called()
+        window._refresh_crossword_view.assert_not_called()
 
-    def test_template_opens_crossword_in_new_document_window(self) -> None:
+    def test_live_resize_requires_confirmation_for_filled_crossword(self) -> None:
         window = Mock()
-        template = create_blank_template(TemplateSettings(3, 3), "numbered")
-        window._base_template = template
+        crossword = create_blank_crossword(CrosswordSettings(3, 3), "numbered")
+        crossword = fill_crossword_slot(
+            crossword,
+            "h1",
+            "ABC",
+            "První řádek",
+        )
+        window._crossword = crossword
+        window._generation_layout = "numbered"
+        window.width_value.get.return_value = "4"
+        window.height_value.get.return_value = "4"
 
-        CrosswordDocumentWindow.create_crossword_from_template(window)
+        with (
+            patch(
+                "krizovkar.gui.messagebox.askyesno",
+                return_value=False,
+            ) as ask,
+            patch("krizovkar.gui.create_blank_crossword") as create_crossword,
+        ):
+            CrosswordDocumentWindow._resize_crossword_from_inputs(window)
 
-        window.application.new_crossword_document.assert_called_once_with(template)
+        ask.assert_called_once()
+        window._restore_dimension_values.assert_called_once_with(crossword)
+        create_crossword.assert_not_called()
+        self.assertIs(crossword, window._crossword)
+        window._set_dirty.assert_not_called()
 
     def test_application_creates_crossword_as_new_document(self) -> None:
         application = Mock()
-        template = create_blank_template(TemplateSettings(3, 3), "numbered")
+        crossword = create_blank_crossword(CrosswordSettings(3, 3), "numbered")
         expected_window = Mock()
         application._open_window.return_value = expected_window
 
-        result = CrosswordApplication.new_crossword_document(
-            application,
-            template,
-        )
+        with patch(
+            "krizovkar.gui.create_blank_crossword",
+            return_value=crossword,
+        ) as create_crossword:
+            result = CrosswordApplication.new_crossword_document(application)
 
-        document = application._open_window.call_args.args[0]
-        self.assertIsInstance(document, CrosswordDocument)
-        self.assertEqual("crossword", document.kind)
-        application._open_window.assert_called_once_with(document, dirty=True)
+        create_crossword.assert_called_once_with(
+            CrosswordSettings(15, 10),
+            "swedish",
+        )
+        application._open_window.assert_called_once_with(crossword, dirty=True)
         self.assertIs(expected_window, result)
 
     def test_crossword_progress_does_not_assign_a_global_type(self) -> None:
         window = Mock()
-        window._template = create_crossword_document(
-            create_blank_template(TemplateSettings(3, 3), "numbered")
+        window._crossword = create_blank_crossword(
+            CrosswordSettings(3, 3),
+            "numbered",
         )
         window._filled_slot_count.return_value = 0
 
@@ -817,10 +850,10 @@ class GuiTest(unittest.TestCase):
     def test_application_opens_yaml_in_new_document_window(self) -> None:
         application = Mock()
         parent = Mock()
-        template = create_blank_template(TemplateSettings(3, 3), "numbered")
+        crossword = create_blank_crossword(CrosswordSettings(3, 3), "numbered")
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "sablona.yaml"
-            write_crossword_template(template, source)
+            source = Path(directory) / "krizovka.yaml"
+            write_crossword_document(crossword, source)
 
             result = CrosswordApplication.open_document(
                 application,
@@ -829,7 +862,7 @@ class GuiTest(unittest.TestCase):
             )
 
         loaded = application._open_window.call_args.args[0]
-        self.assertEqual(template, loaded)
+        self.assertEqual(crossword, loaded)
         application._open_window.assert_called_once_with(
             loaded,
             path=source,
@@ -862,11 +895,8 @@ class GuiTest(unittest.TestCase):
 
     def test_crossword_window_writes_its_document_kind(self) -> None:
         window = Mock()
-        crossword = create_crossword_document(
-            create_blank_template(TemplateSettings(3, 3), "numbered")
-        )
+        crossword = create_blank_crossword(CrosswordSettings(3, 3), "numbered")
         window._document.return_value = crossword
-        window._document_kind = "crossword"
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "krizovka.yaml"
 
@@ -888,7 +918,6 @@ class GuiTest(unittest.TestCase):
         path = Path("krizovka.yaml")
         window._path = path
         window._dirty = True
-        window._document_kind = "crossword"
 
         with patch("krizovkar.gui.sys.platform", "darwin"):
             CrosswordDocumentWindow._update_title(window)
@@ -905,19 +934,17 @@ class GuiTest(unittest.TestCase):
         window = Mock()
         window._path = None
         window._dirty = True
-        window._document_kind = "template"
 
         with patch("krizovkar.gui.sys.platform", "darwin"):
             CrosswordDocumentWindow._update_title(window)
 
-        window.root.title.assert_called_once_with("*Nová šablona — Křížovkář")
+        window.root.title.assert_called_once_with("*Nová křížovka — Křížovkář")
         window.root.attributes.assert_called_once_with("-titlepath", "")
 
     def test_other_platforms_do_not_set_macos_proxy_icon(self) -> None:
         window = Mock()
         window._path = Path("krizovka.yaml")
         window._dirty = False
-        window._document_kind = "crossword"
 
         with patch("krizovkar.gui.sys.platform", "linux"):
             CrosswordDocumentWindow._update_title(window)
@@ -927,7 +954,7 @@ class GuiTest(unittest.TestCase):
     def test_closing_dirty_window_can_discard_document_changes(self) -> None:
         window = Mock()
         window._dirty = True
-        window._path = Path("sablona.yaml")
+        window._path = Path("krizovka.yaml")
 
         with patch(
             "krizovkar.gui.messagebox.askyesnocancel",
@@ -940,22 +967,27 @@ class GuiTest(unittest.TestCase):
 
     def test_crossword_pdf_actions_choose_puzzle_and_solution(self) -> None:
         application = Mock()
-        grid = Mock()
-        application._complete_grid_or_error.return_value = grid
+        application._crossword = create_blank_crossword(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        solution = Mock()
+        application._complete_grid_or_error.return_value = solution
 
-        CrosswordDocumentWindow.save_crossword_pdf(application)
-        CrosswordDocumentWindow.save_solution_pdf(application)
+        with patch("krizovkar.gui.create_grid_from_crossword") as create_grid:
+            CrosswordDocumentWindow.save_crossword_pdf(application)
+            CrosswordDocumentWindow.save_solution_pdf(application)
 
         self.assertEqual(
             [
                 call(
-                    grid,
+                    create_grid.return_value,
                     filled=False,
                     title="Exportovat křížovku bez písmen",
                     initialfile="krizovka.pdf",
                 ),
                 call(
-                    grid,
+                    solution,
                     filled=True,
                     title="Exportovat řešení s písmeny",
                     initialfile="reseni.pdf",
@@ -963,50 +995,19 @@ class GuiTest(unittest.TestCase):
             ],
             application._save_pdf.call_args_list,
         )
+        create_grid.assert_called_once_with(application._crossword)
 
-    def test_blank_template_pdf_action_uses_unfilled_template(self) -> None:
-        application = Mock()
-        application._base_template = create_blank_template(
-            TemplateSettings(3, 3),
-            "numbered",
-        )
-
-        with patch("krizovkar.gui.create_grid_from_template") as create_grid:
-            CrosswordDocumentWindow.save_blank_template_pdf(application)
-
-        create_grid.assert_called_once_with(application._base_template)
-        application._save_pdf.assert_called_once_with(
-            create_grid.return_value,
-            filled=False,
-            title="Exportovat šablonu k tisku",
-            initialfile="sablona.pdf",
-        )
-
-    def test_export_actions_follow_window_document(self) -> None:
-        template_window = CrosswordDocumentWindow.__new__(
-            CrosswordDocumentWindow
-        )
-        template_window._document_kind = "template"
-        template_window.export_menu = Mock()
-        crossword_window = CrosswordDocumentWindow.__new__(
-            CrosswordDocumentWindow
-        )
-        crossword_window._document_kind = "crossword"
+    def test_export_actions_offer_crossword_and_solution(self) -> None:
+        crossword_window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         crossword_window.export_menu = Mock()
 
-        CrosswordDocumentWindow._add_export_actions(template_window)
         CrosswordDocumentWindow._add_export_actions(crossword_window)
 
-        template_window.export_menu.add_command.assert_called_once_with(
-            label="Šablonu k tisku (PDF)…",
-            command=template_window.save_blank_template_pdf,
-        )
         self.assertEqual(
             [
                 call(
                     label="Křížovku bez písmen (PDF)…",
                     command=crossword_window.save_crossword_pdf,
-                    state="disabled",
                 ),
                 call(
                     label="Řešení s písmeny (PDF)…",
@@ -1017,12 +1018,10 @@ class GuiTest(unittest.TestCase):
             crossword_window.export_menu.add_command.call_args_list,
         )
 
-    def test_toolbar_offers_template_actions_off_macos(self) -> None:
+    def test_toolbar_offers_export_off_macos(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
-        window._document_kind = "template"
         window.export_menu = Mock()
         toolbar = Mock()
-        create_button = Mock()
         export_button = Mock()
 
         with (
@@ -1035,40 +1034,25 @@ class GuiTest(unittest.TestCase):
                 "krizovkar.gui.ttk.Menubutton",
                 return_value=export_button,
             ) as menubutton_type,
-            patch(
-                "krizovkar.gui.ttk.Button",
-                return_value=create_button,
-            ) as button_type,
+            patch("krizovkar.gui.ttk.Button") as button_type,
         ):
             CrosswordDocumentWindow._build_toolbar(window)
 
         frame_type.assert_called_once_with(window, padding=(14, 0, 14, 10))
         toolbar.grid.assert_called_once_with(row=0, column=0, sticky="ew")
-        button_type.assert_called_once_with(
-            toolbar,
-            text="Vytvořit křížovku",
-            command=window.create_crossword_from_template,
-        )
+        button_type.assert_not_called()
         menubutton_type.assert_called_once_with(
             toolbar,
             text="Exportovat",
             menu=window.export_menu,
         )
-        create_button.pack.assert_called_once_with(side="left", padx=(0, 6))
         export_button.pack.assert_called_once_with(side="left", padx=(0, 6))
         self.assertIs(toolbar, window.toolbar)
-        self.assertEqual(
-            {
-                "create-crossword": create_button,
-                "export": export_button,
-            },
-            window._toolbar_controls,
-        )
+        self.assertEqual({"export": export_button}, window._toolbar_controls)
 
     def test_macos_toolbar_is_attached_to_window_chrome(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         window.root = Mock()
-        window._document_kind = "template"
         native_toolbar = Mock()
 
         with (
@@ -1083,62 +1067,20 @@ class GuiTest(unittest.TestCase):
 
         root, items = create_toolbar.call_args.args
         self.assertIs(window.root, root)
+        self.assertEqual(["export"], [item.identifier for item in items])
+        self.assertEqual(["Exportovat"], [item.label for item in items])
         self.assertEqual(
-            ["create-crossword", "export"],
-            [item.identifier for item in items],
-        )
-        self.assertEqual(
-            ["Vytvořit křížovku", "Exportovat"],
-            [item.label for item in items],
-        )
-        self.assertEqual(
-            window.create_crossword_from_template,
-            items[0].command,
-        )
-        self.assertEqual(
-            ["Šablonu k tisku (PDF)…"],
-            [action.label for action in items[1].menu_actions],
+            ["Křížovku bez písmen (PDF)…", "Řešení s písmeny (PDF)…"],
+            [action.label for action in items[0].menu_actions],
         )
         self.assertIs(native_toolbar, window.toolbar)
         frame_type.assert_not_called()
 
-    def test_file_menu_follows_template_document(self) -> None:
-        application = Mock()
-        application._document_kind = "template"
-        application._save_menu_index = 4
-        application._save_as_menu_index = 5
-        application._create_crossword_menu_index = 7
-
-        CrosswordDocumentWindow._refresh_file_menu(application)
-
-        self.assertEqual(
-            [
-                call(4, label="Uložit šablonu"),
-                call(5, label="Uložit šablonu jako…"),
-                call(7, state="normal"),
-            ],
-            application.file_menu.entryconfigure.call_args_list,
-        )
-        self.assertEqual(
-            [
-                call(0, state="normal"),
-            ],
-            application.export_menu.entryconfigure.call_args_list,
-        )
-        self.assertEqual(
-            [
-                call("create-crossword", "normal"),
-                call("export", "normal"),
-            ],
-            application._configure_toolbar_action.call_args_list,
-        )
-
     def test_file_menu_enables_complete_crossword_outputs(self) -> None:
         application = Mock()
-        application._document_kind = "crossword"
         application._save_menu_index = 4
         application._save_as_menu_index = 5
-        application._template = _filled_numbered_crossword()
+        application._crossword = _filled_numbered_crossword()
 
         CrosswordDocumentWindow._refresh_file_menu(application)
 
@@ -1161,50 +1103,24 @@ class GuiTest(unittest.TestCase):
             "normal",
         )
 
-    def test_template_actions_are_disabled_without_template(self) -> None:
-        application = Mock()
-        application._document_kind = "template"
-        application._save_menu_index = 4
-        application._save_as_menu_index = 5
-        application._create_crossword_menu_index = 7
-        application._base_template = None
-
-        CrosswordDocumentWindow._refresh_file_menu(application)
-
-        application.file_menu.entryconfigure.assert_any_call(
-            7,
-            state="disabled",
-        )
-        application.export_menu.entryconfigure.assert_called_once_with(
-            0,
-            state="disabled",
-        )
-        self.assertEqual(
-            [
-                call("create-crossword", "disabled"),
-                call("export", "disabled"),
-            ],
-            application._configure_toolbar_action.call_args_list,
-        )
-
     def test_file_menu_disables_incomplete_crossword_outputs(self) -> None:
         application = Mock()
-        application._document_kind = "crossword"
         application._save_menu_index = 4
         application._save_as_menu_index = 5
-        application._template = create_crossword_document(
-            create_blank_template(TemplateSettings(3, 3), "numbered")
+        application._crossword = create_blank_crossword(
+            CrosswordSettings(3, 3),
+            "numbered",
         )
 
         CrosswordDocumentWindow._refresh_file_menu(application)
 
         self.assertEqual(
-            [call(0, state="disabled"), call(1, state="disabled")],
+            [call(0, state="normal"), call(1, state="disabled")],
             application.export_menu.entryconfigure.call_args_list,
         )
         application._configure_toolbar_action.assert_called_once_with(
             "export",
-            "disabled",
+            "normal",
         )
 
     def test_page_format_is_chosen_in_export_dialog_and_remembered(self) -> None:
@@ -1234,15 +1150,15 @@ class GuiTest(unittest.TestCase):
             dialog_type.return_value.result = None
             page_format = CrosswordDocumentWindow._choose_page_format(
                 window,
-                title="Exportovat šablonu k tisku",
+                title="Exportovat křížovku bez písmen",
             )
 
         self.assertIsNone(page_format)
         self.assertEqual("A4", window._page_format)
 
     def test_saves_pdf_with_format_chosen_in_export_dialog(self) -> None:
-        template = _filled_numbered_crossword()
-        grid = create_grid_from_template(template)
+        crossword = _filled_numbered_crossword()
+        grid = create_grid_from_crossword(crossword)
         application = Mock()
         application._choose_page_format.return_value = "A5"
         with tempfile.TemporaryDirectory() as directory:
@@ -1288,8 +1204,8 @@ class GuiTest(unittest.TestCase):
             application,
             Mock(),
             filled=False,
-            title="Exportovat šablonu k tisku",
-            initialfile="sablona.pdf",
+            title="Exportovat křížovku bez písmen",
+            initialfile="krizovka.pdf",
         )
 
         application._choose_output.assert_not_called()
@@ -1297,7 +1213,7 @@ class GuiTest(unittest.TestCase):
     def test_pdf_render_error_is_shown_and_restores_cursor(self) -> None:
         application = Mock()
         application._choose_page_format.return_value = "A4"
-        application._choose_output.return_value = (Path("sablona.pdf"), False)
+        application._choose_output.return_value = (Path("krizovka.pdf"), False)
 
         with patch(
             "krizovkar.gui.render_pdf",
@@ -1307,8 +1223,8 @@ class GuiTest(unittest.TestCase):
                 application,
                 Mock(),
                 filled=False,
-                title="Exportovat šablonu k tisku",
-                initialfile="sablona.pdf",
+                title="Exportovat křížovku bez písmen",
+                initialfile="krizovka.pdf",
             )
 
         application._show_action_error.assert_called_once_with(
@@ -1347,7 +1263,7 @@ class GuiTest(unittest.TestCase):
         self.assertEqual(0, exit_code)
         application.choose_document.assert_called_once_with(parent=None)
         application.show_no_document_state.assert_not_called()
-        application.new_template_document.assert_not_called()
+        application.new_crossword_document.assert_not_called()
         application.open_document.assert_not_called()
         root.mainloop.assert_called_once_with()
 
