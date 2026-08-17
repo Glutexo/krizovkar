@@ -6,9 +6,9 @@ Křížovkář je připravovaný otevřený nástroj pro tvorbu švédských, kl
 
 Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu,
 experimentální plnění švédské a číslované křížovky z JSON slovníku,
-automatický převod umístěného zadání na editovatelnou křížovku, převod
+automatický převod umístěného zadání na šablonu křížovky, převod
 výsledku do upravitelného LaTeXového dokumentu, jeho překlad do PDF a grafické
-rozhraní se samostatnými okny YAML křížovek z vlastních hesel.
+rozhraní se samostatnými okny YAML šablon a křížovek z vlastních hesel.
 Další rozšíření editoru budou postupně zpřístupňovat například tajenky a
 automatické plnění.
 
@@ -21,26 +21,28 @@ příkazem:
 uv run krizovkar-gui
 ```
 
-Tím se otevře systémový dialog pro výběr existující křížovky. Po jeho
+Tím se otevře systémový dialog pro výběr existující šablony nebo křížovky. Po jeho
 zavření zůstane aplikace spuštěná bez otevřeného dokumentu; z nabídky
-**Soubor** lze vytvořit novou křížovku, otevřít soubor nebo vybrat některý z
+**Soubor** lze vygenerovat novou šablonu, otevřít soubor nebo vybrat některý z
 posledních dokumentů. Existující soubor
 lze také otevřít přímo při spuštění; každá zadaná cesta dostane vlastní
 okno a systémový dialog se v tom případě nezobrazí:
 
 ```shell
-uv run krizovkar-gui examples/crossword-unfilled.yaml \
+uv run krizovkar-gui examples/template-unfilled.yaml \
   examples/crossword-minimal.yaml
 ```
 
 Každé viditelné okno představuje právě jeden YAML soubor a v titulku ukazuje
-jeho název, případně **Nová křížovka**. Hvězdička
+jeho název, případně **Nová šablona**. Hvězdička
 před názvem označuje neuložené změny. Na macOS má otevřený nebo uložený
 dokument v záhlaví také systémovou ikonu svého YAML souboru, kterou lze
 přetáhnout stejně jako soubor ve Finderu.
 
-Každé okno upravuje dokument `kind: crossword`. Ten určuje rozměr, role
-buněk, všechna místa pro vodorovná a svislá hesla i dosud doplněný obsah.
+Nové okno nejprve upravuje `kind: template`; po doplnění prvního hesla se
+dokument stane editovatelnou křížovkou `kind: crossword`. Oba druhy určují
+rozměr, role buněk, všechna místa pro vodorovná a svislá hesla i dosud
+doplněný obsah.
 Každé heslo může mít legendu uvnitř mřížky, nebo číslo a legendu pod ní;
 oba způsoby lze v jedné křížovce kombinovat. Místo se vybírá kliknutím v
 náhledu nebo v seznamu; formulář ukazuje jeho délku a písmena známá z
@@ -48,11 +50,12 @@ křížení. Dokument může zůstat prázdný, být rozpracovaný nebo hotový 
 každém z těchto stavů jej lze uložit a znovu použít jako základ další práce.
 
 V záhlaví náhledu se nastavuje počet řádků a sloupců. Změna rozměru
-znovu vytvoří rozvržení; obsahuje-li křížovka doplněná hesla nebo tajenku,
+znovu vytvoří rozvržení; obsahuje-li dokument doplněná hesla nebo tajenku,
 editor si nejprve vyžádá potvrzení. Prázdnou tiskovou křížovku lze
 exportovat do PDF kdykoli, samostatné řešení až po vyplnění všech hesel.
 
-Nabídka **Soubor** otevírá existující `kind: crossword` v dalším okně.
+Nabídka **Soubor** otevírá existující `kind: template` i `kind: crossword`
+v dalším okně.
 Na macOS používá zkratky `⌘N`, `⌘O`,
 `⌘S`, `⇧⌘S` a `⌘W`; na ostatních systémech odpovídající `Ctrl+N`,
 `Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+S` a `Ctrl+W`. Poslední z nich zavře pouze
@@ -103,24 +106,27 @@ konkrétní rozsah první funkční verze bude popsán v roadmapě.
 
 ## Datový model
 
-Křížovkář rozlišuje tři samostatné druhy YAML dokumentů:
+Křížovkář rozlišuje čtyři samostatné druhy YAML dokumentů:
 
 - `kind: specification` je vstupní zadání se slovy, nápovědami, tajenkami a pravidly skládání,
-- `kind: crossword` je prázdná, rozpracovaná nebo hotová editovatelná
-  křížovka s rolemi buněk a místy pro hesla,
+- `kind: template` je vygenerovaná šablona s rolemi buněk a místy pro
+  budoucí hesla,
+- `kind: crossword` je rozpracovaná nebo hotová křížovka vzniklá
+  ručním nebo automatickým vyplňováním šablony,
 - `kind: grid` je mřížka s konkrétními rolemi buněk a volitelně již doplněnými
   písmeny a legendami, kterou lze přímo vykreslit.
 
 ```text
-umístěné specification + volba rozvržení → crossword
-crossword (ruční doplňování) → grid → LaTeX → PDF
-crossword + slovník → fill → vyplněný crossword → grid → LaTeX → PDF
+umístěné specification + volba rozvržení → template
+rozměr + volba rozvržení → generování → template
+template + ruční doplňování → crossword → grid → LaTeX → PDF
+template nebo crossword + slovník → fill → crossword → grid → LaTeX → PDF
 ```
 
-Dokument `kind: crossword` může obsahovat libovolný počet doplněných
-hesel, a proto sám slouží i jako znovu použitelný základ. Zápis bez odpovědi
-ukazuje [nevyplněná křížovka](examples/crossword-unfilled.yaml), hotovou
-variantu [minimální křížovka](examples/crossword-minimal.yaml).
+Šablonu bez odpovědi ukazuje [nevyplněná šablona](examples/template-unfilled.yaml).
+Dokument `kind: crossword` může po ručním doplňování zůstat rozpracovaný;
+automatické `fill` jej dokončí. Hotovou podobu ukazuje
+[minimální křížovka](examples/crossword-minimal.yaml).
 
 Nejmenší platná cílová mřížka zatím určuje pouze rozměr:
 
@@ -133,17 +139,17 @@ grid:
   height: 10
 ```
 
-Křížovka každému heslu určuje stabilní identifikátor, začátek, směr a
+Šablona každému heslu určuje stabilní identifikátor, začátek, směr a
 délku; matice buněk rozlišuje budoucí písmena, vepsané legendy, pomůcku a
-nevyplňovaná pole. Hustá nevyplněná křížovka nechá odpovědi a texty legend
-neznámé, křížovka převedená ze zadání je naopak uchová jako doplněný obsah
-míst. Ukazuje to [křížovka ze zadání](examples/crossword-from-specification.yaml).
+nevyplňovaná pole. Hustá nevyplněná šablona nechá odpovědi a texty legend
+neznámé, šablona převedená ze zadání je naopak uchová jako pevný obsah
+míst. Ukazuje to [šablona ze zadání](examples/template-from-specification.yaml).
 
-Křížovka může navíc rezervovat jedno nebo více míst pro části tajenky.
+Šablona může navíc rezervovat jedno nebo více míst pro části tajenky.
 Známá tajenka se ukládá jako seznam slov bez mezer a interpunkce, aby se
 neztratila povolená místa budoucího rozdělení. `word_count` u každé části
 určuje, kolik po sobě jdoucích slov se spojí do příslušného místa. Ukazuje
-to [křížovka s tajenkou](examples/crossword-secret.yaml). Pokud konkrétní znění
+to [šablona s tajenkou](examples/template-secret.yaml). Pokud konkrétní znění
 zatím není známé, `words` i `word_count` se vynechají a zůstanou jen
 připravená místa.
 
@@ -222,6 +228,7 @@ Slovní části bez výslovné `legend` dostanou postupně popisky `1. část ta
 
 Význam dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md).
 Strojová pravidla jsou oddělená v [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json),
+[JSON Schema šablony](src/krizovkar/schemas/template-v1.schema.json),
 [JSON Schema editovatelné křížovky](src/krizovkar/schemas/crossword-v1.schema.json) a
 [JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json).
 
@@ -284,16 +291,16 @@ Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-lett
 
 ## Vstup a výstup příkazů
 
-Volba `-o` neboli `--output` je u příkazů `crossword`, `grid`, `fill`,
+Volba `-o` neboli `--output` je u příkazů `template`, `grid`, `fill`,
 `latex` a `render` nepovinná. Bez ní příkaz zapíše výsledný
 YAML, textový LaTeX nebo binární PDF na standardní výstup, takže jej lze
 přesměrovat nebo předat dalšímu programu:
 
 ```shell
-uv run krizovkar crossword examples/specification-placed-words.yaml \
-  --layout swedish > build/placed-crossword.yaml
-uv run krizovkar crossword --width 15 --height 10 > build/crossword.yaml
-uv run krizovkar fill build/crossword.yaml slovnik.json \
+uv run krizovkar template examples/specification-placed-words.yaml \
+  --layout swedish > build/placed-template.yaml
+uv run krizovkar template --width 15 --height 10 > build/template.yaml
+uv run krizovkar fill build/template.yaml slovnik.json \
   > build/filled-crossword.yaml
 uv run krizovkar grid build/filled-crossword.yaml > build/filled-grid.yaml
 uv run krizovkar latex build/filled-grid.yaml > build/filled-grid.tex
@@ -302,42 +309,42 @@ uv run krizovkar render build/filled-grid.yaml > build/filled-grid.pdf
 
 Stavová hláška jde v tomto režimu na standardní chybový výstup a výsledná data neznečistí. Při zadaném `--output` se dál zapisuje atomicky do souboru, existující soubor se bez `--force` nepřepíše a stavová hláška se vypíše na standardní výstup.
 
-Místo vstupního souboru přijímají příkazy `crossword`, `grid`, `fill`,
+Místo vstupního souboru přijímají příkazy `template`, `grid`, `fill`,
 `validate`, `latex` a `render` také `-`, které znamená standardní
-vstup. U `crossword` jde o vstupní zadání. U příkazu `fill` lze tímto
-způsobem načíst křížovku nebo slovník, ale ne oba vstupy současně. Výstupy
-lze díky tomu spojovat přímo rourou. Editovatelná křížovka se může převést
+vstup. U `template` jde o vstupní zadání. U příkazu `fill` lze tímto
+způsobem načíst šablonu, křížovku nebo slovník, ale ne oba vstupy
+současně. Výstupy lze díky tomu spojovat přímo rourou. Šablona se může převést
 na LaTeX bez mezikroku:
 
 ```shell
-uv run krizovkar crossword --width 15 --height 10 \
-  | uv run krizovkar latex - > build/crossword.tex
+uv run krizovkar template --width 15 --height 10 \
+  | uv run krizovkar latex - > build/template.tex
 ```
 
 Nebo z ní lze rovnou sestavit PDF; `render` uvnitř vytvoří stejný LaTeXový
 zdroj a přeloží jej LuaLaTeXem:
 
 ```shell
-uv run krizovkar crossword --width 15 --height 10 \
-  | uv run krizovkar render - > build/crossword.pdf
+uv run krizovkar template --width 15 --height 10 \
+  | uv run krizovkar render - > build/template.pdf
 ```
 
 Nebo lze v rouře zachovat i samostatný převod na cílovou mřížku:
 
 ```shell
-uv run krizovkar crossword --width 15 --height 10 \
+uv run krizovkar template --width 15 --height 10 \
   | uv run krizovkar grid - \
   | uv run krizovkar render - > build/unfilled-grid.pdf
 ```
 
-## Vytvoření editovatelné křížovky
+## Vygenerování šablony
 
-Umístěné zadání převede na křížovku volitelný poziční argument:
+Umístěné zadání převede na šablonu volitelný poziční argument:
 
 ```shell
-uv run krizovkar crossword examples/specification-placed-words.yaml \
+uv run krizovkar template examples/specification-placed-words.yaml \
   --layout swedish \
-  --output build/crossword-from-specification.yaml
+  --output build/template-from-specification.yaml
 ```
 
 Převod zachová rozměr, odpovědi, legendy, tajenky, jejich zadání i pomůcku.
@@ -351,27 +358,27 @@ Rozměr i tajenky už v tomto režimu určuje zadání. Volby `--width`,
 `--height`, `--seed` a volby tajenky proto nelze se vstupním souborem
 kombinovat.
 
-Bez vstupního zadání vytvoří stejný příkaz hustou nevyplněnou křížovku
+Bez vstupního zadání vygeneruje stejný příkaz hustou nevyplněnou šablonu
 bez slovníku a bez znalosti budoucích odpovědí. Výchozí rozvržení je švédské:
 
 ```shell
-uv run krizovkar crossword \
+uv run krizovkar template \
   --width 15 \
   --height 10 \
-  --output build/crossword.yaml
+  --output build/template.yaml
 ```
 
 Číslované (čárkované) rozvržení zvolí `--layout numbered`:
 
 ```shell
-uv run krizovkar crossword \
+uv run krizovkar template \
   --layout numbered \
   --width 15 \
   --height 10 \
-  --output build/numbered-crossword.yaml
+  --output build/numbered-template.yaml
 ```
 
-Stejné rozvržení a rozměry vytvoří stejnou křížovku. Švédský
+Stejné rozvržení a rozměry vytvoří stejnou šablonu. Švédský
 generátor rozdělí plochu na písmenné obdélníky, legendové buňky a jejich
 nevyplňované průsečíky. Číslovaná varianta ponechá všechny buňky písmenné,
 obě osy rozdělí silnými předěly a budoucí legendy umístí vně mřížky.
@@ -379,57 +386,58 @@ Obě rozvržení používají délky hesel 3 až 8 a každému vodorovnému i
 svislému heslu přidělí vlastní místo. Příkaz existující soubor nepřepíše
 bez volby `--force`.
 
-Tajenku lze při tvorbě křížovky zadat čtyřmi způsoby:
+Tajenku lze při generování šablony zadat čtyřmi způsoby:
 
 ```shell
 # Pouze celková délka
-uv run krizovkar crossword --width 7 --height 6 \
+uv run krizovkar template --width 7 --height 6 \
   --secret-length 6 --output build/secret-length.yaml
 
 # Předem určené délky částí
-uv run krizovkar crossword --width 7 --height 12 \
+uv run krizovkar template --width 7 --height 12 \
   --secret-parts 5,6 --output build/secret-lengths.yaml
 
 # Konkrétní tajenka s automatickým dělením na švech slov
-uv run krizovkar crossword --width 7 --height 12 \
+uv run krizovkar template --width 7 --height 12 \
   --secret "DÁREK RADOST" --output build/secret-auto.yaml
 
 # Konkrétní a pevně rozdělená tajenka
-uv run krizovkar crossword --width 7 --height 12 \
+uv run krizovkar template --width 7 --height 12 \
   --secret-part DÁREK --secret-part RADOST \
   --output build/secret-fixed.yaml
 ```
 
 Tyto volby fungují pro obě hodnoty `--layout`. U konkrétního textu se velikost písmen sjednotí, mezery a interpunkce se do buněk nezapisují a seznam slov zachová všechny povolené švy. Automatické dělení nikdy nerozdělí slovo. Generátor podle potřeby změní jinak vyvážené délky běžných slotů tak, aby maska obsahovala požadované délky tajenky od 3 do 8 polí; pokud se požadavek do zadaného rozměru nevejde, skončí s chybou. Volitelné `--secret-prompt` doplní zadání; jeho pozici a zarovnání určují `--secret-prompt-placement` a `--secret-prompt-alignment`. Seed ovlivňuje výběr vhodných slotů.
 
-Platnou křížovku lze bez slovníku převést na cílovou mřížku:
+Platnou šablonu i křížovku lze bez slovníku převést na cílovou mřížku:
 
 ```shell
-uv run krizovkar grid build/crossword.yaml \
+uv run krizovkar grid build/template.yaml \
   --output build/unfilled-grid.yaml
 ```
 
 Převod zachová nevyplňovaná, legendová a pomocná pole, čísla a silné
 předěly číslovaného rozvržení, zvýraznění tajenek, jejich zobáčky a zadání.
-U husté nevyplněné křížovky zůstanou písmena a texty legend prázdné.
-Křížovka vytvořená ze zadání naopak přenese pevné odpovědi, legendy a
+U husté nevyplněné šablony zůstanou písmena a texty legend prázdné.
+Šablona vytvořená ze zadání naopak přenese pevné odpovědi, legendy a
 slova pomůcky. Bez mezikroku ji lze vysázet příkazem
-`krizovkar latex build/crossword.yaml` nebo z ní rovnou sestavit PDF příkazem
-`krizovkar render build/crossword.yaml`.
+`krizovkar latex build/template.yaml` nebo z ní rovnou sestavit PDF příkazem
+`krizovkar render build/template.yaml`.
 
-Prázdná místa křížovky lze později vyplnit ze slovníku:
+Prázdná místa šablony lze později vyplnit ze slovníku:
 
 ```shell
-uv run krizovkar fill build/crossword.yaml slovnik.json \
+uv run krizovkar fill build/template.yaml slovnik.json \
   --seed 10 \
   --output build/filled-crossword.yaml
 ```
 
-Plnění funguje i pro ručně vytvořené a částečně vyplněné křížovky.
+Plnění funguje pro šablony i pro ručně vytvořené a částečně vyplněné křížovky.
 Doplněná hesla zachová; pro každé zbývající místo vybere heslo odpovídající délky,
 zachová shodná písmena na kříženích a stejnou odpověď nepoužije dvakrát.
-Odpověď a legendu uloží přímo do původního slotu, takže výsledkem
-zůstává editovatelný dokument `kind: crossword`. Ten lze dál upravovat,
+Odpověď a legendu uloží přímo do původního slotu. Výsledkem je vždy
+editovatelný dokument `kind: crossword`; vstupní šablona se tím změní v
+křížovku. Tu lze dál upravovat,
 znovu použít jako základ nebo převést na cílovou mřížku:
 
 ```shell
@@ -438,11 +446,11 @@ uv run krizovkar grid build/filled-crossword.yaml \
 ```
 
 Při převodu dostane slot s vepsanou legendovou buňkou švédskou legendu;
-slot bez ní dostane číslo a vnější legendu. Stejná křížovka, slovník a
+slot bez ní dostane číslo a vnější legendu. Stejná šablona nebo křížovka, slovník a
 seed vytvoří stejnou vyplněnou křížovku.
 
-Známou tajenku uloženou v křížovce `fill` doplní automaticky a její
-místa nevyhledává ve slovníku. Rezervuje-li křížovka jen prázdná tajenková
+Známou tajenku uloženou v šabloně nebo křížovce `fill` doplní automaticky a její
+místa nevyhledává ve slovníku. Rezervuje-li dokument jen prázdná tajenková
 místa, předá se konkrétní text pomocí `--secret` nebo opakovaného
 `--secret-part`. Stejné volby lze použít i bez předchozí rezervace; plnění
 pak vhodná místa tajenky samo vybere. Jednotlivé části při plnění dostanou
@@ -462,21 +470,21 @@ seznam možných legend v preferovaném pořadí:
 }
 ```
 
-Nejprve se vytvoří nevyplněná křížovka, potom se naplní slovníkem a
+Nejprve se vygeneruje nevyplněná šablona, potom se naplní slovníkem a
 nakonec se převede nebo rovnou vykreslí:
 
 ```shell
-uv run krizovkar crossword --width 15 --height 10 \
-  --output build/crossword.yaml
-uv run krizovkar fill build/crossword.yaml slovnik.json \
+uv run krizovkar template --width 15 --height 10 \
+  --output build/template.yaml
+uv run krizovkar fill build/template.yaml slovnik.json \
   --seed 10 --output build/filled-crossword.yaml
 uv run krizovkar render build/filled-crossword.yaml \
   --output build/filled-crossword.pdf
 ```
 
-Rozvržení `numbered` se volí u prvního příkazu `crossword`; konkrétní
-nebo rezervovaná tajenka se zadá při vytvoření křížovky nebo při jejím
-pozdějším plnění. Stejná křížovka, slovník a seed vytvoří stejný vyplněný
+Rozvržení `numbered` se volí u prvního příkazu `template`; konkrétní
+nebo rezervovaná tajenka se zadá při vygenerování šablony nebo při jejím
+pozdějším plnění. Stejná šablona, slovník a seed vytvoří stejný vyplněný
 dokument.
 
 Pokud švédská maska obsahuje více písmenných obdélníků oddělených legendovými osami, jejich hesla se navzájem nekříží. Kvalitativní validace proto upozorní, že výsledná slova tvoří oddělené ostrovy; číslovaná varianta má naproti tomu souvislou písmennou plochu.
@@ -532,16 +540,16 @@ uv run krizovkar render examples/grid-random-letters.yaml \
   --output build/random-letters.pdf
 ```
 
-Vstupem `latex` i `render` může být cílová mřížka `kind: grid` nebo
-editovatelná křížovka `kind: crossword`; křížovka se automaticky převede na
-mřížku bez slovníku.
+Vstupem `latex` i `render` může být cílová mřížka `kind: grid`, šablona
+`kind: template` nebo editovatelná křížovka `kind: crossword`; strukturální
+dokument se automaticky převede na mřížku bez slovníku.
 Volba `--page-format` přijímá `A0` až `A6`, `Letter` a `Legal`,
 nerozlišuje velikost písmen a její výchozí hodnota je `A4`. Obsah se podle
 potřeby zmenší tak, aby zůstal na jedné stránce zvoleného formátu.
 
 U vyplněné cílové mřížky LaTeX i PDF standardně zobrazí písmena. Pro jejich
 skrytí přidej k příkazu `latex` nebo `render` volbu `--blank`; nevyplněná
-křížovka a mřížka zůstanou prázdné i bez této volby:
+šablona a mřížka zůstanou prázdné i bez této volby:
 
 ```shell
 uv run krizovkar render examples/grid-secret-arrows.yaml \

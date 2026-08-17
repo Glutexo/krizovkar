@@ -1,5 +1,5 @@
 format: krizovkar
-kind: crossword
+kind: template
 version: 1
 grid:
   width: 7

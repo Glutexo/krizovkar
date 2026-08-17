@@ -17,26 +17,31 @@ from krizovkar.generator import (
     DEFAULT_SEED,
     GenerationError,
     SecretRequirement,
-    create_crossword_from_specification,
     create_grid_from_crossword,
+    create_grid_from_template,
+    create_template_from_specification,
     fill_crossword,
-    generate_numbered_crossword,
-    generate_swedish_crossword,
+    generate_numbered_template,
+    generate_swedish_template,
     normalize_secret_text,
 )
 from krizovkar.localization import ngettext, system_error_message
 from krizovkar.model import (
     CrosswordGrid,
+    CrosswordTemplate,
     ModelError,
     SecretPrompt,
     dump_crossword_document,
     dump_crossword_grid,
+    dump_crossword_template,
     load_crossword_document,
     load_crossword_document_kind,
     load_crossword_grid,
     load_crossword_specification,
+    load_crossword_template,
     write_crossword_document,
     write_crossword_grid,
+    write_crossword_template,
 )
 from krizovkar.renderer import (
     DEFAULT_PAGE_FORMAT,
@@ -154,45 +159,45 @@ def _parser() -> argparse.ArgumentParser:
         title="příkazy",
     )
 
-    crossword = commands.add_parser(
-        "crossword",
-        help="vytvoří editovatelnou křížovku ze zadání nebo bez něj",
+    template = commands.add_parser(
+        "template",
+        help="vygeneruje šablonu křížovky ze zadání nebo bez něj",
         description=(
             "Převede vstupní zadání na švédskou nebo číslovanou "
-            "křížovku. Bez vstupního zadání vytvoří hustou nevyplněnou "
-            "křížovku z rozměru, aniž použije slovník."
+            "šablonu. Bez vstupního zadání vygeneruje hustou nevyplněnou "
+            "šablonu z rozměru, aniž použije slovník."
         ),
     )
-    crossword.add_argument(
+    template.add_argument(
         "specification",
         nargs="?",
         type=Path,
         metavar="ZADÁNÍ.yaml",
         help="volitelné vstupní YAML zadání; - znamená standardní vstup",
     )
-    crossword.add_argument(
+    template.add_argument(
         "-o",
         "--output",
         type=Path,
-        metavar="KŘÍŽOVKA.yaml",
+        metavar="ŠABLONA.yaml",
         help="cílový YAML soubor; bez volby standardní výstup",
     )
-    crossword.add_argument(
+    template.add_argument(
         "--width",
         type=int,
         default=None,
         metavar="POČET",
         help=f"počet sloupců; výchozí je {DEFAULT_GRID_WIDTH}",
     )
-    crossword.add_argument(
+    template.add_argument(
         "--height",
         type=int,
         default=None,
         metavar="POČET",
         help=f"počet řádků; výchozí je {DEFAULT_GRID_HEIGHT}",
     )
-    _add_layout_argument(crossword)
-    crossword.add_argument(
+    _add_layout_argument(template)
+    template.add_argument(
         "--seed",
         type=int,
         default=None,
@@ -202,27 +207,27 @@ def _parser() -> argparse.ArgumentParser:
             f"výchozí je {DEFAULT_SEED}"
         ),
     )
-    _add_secret_arguments(crossword, allow_lengths=True)
-    crossword.add_argument(
+    _add_secret_arguments(template, allow_lengths=True)
+    template.add_argument(
         "--force",
         action="store_true",
         help="povolí přepsání existujícího YAML souboru",
     )
-    crossword.set_defaults(handler=_crossword)
+    template.set_defaults(handler=_template)
 
     grid = commands.add_parser(
         "grid",
-        help="vytvoří cílovou mřížku z editovatelné křížovky",
+        help="vytvoří cílovou mřížku ze šablony nebo křížovky",
         description=(
-            "Převede role buněk a místa křížovky na cílovou mřížku bez "
-            "použití slovníku. Případný pevný obsah slotů zachová."
+            "Převede role buněk a místa šablony nebo křížovky na cílovou "
+            "mřížku bez použití slovníku. Případný pevný obsah slotů zachová."
         ),
     )
     grid.add_argument(
-        "crossword",
+        "document",
         type=Path,
-        metavar="KŘÍŽOVKA.yaml",
-        help="vstupní YAML křížovka; - znamená standardní vstup",
+        metavar="DOKUMENT.yaml",
+        help="vstupní YAML šablona nebo křížovka; - znamená standardní vstup",
     )
     grid.add_argument(
         "-o",
@@ -240,17 +245,18 @@ def _parser() -> argparse.ArgumentParser:
 
     fill = commands.add_parser(
         "fill",
-        help="doplní prázdná místa křížovky hesly ze slovníku",
+        help="vyplní šablonu nebo rozpracovanou křížovku ze slovníku",
         description=(
-            "Přiřadí různá hesla všem prázdným místům křížovky, dodrží jejich "
-            "délky a písmena na kříženích a zapíše vyplněnou křížovku."
+            "Přiřadí různá hesla všem prázdným místům šablony nebo "
+            "křížovky, dodrží jejich délky a písmena na kříženích a "
+            "zapíše vyplněnou křížovku."
         ),
     )
     fill.add_argument(
-        "crossword",
+        "document",
         type=Path,
-        metavar="KŘÍŽOVKA.yaml",
-        help="vstupní YAML křížovka; - znamená standardní vstup",
+        metavar="DOKUMENT.yaml",
+        help="vstupní YAML šablona nebo křížovka; - znamená standardní vstup",
     )
     fill.add_argument(
         "dictionary",
@@ -298,9 +304,9 @@ def _parser() -> argparse.ArgumentParser:
 
     latex = commands.add_parser(
         "latex",
-        help="vytvoří LaTeXovou sazbu z cílové mřížky nebo křížovky",
+        help="vytvoří LaTeXovou sazbu z mřížky, šablony nebo křížovky",
         description=(
-            "Načte a ověří YAML typu grid nebo crossword a vysází "
+            "Načte a ověří YAML typu grid, template nebo crossword a vysází "
             "křížovku jako samostatně přeložitelný LaTeXový dokument."
         ),
     )
@@ -309,7 +315,7 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         metavar="VSTUP.yaml",
         help=(
-            "vstupní YAML cílové mřížky nebo křížovky; "
+            "vstupní YAML mřížky, šablony nebo křížovky; "
             "- znamená standardní vstup"
         ),
     )
@@ -348,9 +354,9 @@ def _parser() -> argparse.ArgumentParser:
 
     render = commands.add_parser(
         "render",
-        help="sestaví PDF přes LaTeX z cílové mřížky nebo křížovky",
+        help="sestaví PDF přes LaTeX z mřížky, šablony nebo křížovky",
         description=(
-            "Načte a ověří YAML typu grid nebo crossword, vytvoří stejný "
+            "Načte a ověří YAML typu grid, template nebo crossword, vytvoří stejný "
             "LaTeXový dokument jako příkaz latex a přeloží jej pomocí "
             "LuaLaTeXu do PDF."
         ),
@@ -360,7 +366,7 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         metavar="VSTUP.yaml",
         help=(
-            "vstupní YAML cílové mřížky nebo křížovky; "
+            "vstupní YAML mřížky, šablony nebo křížovky; "
             "- znamená standardní vstup"
         ),
     )
@@ -554,6 +560,22 @@ def _reusable_input_source(source: Path) -> Path | StringIO:
         ) from error
 
 
+def _load_template_or_crossword(
+    source: Path | StringIO,
+) -> CrosswordTemplate:
+    kind = load_crossword_document_kind(source)
+    if isinstance(source, StringIO):
+        source.seek(0)
+    if kind == "template":
+        return load_crossword_template(source)
+    if kind == "crossword":
+        return load_crossword_document(source)
+    raise ModelError(
+        "očekává se šablona kind: template nebo křížovka "
+        f"kind: crossword; vstup má kind: {kind!r}"
+    )
+
+
 def _input_description(source: Path) -> str:
     if source == STANDARD_INPUT_PATH:
         return "standardní vstup"
@@ -580,7 +602,7 @@ def _binary_standard_output() -> BinaryIO:
     return output
 
 
-def _crossword(arguments: argparse.Namespace) -> int:
+def _template(arguments: argparse.Namespace) -> int:
     try:
         if arguments.specification is not None:
             dense_options = (
@@ -603,18 +625,18 @@ def _crossword(arguments: argparse.Namespace) -> int:
             specification = load_crossword_specification(
                 _input_source(arguments.specification)
             )
-            crossword = create_crossword_from_specification(
+            template = create_template_from_specification(
                 specification,
                 layout=arguments.layout,
             )
         else:
             secret = _secret_requirement(arguments)
-            generate_crossword = (
-                generate_numbered_crossword
+            generate_template = (
+                generate_numbered_template
                 if arguments.layout == "numbered"
-                else generate_swedish_crossword
+                else generate_swedish_template
             )
-            crossword = generate_crossword(
+            template = generate_template(
                 width=(
                     arguments.width
                     if arguments.width is not None
@@ -633,10 +655,10 @@ def _crossword(arguments: argparse.Namespace) -> int:
                 secret=secret,
             )
         if arguments.output is None:
-            dump_crossword_document(crossword, sys.stdout)
+            dump_crossword_template(template, sys.stdout)
         else:
-            write_crossword_document(
-                crossword,
+            write_crossword_template(
+                template,
                 arguments.output,
                 overwrite=arguments.force,
             )
@@ -645,9 +667,9 @@ def _crossword(arguments: argparse.Namespace) -> int:
         return 2
 
     _print_success(
-        f"Křížovka vytvořena: {_output_description(arguments.output)} "
-        f"({crossword.grid.width} × {crossword.grid.height}, "
-        f"{_localized_count(len(crossword.slots), 'heslo', 'hesel')})",
+        f"Šablona vygenerována: {_output_description(arguments.output)} "
+        f"({template.grid.width} × {template.grid.height}, "
+        f"{_localized_count(len(template.slots), 'heslo', 'hesel')})",
         arguments.output,
     )
     return 0
@@ -655,10 +677,14 @@ def _crossword(arguments: argparse.Namespace) -> int:
 
 def _grid(arguments: argparse.Namespace) -> int:
     try:
-        crossword = load_crossword_document(
-            _input_source(arguments.crossword)
+        document = _load_template_or_crossword(
+            _reusable_input_source(arguments.document)
         )
-        grid = create_grid_from_crossword(crossword)
+        grid = (
+            create_grid_from_crossword(document)
+            if document.kind == "crossword"
+            else create_grid_from_template(document)
+        )
         if arguments.output is None:
             dump_crossword_grid(grid, sys.stdout)
         else:
@@ -672,9 +698,9 @@ def _grid(arguments: argparse.Namespace) -> int:
         return 2
 
     _print_success(
-        f"Mřížka z křížovky vytvořena: {_output_description(arguments.output)} "
-        f"({crossword.grid.width} × {crossword.grid.height}, "
-        f"{_localized_count(len(crossword.slots), 'heslo', 'hesel')})",
+        f"Mřížka vytvořena: {_output_description(arguments.output)} "
+        f"({document.grid.width} × {document.grid.height}, "
+        f"{_localized_count(len(document.slots), 'heslo', 'hesel')})",
         arguments.output,
     )
     return 0
@@ -683,20 +709,20 @@ def _grid(arguments: argparse.Namespace) -> int:
 def _fill(arguments: argparse.Namespace) -> int:
     try:
         if (
-            arguments.crossword == STANDARD_INPUT_PATH
+            arguments.document == STANDARD_INPUT_PATH
             and arguments.dictionary == STANDARD_INPUT_PATH
         ):
             raise ModelError(
                 "standardní vstup nelze u příkazu fill použít zároveň "
-                "pro křížovku i slovník"
+                "pro šablonu nebo křížovku a slovník"
             )
         secret = _secret_requirement(arguments)
-        crossword = load_crossword_document(
-            _input_source(arguments.crossword)
+        document = _load_template_or_crossword(
+            _reusable_input_source(arguments.document)
         )
         dictionary = load_dictionary(_input_source(arguments.dictionary))
         crossword = fill_crossword(
-            crossword,
+            document,
             dictionary,
             seed=arguments.seed,
             secret=secret,
@@ -730,12 +756,15 @@ def _load_renderable_crossword(source_path: Path) -> CrosswordGrid:
         source.seek(0)
     if document_kind == "grid":
         return load_crossword_grid(source)
+    if document_kind == "template":
+        template = load_crossword_template(source)
+        return create_grid_from_template(template)
     if document_kind == "crossword":
         crossword = load_crossword_document(source)
         return create_grid_from_crossword(crossword)
     raise ModelError(
-        "sázet lze pouze cílovou mřížku kind: grid nebo křížovku "
-        "kind: crossword; vstup má "
+        "sázet lze pouze cílovou mřížku kind: grid, šablonu "
+        "kind: template nebo křížovku kind: crossword; vstup má "
         f"kind: {document_kind!r}"
     )
 

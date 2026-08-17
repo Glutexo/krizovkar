@@ -2,17 +2,20 @@
 
 Křížovkář ukládá data jako textové dokumenty v YAML 1.2. Model je nezávislý na budoucím editoru, aby stejné soubory mohly používat různé nástroje.
 
-Existují tři samostatné druhy dokumentů:
+Existují čtyři samostatné druhy dokumentů:
 
 - zadání `specification` popisuje, co se má do křížovky vložit,
-- editovatelná křížovka `crossword` popisuje role buněk, místa pro hesla a
-  jejich případně doplněný obsah,
+- vygenerovaná šablona `template` popisuje role buněk a místa pro budoucí
+  hesla,
+- editovatelná křížovka `crossword` vzniká ručním nebo automatickým
+  vyplňováním šablony,
 - cílová mřížka `grid` popisuje konkrétní role buněk a volitelně jejich obsah.
 
 ```text
-umístěné specification + volba rozvržení → crossword
-crossword (ruční doplňování) → grid → LaTeX → PDF
-crossword + slovník → plnění → vyplněný crossword → grid → LaTeX → PDF
+umístěné specification + volba rozvržení → template
+rozměr + volba rozvržení → generování → template
+template + ruční doplňování → crossword → grid → LaTeX → PDF
+template nebo crossword + slovník → plnění → crossword → grid → LaTeX → PDF
 ```
 
 LaTeXový zdroj není dalším druhem YAML dokumentu a nemá položku `kind`.
@@ -23,15 +26,17 @@ Každý druh má vlastní JSON Schema a vlastní Pythonový loader. Dokument pro
 
 Položka `kind` rozlišuje fázi dat, nikoli švédskou, čárkovanou nebo jinou podobu křížovky. Všechny používají stejné zadání i stejný model cílové mřížky. Způsob uvedení legendy je vlastnost konkrétního rozložení a jednotlivá hesla v jedné mřížce mohou používat různé způsoby.
 
-## Editovatelná křížovka, verze 1
+## Šablona a editovatelná křížovka, verze 1
 
-Dokument `kind: crossword` může být prázdný, rozpracovaný nebo hotový. Lze jej
-uložit, ručně upravit a později znovu použít nebo naplnit jiným slovníkem.
-Hustá nevyplněná křížovka obsah odpovědí nezná:
+Šablona `kind: template` a křížovka `kind: crossword` sdílejí strukturu.
+Generátor vždy vrací šablonu; první ruční doplnění nebo příkaz `fill` z ní
+vytvoří křížovku. Křížovka může zůstat rozpracovaná nebo být hotová a
+lze ji později znovu doplňovat. Hustá nevyplněná šablona obsah odpovědí
+nezná:
 
 ```yaml
 format: krizovkar
-kind: crossword
+kind: template
 version: 1
 grid:
   width: 3
@@ -56,12 +61,12 @@ Každý `slot` popisuje jedno budoucí heslo. Povinné `id` je v dokumentu jedin
 
 Volitelná souřadnice `legend` označuje vepsanou legendovou buňku. Musí ležet bezprostředně vlevo od vodorovného slotu nebo nad svislým slotem. Její vynechání znamená budoucí vnější legendu, takže stejný model podporuje švédské, klasické i smíšené rozložení.
 
-Křížovka převedená ze zadání může slotu přidat společně položky
-`answer` a `clue`. Jde o doplněnou odpověď a její legendu; musí být uvedené obě
+Šablona převedená ze zadání může slotu přidat společně položky
+`answer` a `clue`. Jde o pevnou odpověď a její legendu; musí být uvedené obě
 nebo ani jedna a počet písmenných polí `answer` musí odpovídat `length`.
 Volitelné `in_help: true` zařadí odpověď do jediné buňky `type: help`.
 Křížící se odpovědi musí mít na společném poli stejné písmeno. Ucelený
-zápis ukazuje [křížovka ze zadání](../examples/crossword-from-specification.yaml).
+zápis ukazuje [šablona ze zadání](../examples/template-from-specification.yaml).
 
 ### Připravená tajenka
 
@@ -94,16 +99,16 @@ slotu; žádné rozdělení proto nemůže vzniknout uvnitř slova. Neznámá
 tajenka vynechá `words` i všechna `word_count`; délky připravených částí
 pak určují samotné sloty. Volitelné `prompt` má stejný význam jako zadání
 tajenky v dokumentech `specification` a `grid`. Ucelený příklad je v
-[křížovce se známou tajenkou](../examples/crossword-secret.yaml).
+[šabloně se známou tajenkou](../examples/template-secret.yaml).
 
 Loader navíc kontroluje rozměr matice, přesah slotů, jejich překryvy ve
 stejném směru a vazby na role buněk. Každá písmenná buňka musí patřit
 alespoň jednomu slotu a každou legendovou buňku musí používat alespoň jeden
 slot. Buňka pomůcky smí být nejvýše jedna a vyžaduje alespoň jeden pevný
 slot s `in_help: true`. Ucelený zápis je v
-[nevyplněné křížovce](../examples/crossword-unfilled.yaml).
+[nevyplněné šabloně](../examples/template-unfilled.yaml).
 
-Příkaz `crossword` s pozičním vstupem načte `specification` a vytvoří z
+Příkaz `template` s pozičním vstupem načte `specification` a vytvoří z
 každého umístěného slova vyplněný slot. Výchozí `--layout swedish` vyžaduje
 pro každé slovo volnou legendovou buňku bezprostředně před jeho začátkem.
 `--layout numbered` ponechá legendu vně mřížky. Volná pole se stanou
@@ -111,8 +116,8 @@ pro každé slovo volnou legendovou buňku bezprostředně před jeho začátkem
 první volné buňky po řádcích. Tajenková slova se stanou pevnými sloty a
 tajenky z vybraných polí zůstanou samostatnými částmi `cells`.
 
-Bez pozičního vstupu vytváří `crossword` deterministickou hustou nevyplněnou
-křížovku bez slovníku. Švédské rozvržení používá legendové osy a písmenné bloky;
+Bez pozičního vstupu vytváří `template` deterministickou hustou nevyplněnou
+šablonu bez slovníku. Švédské rozvržení používá legendové osy a písmenné bloky;
 číslované ponechá celou plochu písmennou a rozdělí ji silnými předěly.
 Vodorovné sloty dostávají identifikátory `h1`, `h2`, … v pořadí shora dolů
 a zleva doprava; svislé obdobně `v1`, `v2`, … Volby tajenky mohou určit
@@ -122,22 +127,22 @@ nepřekrývající sloty a u známého textu ukládá výsledné `word_count`.
 Prohledává seřazené varianty délek 3 až 8 a vybere první, která obsahuje
 všechny požadované délky a dovolí jejich umístění.
 
-Příkaz `fill` přijímá libovolnou platnou křížovku a slovník. Doplněné
+Příkaz `fill` přijímá libovolnou platnou šablonu nebo křížovku a slovník. Doplněné
 sloty použije jako počáteční omezení. Pomocí zpětného prohledávání přiřadí
 každému zbývajícímu běžnému slotu jiné heslo správné délky a průběžně
 omezuje kandidáty podle již známých písmen na kříženích. Tajenkové sloty
 vyplní přímo, bez hledání odpovědi ve slovníku, a jejich písmena použije
 jako další pevná omezení. Neznámou
-rezervovanou tajenku musí doplnit konkrétní text; není-li v křížovce
+rezervovanou tajenku musí doplnit konkrétní text; není-li v dokumentu
 rezervace, `fill` vhodné sloty automaticky vybere. Rozdělení je přípustné
 jen tehdy, pokud každá část končí na hranici slova.
 
-Výsledkem `fill` je znovu dokument `kind: crossword`; každému vyplněnému
+Výsledkem `fill` je vždy dokument `kind: crossword`; každému vyplněnému
 slotu přibude `answer` a `clue`. Rozvržení, tajenky a pomůcka zůstanou
 editovatelné a celou křížovku lze znovu použít jako základ. Seed určuje
 pořadí kandidátů a zachovává opakovatelnost výsledku.
 
-Příkaz `grid` převádí platnou křížovku na cílovou mřížku bez slovníku. Role
+Příkaz `grid` převádí platnou šablonu nebo křížovku na cílovou mřížku bez slovníku. Role
 `letter`, `legend`, `help` a `empty` zachová, u číslovaných slotů doplní čísla
 začátků a silné mezislovní předěly a připravené tajenky převede na buňky
 `secret`. Přenese také jejich zobáčky a `prompt`. Nevyplněné sloty zůstanou
@@ -148,7 +153,8 @@ na číslovaná hesla s vnějšími legendami. Společný začátek vodorovného
 a svislého slotu sdílí jedno číslo. Samotná `secrets.words` u slotu bez
 pevného `answer` se při tomto
 převodu dál nezveřejňují. Příkazy `latex` a `render` umějí stejný převod
-provést automaticky, dostanou-li přímo dokument `kind: crossword`. První z
+provést automaticky, dostanou-li přímo `kind: template` nebo
+`kind: crossword`. První z
 nich vypíše upravitelný LaTeX, druhý stejný zdroj přeloží LuaLaTeXem do PDF.
 
 ## Cílová mřížka, verze 1
@@ -309,7 +315,7 @@ Nemá položku `value` ani `texts`. Renderer před seznam vloží tučný nadpis
 ## Zadání, verze 1
 
 Zadání je zdrojový dokument, který popisuje rozměr mřížky a umístěná
-slova. Příkaz `crossword` z něj vytvoří editovatelnou křížovku, kterou lze
+slova. Příkaz `template` z něj vytvoří šablonu, kterou lze
 převést na cílový dokument `grid`:
 
 ```yaml
@@ -349,7 +355,7 @@ legendové buňky, nebo jako číselná legenda mimo mřížku. Legendové buňk
 však zabírají souřadnice, a proto může stejné zadání vyhovět rozměru
 čárkované mřížky, ale po vložení vepsaných legend už nevyhovět rozměru
 švédské mřížky. Tuto platnost posoudí zvolené `--layout` při převodu na
-`crossword`.
+`template`.
 
 Souřadnice používají `row` a `column`, počítají se od 1 a jejich počátek leží v levém horním rohu. Řádky rostou směrem dolů a sloupce doprava. Slova se mohou křížit pouze tehdy, mají-li na společné souřadnici stejné písmeno.
 
@@ -440,7 +446,7 @@ Všechny varianty mohou být v jednom zadání. Cílový dokument `grid` je při
 ### Umístění pomůcky
 
 Obsah pomocné buňky tvoří odpovědi s `in_help: true` v pořadí, v jaké
-jsou uvedené ve `words`. Není-li poloha pomůcky zadaná, převod na křížovku ji
+jsou uvedené ve `words`. Není-li poloha pomůcky zadaná, převod na šablonu ji
 po rozložení slov, legend a ostatních buněk vloží do první volné buňky.
 Buňky prochází po řádcích zleva doprava a shora dolů.
 
@@ -455,16 +461,17 @@ Blok `help` je platný jen tehdy, když má alespoň jedno slovo `in_help: true`
 
 Loader již ověřuje rozměry, rozsah běžných i tajenkových slov, shodu
 písmen na kříženích, obsazenost vybraných tajenkových polí a základní platnost
-výslovné polohy pomůcky. Převod `specification → crossword` navíc odmítne
+výslovné polohy pomůcky. Převod `specification → template` navíc odmítne
 překryv dvou slotů ve stejném směru, kolizi legendy a písmene nebo pomůcky a
-jiné buňky. Příkazy `latex` a `render` přijímají `grid` nebo `crossword`;
-zadání lze převést rourou `crossword ZADÁNÍ.yaml | latex -` nebo rovnou
-sestavit jako PDF pomocí `crossword ZADÁNÍ.yaml | render -`.
+jiné buňky. Příkazy `latex` a `render` přijímají `grid`, `template` nebo
+`crossword`; zadání lze převést rourou `template ZADÁNÍ.yaml | latex -` nebo rovnou
+sestavit jako PDF pomocí `template ZADÁNÍ.yaml | render -`.
 
 ## Validace
 
 Strojová pravidla jsou v samostatných schématech pro
 [cílovou mřížku](../src/krizovkar/schemas/grid-v1.schema.json),
+[šablonu](../src/krizovkar/schemas/template-v1.schema.json),
 [editovatelnou křížovku](../src/krizovkar/schemas/crossword-v1.schema.json) a
 [zadání](../src/krizovkar/schemas/specification-v1.schema.json). Schémata
 odmítají neznámé a chybně napsané položky i nulové, záporné nebo neceločíselné
@@ -487,10 +494,10 @@ zcela doplněného výsledku.
 
 Minimální dokumenty jsou v příkladech [cílové mřížky](../examples/grid-minimal.yaml) a [zadání](../examples/specification-minimal.yaml).
 
-Převod nevyplněné křížovky ukazuje [nevyplněná cílová mřížka](../examples/grid-unfilled.yaml).
+Převod nevyplněné šablony ukazuje [nevyplněná cílová mřížka](../examples/grid-unfilled.yaml).
 
 Doplněné sloty a pomůcku ukazuje
-[křížovka ze zadání](../examples/crossword-from-specification.yaml).
+[šablona ze zadání](../examples/template-from-specification.yaml).
 
 Vyšší zadání ukazuje [příklad s umístěnými slovy a automatickou pomůckou](../examples/specification-placed-words.yaml).
 

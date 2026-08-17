@@ -209,8 +209,8 @@ class CrosswordSecret:
 
 
 @dataclass(frozen=True, slots=True)
-class CrosswordDocument:
-    """Editovatelná křížovka s rolemi buněk a místy pro hesla."""
+class CrosswordTemplate:
+    """Šablona s rolemi buněk a místy pro budoucí hesla."""
 
     format_name: str
     kind: str
@@ -218,6 +218,26 @@ class CrosswordDocument:
     grid: CrosswordLayout
     slots: tuple[WordSlot, ...]
     secrets: tuple[CrosswordSecret, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class CrosswordDocument(CrosswordTemplate):
+    """Editovatelná křížovka vzniklá vyplňováním šablony."""
+
+
+def create_crossword_document(
+    template: CrosswordTemplate,
+) -> CrosswordDocument:
+    """Vytvoří dokument křížovky z vyplňované šablony."""
+
+    return CrosswordDocument(
+        format_name=template.format_name,
+        kind="crossword",
+        version=template.version,
+        grid=template.grid,
+        slots=template.slots,
+        secrets=template.secrets,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -683,9 +703,9 @@ def _cell_roles(
     return tuple(rows)
 
 
-def _crossword_document_from_data(data: dict[str, Any]) -> CrosswordDocument:
+def _crossword_template_from_data(data: dict[str, Any]) -> CrosswordTemplate:
     raw_grid = data["grid"]
-    crossword = CrosswordDocument(
+    template = CrosswordTemplate(
         format_name=data["format"],
         kind=data["kind"],
         version=data["version"],
@@ -729,19 +749,26 @@ def _crossword_document_from_data(data: dict[str, Any]) -> CrosswordDocument:
             for secret in data.get("secrets", ())
         ),
     )
-    _validate_crossword_document(crossword)
-    return crossword
+    _validate_crossword_template(template)
+    return template
+
+
+def load_crossword_template(source: YamlSource) -> CrosswordTemplate:
+    """Načte a ověří šablonu křížovky ze souboru nebo proudu YAML."""
+
+    data = _validated_data(source, "template-v1.schema.json")
+    return _crossword_template_from_data(data)
 
 
 def load_crossword_document(source: YamlSource) -> CrosswordDocument:
     """Načte a ověří editovatelnou křížovku ze souboru nebo proudu YAML."""
 
     data = _validated_data(source, "crossword-v1.schema.json")
-    return _crossword_document_from_data(data)
+    return create_crossword_document(_crossword_template_from_data(data))
 
 
-def _validate_crossword_document(crossword: CrosswordDocument) -> None:
-    grid = crossword.grid
+def _validate_crossword_template(template: CrosswordTemplate) -> None:
+    grid = template.grid
     if grid.width < 1 or grid.height < 1:
         raise ModelError("neplatný datový model: $.grid: rozměry musí být kladné")
     if len(grid.cells) != grid.height:
@@ -757,7 +784,7 @@ def _validate_crossword_document(crossword: CrosswordDocument) -> None:
                 f"počet buněk ({len(row)}) neodpovídá "
                 f"grid.width ({grid.width})"
             )
-    if not crossword.slots:
+    if not template.slots:
         raise ModelError("neplatný datový model: $.slots: seznam nesmí být prázdný")
 
     identifiers: dict[str, str] = {}
@@ -767,7 +794,7 @@ def _validate_crossword_document(crossword: CrosswordDocument) -> None:
     fixed_letters: dict[tuple[int, int], tuple[str, str]] = {}
     help_slots: list[str] = []
 
-    for slot_index, slot in enumerate(crossword.slots):
+    for slot_index, slot in enumerate(template.slots):
         path = f"$.slots[{slot_index}]"
         if slot.length < 1:
             raise ModelError(
@@ -948,9 +975,9 @@ def _validate_crossword_document(crossword: CrosswordDocument) -> None:
             "buňka type: help vyžaduje alespoň jedno heslo s in_help"
         )
 
-    slots_by_identifier = {slot.identifier: slot for slot in crossword.slots}
+    slots_by_identifier = {slot.identifier: slot for slot in template.slots}
     used_secret_slots: dict[str, str] = {}
-    for secret_index, secret in enumerate(crossword.secrets):
+    for secret_index, secret in enumerate(template.secrets):
         secret_path = f"$.secrets[{secret_index}]"
         if not secret.parts:
             raise ModelError(
@@ -1043,7 +1070,7 @@ def _validate_crossword_document(crossword: CrosswordDocument) -> None:
             if slot is None:
                 raise ModelError(
                     f"neplatný datový model: {part_path}.slot: "
-                    f"slot {part.slot_identifier!r} v křížovce neexistuje"
+                    f"slot {part.slot_identifier!r} v dokumentu neexistuje"
                 )
             previous_path = used_secret_slots.get(part.slot_identifier)
             if previous_path is not None:
@@ -1573,10 +1600,13 @@ def _cell_role_data(cell: CellRole) -> dict[str, str]:
     )
 
 
-def _crossword_document_data(crossword: CrosswordDocument) -> dict[str, Any]:
-    _validate_crossword_document(crossword)
+def _structural_document_data(
+    document: CrosswordTemplate,
+    schema_name: str,
+) -> dict[str, Any]:
+    _validate_crossword_template(document)
     slots = []
-    for slot in crossword.slots:
+    for slot in document.slots:
         data: dict[str, Any] = {
             "id": slot.identifier,
             "start": {
@@ -1599,22 +1629,22 @@ def _crossword_document_data(crossword: CrosswordDocument) -> dict[str, Any]:
         slots.append(data)
 
     result: dict[str, Any] = {
-        "format": crossword.format_name,
-        "kind": crossword.kind,
-        "version": crossword.version,
+        "format": document.format_name,
+        "kind": document.kind,
+        "version": document.version,
         "grid": {
-            "width": crossword.grid.width,
-            "height": crossword.grid.height,
+            "width": document.grid.width,
+            "height": document.grid.height,
             "cells": [
                 [_cell_role_data(cell) for cell in row]
-                for row in crossword.grid.cells
+                for row in document.grid.cells
             ],
         },
         "slots": slots,
     }
-    if crossword.secrets:
+    if document.secrets:
         result["secrets"] = []
-        for secret in crossword.secrets:
+        for secret in document.secrets:
             parts = []
             for part in secret.parts:
                 if isinstance(part, CrosswordSecretCellsPart):
@@ -1641,16 +1671,7 @@ def _crossword_document_data(crossword: CrosswordDocument) -> dict[str, Any]:
                     "alignment": secret.prompt.alignment,
                 }
             result["secrets"].append(secret_data)
-    return result
-
-
-def _validated_crossword_document_data(
-    crossword: CrosswordDocument,
-) -> dict[str, Any]:
-    return _validate_data(
-        _crossword_document_data(crossword),
-        "crossword-v1.schema.json",
-    )
+    return _validate_data(result, schema_name)
 
 
 def _write_yaml_document(
@@ -1786,6 +1807,35 @@ def dump_crossword_specification(
     )
 
 
+def write_crossword_template(
+    template: CrosswordTemplate,
+    output: str | Path,
+    *,
+    overwrite: bool = False,
+) -> Path:
+    """Zapíše šablonu křížovky atomicky jako YAML."""
+
+    return _write_yaml_document(
+        _structural_document_data(template, "template-v1.schema.json"),
+        output,
+        overwrite=overwrite,
+        subject="šablonu křížovky",
+    )
+
+
+def dump_crossword_template(
+    template: CrosswordTemplate,
+    output: TextIO,
+) -> None:
+    """Zapíše šablonu křížovky do textového proudu YAML."""
+
+    _dump_yaml_document_safely(
+        _structural_document_data(template, "template-v1.schema.json"),
+        output,
+        subject="šablonu křížovky",
+    )
+
+
 def write_crossword_document(
     crossword: CrosswordDocument,
     output: str | Path,
@@ -1795,7 +1845,7 @@ def write_crossword_document(
     """Zapíše editovatelnou křížovku atomicky jako YAML."""
 
     return _write_yaml_document(
-        _validated_crossword_document_data(crossword),
+        _structural_document_data(crossword, "crossword-v1.schema.json"),
         output,
         overwrite=overwrite,
         subject="křížovku",
@@ -1809,7 +1859,7 @@ def dump_crossword_document(
     """Zapíše editovatelnou křížovku do textového proudu YAML."""
 
     _dump_yaml_document_safely(
-        _validated_crossword_document_data(crossword),
+        _structural_document_data(crossword, "crossword-v1.schema.json"),
         output,
         subject="křížovku",
     )
