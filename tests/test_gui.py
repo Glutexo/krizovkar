@@ -1869,6 +1869,20 @@ class GuiTest(unittest.TestCase):
         self.assertEqual(2, exit_code)
         self.assertIn("grafické rozhraní nelze spustit", error_output.getvalue())
 
+    def test_main_rejects_tk_older_than_version_nine(self) -> None:
+        error_output = StringIO()
+        with (
+            patch("krizovkar.gui.tk.TkVersion", 8.6),
+            patch("krizovkar.gui.tk.Tk") as root_type,
+            redirect_stderr(error_output),
+        ):
+            exit_code = main([])
+
+        self.assertEqual(2, exit_code)
+        self.assertIn("vyžaduje Tk 9.0 nebo novější", error_output.getvalue())
+        self.assertIn("nalezena verze 8.6", error_output.getvalue())
+        root_type.assert_not_called()
+
     def test_main_opens_system_file_dialog(self) -> None:
         root = Mock()
         application = Mock()

@@ -100,9 +100,13 @@ nezadává tajenky, vlastní pomůcku ani automatické vyplnění ze slovníku.
 Export do PDF používá LuaLaTeX a vyžaduje stejnou instalaci TeX Live
 jako příkaz `render`.
 
-GUI vyžaduje Python s podporou Tk 8.6 nebo novější. Modul `tkinter` je součástí
-standardní knihovny Pythonu, některé systémové distribuce jej ale instalují jako
-samostatný balíček.
+GUI vyžaduje Python 3.14.1 nebo novější sestavený s Tk 9.0 nebo novějším.
+Modul `tkinter` je součástí standardní knihovny Pythonu, konkrétní verzi Tk
+ale určuje použité sestavení Pythonu. Dostupnou verzi vypíše:
+
+```shell
+uv run python -c 'import tkinter as tk; print(tk.TkVersion)'
+```
 
 ## Zaměření
 
@@ -514,8 +518,9 @@ Validátor nepřiřazuje celé mřížce jeden druh. U každého začátku hesla
 
 ## Vytvoření LaTeXu a PDF
 
-Projekt vyžaduje Python 3.11 nebo novější. Pythonové závislosti lze
-nainstalovat pomocí [uv](https://docs.astral.sh/uv/):
+Projekt vyžaduje Python 3.14.1 nebo novější; soubor `.python-version`
+pro vývoj připíná verzi 3.14.1. Pythonové závislosti lze nainstalovat pomocí
+[uv](https://docs.astral.sh/uv/):
 
 ```shell
 uv sync

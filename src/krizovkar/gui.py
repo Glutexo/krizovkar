@@ -50,6 +50,7 @@ from krizovkar.renderer import (
 
 _MAX_CROSSWORD_DIMENSION = 50
 _MAX_RECENT_DOCUMENTS = 10
+_MINIMUM_TK_VERSION = 9.0
 _GRID_RESIZE_HIT_RADIUS = 7
 _GRID_RESIZE_HANDLE_RADIUS = 3
 _GRID_RESIZE_FEEDBACK_TAG = "grid-resize-feedback"
@@ -2424,6 +2425,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     document_paths = tuple(
         Path(argument) for argument in (sys.argv[1:] if argv is None else argv)
     )
+    if tk.TkVersion < _MINIMUM_TK_VERSION:
+        print(
+            "chyba: grafické rozhraní vyžaduje Tk 9.0 nebo novější "
+            f"(nalezena verze {tk.TkVersion:.1f})",
+            file=sys.stderr,
+        )
+        return 2
     _configure_tk_runtime()
     try:
         root = tk.Tk()
