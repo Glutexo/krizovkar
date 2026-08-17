@@ -54,6 +54,7 @@ from krizovkar.renderer import (
 
 _MAX_TEMPLATE_DIMENSION = 50
 _MAX_RECENT_DOCUMENTS = 10
+_TEMPLATE_UPDATE_DELAY_MS = 150
 _DIRECTION_LABELS = {
     "horizontal": "Vodorovně",
     "vertical": "Svisle",
@@ -1075,6 +1076,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.slot_pattern_value = tk.StringVar(value="Vzor z křížení: —")
         self.progress_value = tk.StringVar()
         self._page_format = DEFAULT_PAGE_FORMAT
+        self._template_update_job: str | None = None
 
         self._configure_window()
         self._configure_styles()
@@ -1356,18 +1358,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             justify="left",
         ).grid(row=3, column=0, sticky="w", pady=(6, 0))
 
-        self.create_template_button = ttk.Button(
-            properties,
-            text="Aktualizovat šablonu",
-            command=self.create_new_template,
-        )
-        self.create_template_button.grid(
-            row=4,
-            column=0,
-            sticky="ew",
-            pady=(10, 0),
-        )
-
         preview_frame = ttk.LabelFrame(tab, text="Náhled šablony", padding=12)
         preview_frame.grid(row=0, column=1, sticky="nsew")
         preview_frame.columnconfigure(0, weight=1)
@@ -1551,8 +1541,11 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.slots_tree.bind("<<TreeviewSelect>>", self._slot_selection_changed)
 
     def _watch_inputs(self) -> None:
-        self.layout_value.trace_add("write", self._template_input_changed)
-        self._template_input_changed()
+        for value in (self.width_value, self.height_value, self.layout_value):
+            value.trace_add("write", self._template_input_changed)
+        self.layout_help_value.set(
+            self._layout_description(self.layout_value.get())
+        )
 
     @staticmethod
     def _layout_description(layout: str) -> str:
@@ -1567,22 +1560,35 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
 
     def _template_input_changed(self, *_args: str) -> None:
-        layout = self.layout_value.get()
-        self.layout_help_value.set(self._layout_description(layout))
+        self.layout_help_value.set(
+            self._layout_description(self.layout_value.get())
+        )
+        if self._template_update_job is not None:
+            self.after_cancel(self._template_update_job)
+        self._template_update_job = self.after(
+            _TEMPLATE_UPDATE_DELAY_MS,
+            self._update_template_from_inputs,
+        )
 
-    def create_new_template(self) -> None:
+    def _update_template_from_inputs(self) -> None:
+        self._template_update_job = None
         try:
             settings = parse_template_settings(
                 self.width_value.get(),
                 self.height_value.get(),
             )
             layout = cast(SpecificationLayout, self.layout_value.get())
+            current = self._base_template
+            if (
+                current is not None
+                and current.grid.width == settings.width
+                and current.grid.height == settings.height
+                and template_layout(current) == layout
+            ):
+                return
             template = create_blank_template(settings, layout)
         except GuiInputError as error:
-            self._show_action_error(
-                "Šablonu nelze vytvořit",
-                str(error),
-            )
+            self.layout_help_value.set(str(error))
             return
 
         self._base_template = template

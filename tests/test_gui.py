@@ -550,8 +550,47 @@ class GuiTest(unittest.TestCase):
         self.assertEqual("template", loaded_template.kind)
         self.assertIsInstance(loaded_crossword, CrosswordDocument)
 
-    def test_template_update_changes_only_its_document_window(self) -> None:
+    def test_template_watches_all_values_for_live_updates(self) -> None:
         window = Mock()
+        window.layout_value.get.return_value = "numbered"
+        window._layout_description.return_value = "Popis rozvržení"
+
+        CrosswordDocumentWindow._watch_inputs(window)
+
+        for value in (
+            window.width_value,
+            window.height_value,
+            window.layout_value,
+        ):
+            value.trace_add.assert_called_once_with(
+                "write",
+                window._template_input_changed,
+            )
+        window.layout_help_value.set.assert_called_once_with("Popis rozvržení")
+
+    def test_template_input_change_replaces_pending_live_update(self) -> None:
+        window = Mock()
+        window._template_update_job = "předchozí"
+        window.after.return_value = "nová"
+        window.layout_value.get.return_value = "numbered"
+        window._layout_description.return_value = "Popis rozvržení"
+
+        with patch("krizovkar.gui._TEMPLATE_UPDATE_DELAY_MS", 321):
+            CrosswordDocumentWindow._template_input_changed(window)
+
+        window.after_cancel.assert_called_once_with("předchozí")
+        window.after.assert_called_once_with(
+            321,
+            window._update_template_from_inputs,
+        )
+        self.assertEqual("nová", window._template_update_job)
+
+    def test_live_template_update_changes_only_its_document_window(self) -> None:
+        window = Mock()
+        window._base_template = create_blank_template(
+            TemplateSettings(4, 4),
+            "numbered",
+        )
         new_template = create_blank_template(TemplateSettings(3, 3), "numbered")
         window.width_value.get.return_value = "3"
         window.height_value.get.return_value = "3"
@@ -560,12 +599,55 @@ class GuiTest(unittest.TestCase):
         with patch(
             "krizovkar.gui.create_blank_template",
             return_value=new_template,
-        ):
-            CrosswordDocumentWindow.create_new_template(window)
+        ) as create_template:
+            CrosswordDocumentWindow._update_template_from_inputs(window)
 
+        create_template.assert_called_once_with(
+            TemplateSettings(3, 3),
+            "numbered",
+        )
         self.assertIs(new_template, window._base_template)
+        self.assertIsNone(window._template_update_job)
         window._set_dirty.assert_called_once_with(True)
         window._refresh_template_view.assert_called_once_with()
+
+    def test_live_template_update_preserves_matching_document(self) -> None:
+        window = Mock()
+        template = create_blank_template(TemplateSettings(3, 3), "numbered")
+        window._base_template = template
+        window.width_value.get.return_value = "3"
+        window.height_value.get.return_value = "3"
+        window.layout_value.get.return_value = "numbered"
+
+        with patch("krizovkar.gui.create_blank_template") as create_template:
+            CrosswordDocumentWindow._update_template_from_inputs(window)
+
+        create_template.assert_not_called()
+        self.assertIs(template, window._base_template)
+        window._set_dirty.assert_not_called()
+        window._refresh_template_view.assert_not_called()
+
+    def test_live_template_update_keeps_last_preview_for_invalid_value(
+        self,
+    ) -> None:
+        window = Mock()
+        template = create_blank_template(TemplateSettings(3, 3), "numbered")
+        window._base_template = template
+        window.width_value.get.return_value = ""
+        window.height_value.get.return_value = "3"
+        window.layout_value.get.return_value = "numbered"
+
+        with patch("krizovkar.gui.create_blank_template") as create_template:
+            CrosswordDocumentWindow._update_template_from_inputs(window)
+
+        create_template.assert_not_called()
+        self.assertIs(template, window._base_template)
+        window.layout_help_value.set.assert_called_once_with(
+            "Počet sloupců musí být celé číslo."
+        )
+        window._show_action_error.assert_not_called()
+        window._set_dirty.assert_not_called()
+        window._refresh_template_view.assert_not_called()
 
     def test_template_opens_crossword_in_new_document_window(self) -> None:
         window = Mock()

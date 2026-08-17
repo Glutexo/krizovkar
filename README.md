@@ -42,8 +42,8 @@ přetáhnout stejně jako soubor ve Finderu.
 Podle kořenového klíče `kind` má okno jednu ze dvou podob:
 
 - **Šablona** určuje rozměr, švédskou nebo číslovanou podobu a všechna místa
-  pro vodorovná a svislá hesla. Má vlastní náhled. Akce **Vytvořit
-  křížovku podle této šablony** v panelu nástrojů a nabídce **Soubor**
+  pro vodorovná a svislá hesla. Změny hodnot se živě promítají do jejího
+  náhledu. Akce **Vytvořit křížovku** v panelu nástrojů a nabídce **Soubor**
   otevře nové okno s nezávislým dokumentem `kind: crossword`.
 - **Křížovka** drží vlastní kopii zvolené šablony a doplněná hesla. Místo se
   vybírá kliknutím v náhledu nebo v seznamu; formulář ukazuje jeho délku a
