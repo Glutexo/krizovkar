@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   checks:
-    name: Python 3.14 / Tk 9
+    name: Python 3.14.6 / Tk 9
     runs-on: macos-latest
     timeout-minutes: 15
 
@@ -29,8 +29,8 @@ jobs:
         id: python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          # Oficiální macOS balíky obsahují Tk 9 od Pythonu 3.14.5.
-          python-version: "3.14"
+          # Oficiální macOS balík Pythonu 3.14.6 obsahuje Tk 9.
+          python-version-file: .python-version
 
       - name: Předat Python nástroji uv
         run: echo "UV_PYTHON=${{ steps.python.outputs.python-path }}" >> "$GITHUB_ENV"
@@ -51,7 +51,7 @@ jobs:
           import sys
           import tkinter as tk
 
-          assert (3, 14, 1) <= sys.version_info[:3] < (3, 15), sys.version
+          assert sys.version_info[:3] == (3, 14, 6), sys.version
           assert tk.TkVersion >= 9.0, tk.TkVersion
           print(f"Python {sys.version.split()[0]}, Tk {tk.TkVersion:.1f}")
           PY
