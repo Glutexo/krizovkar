@@ -52,7 +52,6 @@ from krizovkar.renderer import (
 )
 from krizovkar.validation import validate_crossword_grid_file
 
-
 LAYOUT_CHOICES = ("swedish", "numbered")
 DEFAULT_LAYOUT = "swedish"
 STANDARD_INPUT_PATH = Path("-")
@@ -247,7 +246,7 @@ def _parser() -> argparse.ArgumentParser:
         help="doplní prázdná místa křížovky hesly ze slovníku",
         description=(
             "Přiřadí různá hesla všem prázdným místům křížovky, dodrží jejich "
-            "délky a písmena na kříženích a zapíše cílovou mřížku."
+            "délky a písmena na kříženích a zapíše vyplněnou křížovku."
         ),
     )
     fill.add_argument(
@@ -266,8 +265,8 @@ def _parser() -> argparse.ArgumentParser:
         "-o",
         "--output",
         type=Path,
-        metavar="MŘÍŽKA.yaml",
-        help="cílový YAML soubor; bez volby standardní výstup",
+        metavar="KŘÍŽOVKA.yaml",
+        help="cílová YAML křížovka; bez volby standardní výstup",
     )
     fill.add_argument(
         "--seed",
@@ -751,17 +750,17 @@ def _fill(arguments: argparse.Namespace) -> int:
             _input_source(arguments.crossword)
         )
         dictionary = load_dictionary(_input_source(arguments.dictionary))
-        grid = fill_crossword(
+        crossword = fill_crossword(
             crossword,
             dictionary,
             seed=arguments.seed,
             secret=secret,
         )
         if arguments.output is None:
-            dump_crossword_grid(grid, sys.stdout)
+            dump_crossword_document(crossword, sys.stdout)
         else:
-            write_crossword_grid(
-                grid,
+            write_crossword_document(
+                crossword,
                 arguments.output,
                 overwrite=arguments.force,
             )
@@ -770,7 +769,7 @@ def _fill(arguments: argparse.Namespace) -> int:
         return 2
 
     _print_success(
-        f"Mřížka vytvořena: {_output_description(arguments.output)} "
+        f"Křížovka vyplněna: {_output_description(arguments.output)} "
         f"({crossword.grid.width} × {crossword.grid.height}, "
         f"{_localized_count(len(crossword.slots), 'heslo', 'hesel')}, "
         f"seed {arguments.seed})",

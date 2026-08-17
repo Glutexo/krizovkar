@@ -1689,6 +1689,7 @@ class CommandTest(unittest.TestCase):
                     self.assertTrue(
                         stdout.getvalue().startswith("format: krizovkar\n")
                     )
+                    self.assertIn("kind: crossword\n", stdout.getvalue())
 
     def test_fill_rejects_stdin_for_both_inputs(self) -> None:
         stderr = io.StringIO()
@@ -1722,20 +1723,18 @@ class CommandTest(unittest.TestCase):
 
             self.assertEqual(0, result)
             self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
-            self.assertNotIn("Mřížka vytvořena", stdout.getvalue())
+            self.assertIn("kind: crossword\n", stdout.getvalue())
+            self.assertNotIn("Křížovka vyplněna", stdout.getvalue())
             self.assertIn(
-                "Mřížka vytvořena: standardní výstup "
+                "Křížovka vyplněna: standardní výstup "
                 "(6 × 1, 1 heslo, seed 0)",
                 stderr.getvalue(),
             )
-            source = Path(directory) / "grid.yaml"
+            source = Path(directory) / "filled-crossword.yaml"
             source.write_text(stdout.getvalue(), encoding="utf-8")
-            crossword = load_crossword_grid(source)
-            assert crossword.grid.cells is not None
-            self.assertEqual(
-                "ZELENÍ",
-                "".join(cell.value for cell in crossword.grid.cells[0]),
-            )
+            crossword = load_crossword_document(source)
+            self.assertEqual("ZELENÍ", crossword.slots[0].answer)
+            self.assertEqual("Tajenka", crossword.slots[0].clue)
 
     def test_generate_writes_yaml_to_stdout_without_output(self) -> None:
         answers = tuple(
@@ -1890,7 +1889,7 @@ class CommandTest(unittest.TestCase):
     def test_fill_uses_secret_already_stored_in_crossword(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             dictionary = Path(directory) / "dictionary.json"
-            output = Path(directory) / "grid.yaml"
+            output = Path(directory) / "filled-crossword.yaml"
             dictionary.write_text(
                 json.dumps({"LES": ["Porost stromů"]}, ensure_ascii=False),
                 encoding="utf-8",
@@ -1908,25 +1907,21 @@ class CommandTest(unittest.TestCase):
                 )
 
             self.assertEqual(0, result)
-            crossword = load_crossword_grid(output)
-            assert crossword.grid.cells is not None
-            self.assertEqual(
-                "ZELENÍ",
-                "".join(cell.value for cell in crossword.grid.cells[0]),
-            )
-            self.assertTrue(
-                all(isinstance(cell, SecretCell) for cell in crossword.grid.cells[0])
-            )
-            self.assertEqual(1, len(crossword.secret_prompts))
+            crossword = load_crossword_document(output)
+            self.assertEqual("ZELENÍ", crossword.slots[0].answer)
+            self.assertEqual("Tajenka", crossword.slots[0].clue)
+            self.assertEqual(1, len(crossword.secrets))
+            self.assertIsNotNone(crossword.secrets[0].prompt)
 
-    def test_fill_creates_grid_from_crossword_and_dictionary(self) -> None:
+    def test_fill_creates_crossword_then_grid_converts_it(self) -> None:
         answers = tuple(
             "".join(letters) for letters in product("ABCD", repeat=4)
         )
         with tempfile.TemporaryDirectory() as directory:
             crossword_source = Path(directory) / "crossword.yaml"
             dictionary = Path(directory) / "dictionary.json"
-            output = Path(directory) / "grid.yaml"
+            filled_crossword = Path(directory) / "filled-crossword.yaml"
+            grid_output = Path(directory) / "grid.yaml"
             dictionary.write_text(
                 json.dumps(
                     {
@@ -1960,22 +1955,38 @@ class CommandTest(unittest.TestCase):
                         str(crossword_source),
                         str(dictionary),
                         "--output",
-                        str(output),
+                        str(filled_crossword),
                         "--seed",
                         "42",
                     ]
                 )
 
             self.assertEqual(0, result)
-            self.assertIn("Mřížka vytvořena:", stdout.getvalue())
-            crossword = load_crossword_grid(output)
-            self.assertEqual(5, crossword.grid.width)
-            self.assertEqual(5, crossword.grid.height)
-            assert crossword.grid.cells is not None
+            self.assertIn("Křížovka vyplněna:", stdout.getvalue())
+            crossword = load_crossword_document(filled_crossword)
+            self.assertEqual("crossword", crossword.kind)
+            self.assertTrue(
+                all(
+                    slot.answer is not None and slot.clue is not None
+                    for slot in crossword.slots
+                )
+            )
+            with redirect_stdout(io.StringIO()):
+                grid_result = main(
+                    [
+                        "grid",
+                        str(filled_crossword),
+                        "--output",
+                        str(grid_output),
+                    ]
+                )
+            self.assertEqual(0, grid_result)
+            grid = load_crossword_grid(grid_output)
+            assert grid.grid.cells is not None
             self.assertTrue(
                 all(
                     isinstance(cell, (LetterCell, LegendCell, EmptyCell))
-                    for row in crossword.grid.cells
+                    for row in grid.grid.cells
                     for cell in row
                 )
             )
@@ -1988,7 +1999,7 @@ class CommandTest(unittest.TestCase):
                         str(crossword_source),
                         str(dictionary),
                         "--output",
-                        str(output),
+                        str(filled_crossword),
                     ]
                 )
 

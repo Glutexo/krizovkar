@@ -113,7 +113,7 @@ Křížovkář rozlišuje tři samostatné druhy YAML dokumentů:
 ```text
 umístěné specification + volba rozvržení → crossword
 crossword (ruční doplňování) → grid → LaTeX → PDF
-crossword + slovník → fill → grid → LaTeX → PDF
+crossword + slovník → fill → vyplněný crossword → grid → LaTeX → PDF
 požadavky + slovník → generate (= crossword + fill) → grid
 ```
 
@@ -421,23 +421,32 @@ Prázdná místa křížovky lze později vyplnit ze slovníku:
 ```shell
 uv run krizovkar fill build/crossword.yaml slovnik.json \
   --seed 10 \
-  --output build/filled-grid.yaml
+  --output build/filled-crossword.yaml
 ```
 
 Plnění funguje i pro ručně vytvořené a částečně vyplněné křížovky.
 Doplněná hesla zachová; pro každé zbývající místo vybere heslo odpovídající délky,
 zachová shodná písmena na kříženích a stejnou odpověď nepoužije dvakrát.
-Slot s vepsanou legendovou buňkou vytvoří švédskou legendu; slot bez ní
-dostane číslo a vnější legendu. Stejná křížovka, slovník a seed vytvoří
-stejnou cílovou mřížku.
+Odpověď a legendu uloží přímo do původního slotu, takže výsledkem
+zůstává editovatelný dokument `kind: crossword`. Ten lze dál upravovat,
+znovu použít jako základ nebo převést na cílovou mřížku:
+
+```shell
+uv run krizovkar grid build/filled-crossword.yaml \
+  --output build/filled-grid.yaml
+```
+
+Při převodu dostane slot s vepsanou legendovou buňkou švédskou legendu;
+slot bez ní dostane číslo a vnější legendu. Stejná křížovka, slovník a
+seed vytvoří stejnou vyplněnou křížovku.
 
 Známou tajenku uloženou v křížovce `fill` doplní automaticky a její
 místa nevyhledává ve slovníku. Rezervuje-li křížovka jen prázdná tajenková
 místa, předá se konkrétní text pomocí `--secret` nebo opakovaného
 `--secret-part`. Stejné volby lze použít i bez předchozí rezervace; plnění
-pak vhodná místa tajenky samo vybere. Tajenková pole se ve výsledné mřížce
-zvýrazní a jednotlivé části dostanou legendy `1. část tajenky`, `2. část
-tajenky` a tak dále.
+pak vhodná místa tajenky samo vybere. Jednotlivé části při plnění dostanou
+legendy `1. část tajenky`, `2. část tajenky` a tak dále; následný převod
+jejich pole ve výsledné mřížce zvýrazní.
 
 ## Pokusné generování
 

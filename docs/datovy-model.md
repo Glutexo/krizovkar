@@ -12,7 +12,7 @@ Existují tři samostatné druhy dokumentů:
 ```text
 umístěné specification + volba rozvržení → crossword
 crossword (ruční doplňování) → grid → LaTeX → PDF
-crossword + slovník → plnění → grid (vyplněná mřížka) → LaTeX → PDF
+crossword + slovník → plnění → vyplněný crossword → grid → LaTeX → PDF
 ```
 
 LaTeXový zdroj není dalším druhem YAML dokumentu a nemá položku `kind`.
@@ -126,20 +126,27 @@ Příkaz `fill` přijímá libovolnou platnou křížovku a slovník. Doplněné
 sloty použije jako počáteční omezení. Pomocí zpětného prohledávání přiřadí
 každému zbývajícímu běžnému slotu jiné heslo správné délky a průběžně
 omezuje kandidáty podle již známých písmen na kříženích. Tajenkové sloty
-vyplní přímo, bez hledání odpovědi ve slovníku, označí je jako
-`type: secret` a jejich písmena použije jako další pevná omezení. Neznámou
+vyplní přímo, bez hledání odpovědi ve slovníku, a jejich písmena použije
+jako další pevná omezení. Neznámou
 rezervovanou tajenku musí doplnit konkrétní text; není-li v křížovce
 rezervace, `fill` vhodné sloty automaticky vybere. Rozdělení je přípustné
 jen tehdy, pokud každá část končí na hranici slova.
 
-Vepsané legendy převezmou texty přiřazených hesel. Sloty bez souřadnice `legend` se převedou na číslovaná hesla s vnějšími legendami; společný začátek vodorovného a svislého slotu sdílí jedno číslo. Seed určuje pořadí kandidátů a zachovává opakovatelnost výsledku.
+Výsledkem `fill` je znovu dokument `kind: crossword`; každému vyplněnému
+slotu přibude `answer` a `clue`. Rozvržení, tajenky a pomůcka zůstanou
+editovatelné a celou křížovku lze znovu použít jako základ. Seed určuje
+pořadí kandidátů a zachovává opakovatelnost výsledku.
 
 Příkaz `grid` převádí platnou křížovku na cílovou mřížku bez slovníku. Role
 `letter`, `legend`, `help` a `empty` zachová, u číslovaných slotů doplní čísla
 začátků a silné mezislovní předěly a připravené tajenky převede na buňky
 `secret`. Přenese také jejich zobáčky a `prompt`. Nevyplněné sloty zůstanou
 prázdné; doplněné sloty naopak vloží svá písmena a legendy a `in_help` naplní
-pomůcku. Samotná `secrets.words` u slotu bez pevného `answer` se při tomto
+pomůcku. Tajenkové sloty označí jako `type: secret`. Vepsané legendy
+převezmou texty přiřazených hesel; sloty bez souřadnice `legend` se převedou
+na číslovaná hesla s vnějšími legendami. Společný začátek vodorovného
+a svislého slotu sdílí jedno číslo. Samotná `secrets.words` u slotu bez
+pevného `answer` se při tomto
 převodu dál nezveřejňují. Příkazy `latex` a `render` umějí stejný převod
 provést automaticky, dostanou-li přímo dokument `kind: crossword`. První z
 nich vypíše upravitelný LaTeX, druhý stejný zdroj přeloží LuaLaTeXem do PDF.

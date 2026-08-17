@@ -1372,7 +1372,7 @@ def fill_crossword(
     *,
     seed: int = DEFAULT_SEED,
     secret: SecretRequirement | None = None,
-) -> CrosswordGrid:
+) -> CrosswordDocument:
     """Doplní prázdná místa křížovky hesly ze slovníku."""
 
     crossword = _resolve_crossword_secrets(crossword, secret, seed)
@@ -1410,7 +1410,17 @@ def fill_crossword(
                 random.Random(attempt_seed),
                 fixed_assignments,
             )
-            return _crossword_grid_from_assignments(crossword, assignments)
+            return replace(
+                crossword,
+                slots=tuple(
+                    replace(
+                        slot,
+                        answer=assignments[slot.identifier].answer,
+                        clue=assignments[slot.identifier].clue,
+                    )
+                    for slot in crossword.slots
+                ),
+            )
         except _SearchFailed:
             continue
 
@@ -1435,10 +1445,12 @@ def generate_swedish_grid(
         seed=seed,
         secret=secret,
     )
-    return fill_crossword(
-        crossword,
-        dictionary,
-        seed=seed,
+    return create_grid_from_crossword(
+        fill_crossword(
+            crossword,
+            dictionary,
+            seed=seed,
+        )
     )
 
 
@@ -1458,8 +1470,10 @@ def generate_numbered_grid(
         seed=seed,
         secret=secret,
     )
-    return fill_crossword(
-        crossword,
-        dictionary,
-        seed=seed,
+    return create_grid_from_crossword(
+        fill_crossword(
+            crossword,
+            dictionary,
+            seed=seed,
+        )
     )

@@ -263,16 +263,26 @@ class GeneratorTest(unittest.TestCase):
             )
         )
 
-        crossword = fill_crossword(crossword, dictionary)
+        filled = fill_crossword(crossword, dictionary)
 
-        assert crossword.grid.cells is not None
+        self.assertEqual("crossword", filled.kind)
+        self.assertEqual(
+            ("ABC", "XBX"),
+            tuple(slot.answer for slot in filled.slots),
+        )
+        self.assertEqual(
+            ("Pevné heslo", "Doplněné heslo"),
+            tuple(slot.clue for slot in filled.slots),
+        )
+        grid = create_grid_from_crossword(filled)
+        assert grid.grid.cells is not None
         self.assertEqual(
             ("A", "B", "C"),
-            tuple(cell.value for cell in crossword.grid.cells[1]),
+            tuple(cell.value for cell in grid.grid.cells[1]),
         )
         self.assertEqual(
             ("X", "B", "X"),
-            tuple(crossword.grid.cells[row][1].value for row in range(3)),
+            tuple(grid.grid.cells[row][1].value for row in range(3)),
         )
 
     def test_normalizes_secret_words_and_discards_punctuation(self) -> None:
@@ -412,18 +422,22 @@ class GeneratorTest(unittest.TestCase):
             ),
         )
 
-        crossword = fill_crossword(crossword, TEST_DICTIONARY)
+        filled = fill_crossword(crossword, TEST_DICTIONARY)
 
-        assert crossword.grid.cells is not None
+        self.assertEqual("ZELENÍ", filled.slots[0].answer)
+        self.assertEqual("Tajenka", filled.slots[0].clue)
+        self.assertEqual(prompt, filled.secrets[0].prompt)
+        grid = create_grid_from_crossword(filled)
+        assert grid.grid.cells is not None
         self.assertEqual(
             ("Z", "E", "L", "E", "N", "Í"),
-            tuple(cell.value for cell in crossword.grid.cells[0]),
+            tuple(cell.value for cell in grid.grid.cells[0]),
         )
         self.assertTrue(
-            all(isinstance(cell, SecretCell) for cell in crossword.grid.cells[0])
+            all(isinstance(cell, SecretCell) for cell in grid.grid.cells[0])
         )
-        self.assertEqual((prompt,), crossword.secret_prompts)
-        self.assertEqual("Tajenka", crossword.clues[0].text)
+        self.assertEqual((prompt,), grid.secret_prompts)
+        self.assertEqual("Tajenka", grid.clues[0].text)
 
     def test_fills_secret_into_reserved_slots_at_word_seams(self) -> None:
         crossword = CrosswordDocument(
@@ -449,20 +463,29 @@ class GeneratorTest(unittest.TestCase):
             ),
         )
 
-        crossword = fill_crossword(
+        filled = fill_crossword(
             crossword,
             TEST_DICTIONARY,
             secret=SecretRequirement(words=("KOMU", "SE")),
         )
 
-        assert crossword.grid.cells is not None
         self.assertEqual(
-            "KOMUSE",
-            "".join(cell.value for cell in crossword.grid.cells[0]),
+            ("KOMU", "SE"),
+            tuple(slot.answer for slot in filled.slots),
         )
         self.assertEqual(
             ("1. část tajenky", "2. část tajenky"),
-            tuple(clue.text for clue in crossword.clues),
+            tuple(slot.clue for slot in filled.slots),
+        )
+        grid = create_grid_from_crossword(filled)
+        assert grid.grid.cells is not None
+        self.assertEqual(
+            "KOMUSE",
+            "".join(cell.value for cell in grid.grid.cells[0]),
+        )
+        self.assertEqual(
+            ("1. část tajenky", "2. část tajenky"),
+            tuple(clue.text for clue in grid.clues),
         )
 
     def test_never_splits_secret_inside_word(self) -> None:
@@ -511,15 +534,18 @@ class GeneratorTest(unittest.TestCase):
             ),
         )
 
-        crossword = fill_crossword(
+        filled = fill_crossword(
             crossword,
             TEST_DICTIONARY,
             secret=SecretRequirement(words=("ZELENÍ",)),
         )
 
-        assert crossword.grid.cells is not None
+        self.assertEqual("ZELENÍ", filled.slots[0].answer)
+        self.assertEqual(("ZELENÍ",), filled.secrets[0].words)
+        grid = create_grid_from_crossword(filled)
+        assert grid.grid.cells is not None
         self.assertTrue(
-            all(isinstance(cell, SecretCell) for cell in crossword.grid.cells[0])
+            all(isinstance(cell, SecretCell) for cell in grid.grid.cells[0])
         )
 
     def test_fills_generated_crossword_deterministically(self) -> None:
@@ -529,16 +555,23 @@ class GeneratorTest(unittest.TestCase):
         second = fill_crossword(crossword, TEST_DICTIONARY, seed=42)
 
         self.assertEqual(first, second)
-        self.assertEqual("grid", first.kind)
+        self.assertEqual("crossword", first.kind)
         self.assertEqual(5, first.grid.width)
         self.assertEqual(5, first.grid.height)
-        assert first.grid.cells is not None
-        cells = tuple(cell for row in first.grid.cells for cell in row)
+        self.assertTrue(
+            all(
+                slot.answer is not None and slot.clue is not None
+                for slot in first.slots
+            )
+        )
+        grid = create_grid_from_crossword(first)
+        assert grid.grid.cells is not None
+        cells = tuple(cell for row in grid.grid.cells for cell in row)
         self.assertEqual(16, sum(isinstance(cell, LetterCell) for cell in cells))
         self.assertEqual(8, sum(isinstance(cell, LegendCell) for cell in cells))
         self.assertEqual(1, sum(isinstance(cell, EmptyCell) for cell in cells))
-        self.assertFalse(first.clues)
-        self.assertFalse(check_crossword_grid(first).warnings)
+        self.assertFalse(grid.clues)
+        self.assertFalse(check_crossword_grid(grid).warnings)
 
     def test_generates_complete_grid_with_fixed_secret(self) -> None:
         prompt = SecretPrompt(text="Doplňte tajenku", placement="below")
@@ -593,22 +626,24 @@ class GeneratorTest(unittest.TestCase):
             ),
         )
 
-        crossword = fill_crossword(crossword, TEST_DICTIONARY, seed=3)
+        filled = fill_crossword(crossword, TEST_DICTIONARY, seed=3)
 
-        assert crossword.grid.cells is not None
-        row = crossword.grid.cells[0]
+        self.assertTrue(all(slot.answer is not None for slot in filled.slots))
+        grid = create_grid_from_crossword(filled)
+        assert grid.grid.cells is not None
+        row = grid.grid.cells[0]
         self.assertEqual(1, row[0].number)
         self.assertEqual(("right",), row[2].bars)
         self.assertEqual(2, row[3].number)
-        self.assertEqual((1, 2), tuple(clue.number for clue in crossword.clues))
+        self.assertEqual((1, 2), tuple(clue.number for clue in grid.clues))
         self.assertEqual(
             ("horizontal", "horizontal"),
-            tuple(clue.direction for clue in crossword.clues),
+            tuple(clue.direction for clue in grid.clues),
         )
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "external.yaml"
-            write_crossword_grid(crossword, output)
-            self.assertEqual(crossword, load_crossword_grid(output))
+            write_crossword_grid(grid, output)
+            self.assertEqual(grid, load_crossword_grid(output))
 
     def test_fills_double_internal_legend_in_direction_order(self) -> None:
         crossword = CrosswordDocument(
@@ -647,10 +682,12 @@ class GeneratorTest(unittest.TestCase):
             )
         )
 
-        crossword = fill_crossword(crossword, dictionary, seed=1)
+        filled = fill_crossword(crossword, dictionary, seed=1)
 
-        assert crossword.grid.cells is not None
-        legend = crossword.grid.cells[0][0]
+        self.assertTrue(all(slot.clue is not None for slot in filled.slots))
+        grid = create_grid_from_crossword(filled)
+        assert grid.grid.cells is not None
+        legend = grid.grid.cells[0][0]
         self.assertIsInstance(legend, LegendCell)
         self.assertEqual(2, len(legend.texts))
         self.assertFalse(legend.arrows)
@@ -901,10 +938,12 @@ class GeneratorTest(unittest.TestCase):
     def test_generates_deterministic_dense_grid(self) -> None:
         first = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=42)
         second = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=42)
-        composed = fill_crossword(
-            generate_swedish_crossword(width=9, height=9),
-            TEST_DICTIONARY,
-            seed=42,
+        composed = create_grid_from_crossword(
+            fill_crossword(
+                generate_swedish_crossword(width=9, height=9),
+                TEST_DICTIONARY,
+                seed=42,
+            )
         )
 
         self.assertEqual(first, second)
@@ -961,10 +1000,12 @@ class GeneratorTest(unittest.TestCase):
             height=7,
             seed=42,
         )
-        composed = fill_crossword(
-            generate_numbered_crossword(width=7, height=7),
-            TEST_DICTIONARY,
-            seed=42,
+        composed = create_grid_from_crossword(
+            fill_crossword(
+                generate_numbered_crossword(width=7, height=7),
+                TEST_DICTIONARY,
+                seed=42,
+            )
         )
 
         self.assertEqual(first, second)
