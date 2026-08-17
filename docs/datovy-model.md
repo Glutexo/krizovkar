@@ -151,13 +151,6 @@ převodu dál nezveřejňují. Příkazy `latex` a `render` umějí stejný pře
 provést automaticky, dostanou-li přímo dokument `kind: crossword`. První z
 nich vypíše upravitelný LaTeX, druhý stejný zdroj přeloží LuaLaTeXem do PDF.
 
-Příkaz `generate` je zkratka nad stejnými dvěma kroky: podle `--layout`
-nejprve vytvoří hustou švédskou nebo číslovanou křížovku a potom ji naplní
-zadaným slovníkem. Přijímá konkrétní tajenku s automatickým nebo pevným
-dělením. Požadavek obsahující jen délku nelze použít pro vyplněnou mřížku,
-ale příkazy `grid`, `latex` a `render` jej zachovají jako označená nevyplněná
-tajenková pole.
-
 ## Cílová mřížka, verze 1
 
 Cílová mřížka popisuje obdélníkový rozměr a případný obsah buněk:

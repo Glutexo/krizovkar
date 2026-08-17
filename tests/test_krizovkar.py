@@ -1407,7 +1407,6 @@ class CommandTest(unittest.TestCase):
             "crossword",
             "grid",
             "fill",
-            "generate",
             "validate",
             "latex",
             "render",
@@ -1435,6 +1434,7 @@ class CommandTest(unittest.TestCase):
                 "nelze použít společně s argumentem --secret",
             ),
             (["crossword", "--neznamy"], "nerozpoznané argumenty: --neznamy"),
+            (["generate"], "argument příkaz: neplatná volba: 'generate'"),
             (["neznamy"], "argument příkaz: neplatná volba: 'neznamy'"),
         )
         for arguments, expected_message in cases:
@@ -1736,119 +1736,6 @@ class CommandTest(unittest.TestCase):
             self.assertEqual("ZELENÍ", crossword.slots[0].answer)
             self.assertEqual("Tajenka", crossword.slots[0].clue)
 
-    def test_generate_writes_yaml_to_stdout_without_output(self) -> None:
-        answers = tuple(
-            "".join(letters) for letters in product("ABCD", repeat=4)
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            dictionary = Path(directory) / "dictionary.json"
-            dictionary.write_text(
-                json.dumps(
-                    {
-                        answer: [f"Legenda {answer}"]
-                        for answer in answers
-                    }
-                ),
-                encoding="utf-8",
-            )
-            stdout = io.StringIO()
-            stderr = io.StringIO()
-
-            with redirect_stdout(stdout), redirect_stderr(stderr):
-                result = main(
-                    [
-                        "generate",
-                        str(dictionary),
-                        "--width",
-                        "5",
-                        "--height",
-                        "5",
-                    ]
-                )
-
-            self.assertEqual(0, result)
-            self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
-            self.assertNotIn("Mřížka vytvořena", stdout.getvalue())
-            self.assertIn(
-                "Mřížka vytvořena: standardní výstup "
-                "(5 × 5, 8 hesel, seed 0)",
-                stderr.getvalue(),
-            )
-            source = Path(directory) / "grid.yaml"
-            source.write_text(stdout.getvalue(), encoding="utf-8")
-            crossword = load_crossword_grid(source)
-            self.assertEqual(5, crossword.grid.width)
-            self.assertEqual(5, crossword.grid.height)
-
-    def test_generate_reads_dictionary_from_stdin(self) -> None:
-        answers = tuple(
-            "".join(letters) for letters in product("ABCD", repeat=4)
-        )
-        dictionary_json = json.dumps(
-            {answer: [f"Legenda {answer}"] for answer in answers}
-        )
-        stdout = io.StringIO()
-        stderr = io.StringIO()
-
-        with (
-            patch("sys.stdin", io.StringIO(dictionary_json)),
-            redirect_stdout(stdout),
-            redirect_stderr(stderr),
-        ):
-            result = main(
-                ["generate", "-", "--width", "5", "--height", "5"]
-            )
-
-        self.assertEqual(0, result)
-        self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
-
-    def test_generate_creates_complete_grid_with_secret(self) -> None:
-        answers = tuple(
-            "".join(letters) for letters in product("ABCD", repeat=4)
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            dictionary = Path(directory) / "dictionary.json"
-            output = Path(directory) / "grid.yaml"
-            dictionary.write_text(
-                json.dumps(
-                    {
-                        answer: [f"Legenda {answer}"]
-                        for answer in answers
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            with redirect_stdout(io.StringIO()):
-                result = main(
-                    [
-                        "generate",
-                        str(dictionary),
-                        "--output",
-                        str(output),
-                        "--width",
-                        "5",
-                        "--height",
-                        "5",
-                        "--secret",
-                        "ABCD",
-                        "--secret-prompt",
-                        "Doplňte tajenku",
-                    ]
-                )
-
-            self.assertEqual(0, result)
-            crossword = load_crossword_grid(output)
-            assert crossword.grid.cells is not None
-            self.assertEqual(
-                4,
-                sum(
-                    isinstance(cell, SecretCell)
-                    for row in crossword.grid.cells
-                    for cell in row
-                ),
-            )
-            self.assertEqual("Doplňte tajenku", crossword.secret_prompts[0].text)
 
     def test_crossword_reserves_known_secret_and_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -2075,123 +1962,6 @@ class CommandTest(unittest.TestCase):
                 all(slot.legend_position is None for slot in crossword.slots)
             )
 
-    def test_generate_creates_grid_and_refuses_accidental_overwrite(self) -> None:
-        answers = tuple(
-            "".join(letters) for letters in product("ABCD", repeat=4)
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            dictionary = Path(directory) / "dictionary.json"
-            output = Path(directory) / "generated.yaml"
-            dictionary.write_text(
-                json.dumps(
-                    {
-                        answer: [f"Legenda {answer}"]
-                        for answer in answers
-                    },
-                    ensure_ascii=False,
-                ),
-                encoding="utf-8",
-            )
-            command = [
-                "generate",
-                str(dictionary),
-                "--output",
-                str(output),
-                "--width",
-                "5",
-                "--height",
-                "5",
-                "--seed",
-                "42",
-            ]
-
-            stdout = io.StringIO()
-            with redirect_stdout(stdout):
-                result = main(command)
-
-            self.assertEqual(0, result)
-            self.assertIn("Mřížka vytvořena:", stdout.getvalue())
-            crossword = load_crossword_grid(output)
-            self.assertEqual(5, crossword.grid.width)
-            self.assertEqual(5, crossword.grid.height)
-            self.assertNotIn("arrows:", output.read_text(encoding="utf-8"))
-
-            stderr = io.StringIO()
-            with redirect_stderr(stderr):
-                second_result = main(command)
-
-            self.assertEqual(2, second_result)
-            self.assertIn("již existuje", stderr.getvalue())
-
-            with redirect_stdout(io.StringIO()):
-                forced_result = main([*command, "--force"])
-
-            self.assertEqual(0, forced_result)
-
-    def test_generate_creates_numbered_grid(self) -> None:
-        answers = tuple(
-            "".join(letters)
-            for length in (3, 4)
-            for letters in product("ABCD", repeat=length)
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            dictionary = Path(directory) / "dictionary.json"
-            output = Path(directory) / "numbered-grid.yaml"
-            dictionary.write_text(
-                json.dumps(
-                    {
-                        answer: [f"Legenda {answer}"]
-                        for answer in answers
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            stdout = io.StringIO()
-            with redirect_stdout(stdout):
-                result = main(
-                    [
-                        "generate",
-                        str(dictionary),
-                        "--output",
-                        str(output),
-                        "--layout",
-                        "numbered",
-                        "--width",
-                        "7",
-                        "--height",
-                        "7",
-                        "--seed",
-                        "42",
-                        "--secret",
-                        "ABCD",
-                    ]
-                )
-
-            self.assertEqual(0, result)
-            self.assertIn("28 hesel", stdout.getvalue())
-            crossword = load_crossword_grid(output)
-            self.assertEqual(28, len(crossword.clues))
-            assert crossword.grid.cells is not None
-            cells = tuple(
-                cell for row in crossword.grid.cells for cell in row
-            )
-            self.assertTrue(
-                all(isinstance(cell, (LetterCell, SecretCell)) for cell in cells)
-            )
-            self.assertEqual(
-                4,
-                sum(isinstance(cell, SecretCell) for cell in cells),
-            )
-            self.assertEqual(14, sum(len(cell.bars) for cell in cells))
-            self.assertEqual(
-                tuple(range(1, 25)),
-                tuple(
-                    cell.number
-                    for cell in cells
-                    if cell.number is not None
-                ),
-            )
 
     def test_page_format_names_are_case_insensitive(self) -> None:
         width, height = resolve_page_size("a5")

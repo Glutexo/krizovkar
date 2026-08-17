@@ -15,9 +15,7 @@ from krizovkar.generator import (
     create_grid_from_crossword,
     fill_crossword,
     generate_numbered_crossword,
-    generate_numbered_grid,
     generate_swedish_crossword,
-    generate_swedish_grid,
     normalize_secret_text,
     place_secret_in_crossword,
 )
@@ -25,6 +23,7 @@ from krizovkar.layout import create_dense_swedish_layout
 from krizovkar.model import (
     Coordinate,
     CrosswordDocument,
+    CrosswordGrid,
     CrosswordLayout,
     CrosswordSecret,
     CrosswordSecretCellsPart,
@@ -59,6 +58,44 @@ def _complete_dictionary(*lengths: int) -> CrosswordDictionary:
                 DictionaryEntry(answer=answer, clues=(f"Legenda {answer}",))
             )
     return CrosswordDictionary(entries=tuple(entries))
+
+
+def _filled_swedish_grid(
+    dictionary: CrosswordDictionary,
+    *,
+    width: int,
+    height: int,
+    seed: int = 0,
+    secret: SecretRequirement | None = None,
+) -> CrosswordGrid:
+    crossword = generate_swedish_crossword(
+        width=width,
+        height=height,
+        seed=seed,
+        secret=secret,
+    )
+    return create_grid_from_crossword(
+        fill_crossword(crossword, dictionary, seed=seed)
+    )
+
+
+def _filled_numbered_grid(
+    dictionary: CrosswordDictionary,
+    *,
+    width: int,
+    height: int,
+    seed: int = 0,
+    secret: SecretRequirement | None = None,
+) -> CrosswordGrid:
+    crossword = generate_numbered_crossword(
+        width=width,
+        height=height,
+        seed=seed,
+        secret=secret,
+    )
+    return create_grid_from_crossword(
+        fill_crossword(crossword, dictionary, seed=seed)
+    )
 
 
 TEST_DICTIONARY = _complete_dictionary(3, 4)
@@ -573,10 +610,10 @@ class GeneratorTest(unittest.TestCase):
         self.assertFalse(grid.clues)
         self.assertFalse(check_crossword_grid(grid).warnings)
 
-    def test_generates_complete_grid_with_fixed_secret(self) -> None:
+    def test_pipeline_creates_complete_grid_with_fixed_secret(self) -> None:
         prompt = SecretPrompt(text="Doplňte tajenku", placement="below")
 
-        crossword = generate_swedish_grid(
+        crossword = _filled_swedish_grid(
             TEST_DICTIONARY,
             width=5,
             height=5,
@@ -935,9 +972,9 @@ class GeneratorTest(unittest.TestCase):
         with self.assertRaisesRegex(GenerationError, "nelze rozdělit"):
             generate_swedish_crossword(width=3, height=9)
 
-    def test_generates_deterministic_dense_grid(self) -> None:
-        first = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=42)
-        second = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=42)
+    def test_swedish_pipeline_is_deterministic(self) -> None:
+        first = _filled_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=42)
+        second = _filled_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=42)
         composed = create_grid_from_crossword(
             fill_crossword(
                 generate_swedish_crossword(width=9, height=9),
@@ -987,14 +1024,14 @@ class GeneratorTest(unittest.TestCase):
                 )
                 self.assertNotEqual(right_is_letter, down_is_letter)
 
-    def test_generates_deterministic_numbered_grid(self) -> None:
-        first = generate_numbered_grid(
+    def test_numbered_pipeline_is_deterministic(self) -> None:
+        first = _filled_numbered_grid(
             TEST_DICTIONARY,
             width=7,
             height=7,
             seed=42,
         )
-        second = generate_numbered_grid(
+        second = _filled_numbered_grid(
             TEST_DICTIONARY,
             width=7,
             height=7,
@@ -1025,8 +1062,8 @@ class GeneratorTest(unittest.TestCase):
         self.assertEqual(14, sum(len(cell.bars) for cell in cells))
         self.assertFalse(check_crossword_grid(first).warnings)
 
-    def test_generates_numbered_grid_with_secret(self) -> None:
-        crossword = generate_numbered_grid(
+    def test_numbered_pipeline_keeps_secret(self) -> None:
+        crossword = _filled_numbered_grid(
             TEST_DICTIONARY,
             width=7,
             height=7,
@@ -1047,7 +1084,7 @@ class GeneratorTest(unittest.TestCase):
         self.assertFalse(check_crossword_grid(crossword).warnings)
 
     def test_every_letter_run_is_a_dictionary_entry(self) -> None:
-        crossword = generate_swedish_grid(
+        crossword = _filled_swedish_grid(
             TEST_DICTIONARY,
             width=9,
             height=9,
@@ -1081,21 +1118,21 @@ class GeneratorTest(unittest.TestCase):
 
         self.assertEqual(len(used_answers), len(set(used_answers)))
 
-    def test_seed_can_change_generated_grid(self) -> None:
-        first = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=1)
-        second = generate_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=2)
+    def test_seed_can_change_filled_grid(self) -> None:
+        first = _filled_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=1)
+        second = _filled_swedish_grid(TEST_DICTIONARY, width=9, height=9, seed=2)
 
         self.assertNotEqual(first, second)
 
     def test_rejects_too_small_grid(self) -> None:
         with self.assertRaisesRegex(GenerationError, "nelze rozdělit"):
-            generate_swedish_grid(TEST_DICTIONARY, width=3, height=9)
+            _filled_swedish_grid(TEST_DICTIONARY, width=3, height=9)
 
     def test_rejects_dictionary_without_required_length(self) -> None:
         dictionary = _complete_dictionary(3)
 
         with self.assertRaisesRegex(GenerationError, "délky: 4"):
-            generate_swedish_grid(dictionary, width=5, height=5)
+            _filled_swedish_grid(dictionary, width=5, height=5)
 
 
 if __name__ == "__main__":

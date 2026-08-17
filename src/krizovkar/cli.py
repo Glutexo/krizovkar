@@ -21,15 +21,12 @@ from krizovkar.generator import (
     create_grid_from_crossword,
     fill_crossword,
     generate_numbered_crossword,
-    generate_numbered_grid,
     generate_swedish_crossword,
-    generate_swedish_grid,
     normalize_secret_text,
 )
 from krizovkar.localization import ngettext, system_error_message
 from krizovkar.model import (
     CrosswordGrid,
-    LegendCell,
     ModelError,
     SecretPrompt,
     dump_crossword_document,
@@ -282,58 +279,6 @@ def _parser() -> argparse.ArgumentParser:
         help="povolí přepsání existujícího YAML souboru",
     )
     fill.set_defaults(handler=_fill)
-
-    generate = commands.add_parser(
-        "generate",
-        help="vytvoří vyplněnou mřížku z JSON slovníku",
-        description=(
-            "Vytvoří švédskou nebo číslovanou křížovku, volitelně do ní "
-            "umístí konkrétní tajenku, vybere křížící se hesla z JSON "
-            "slovníku a zapíše cílovou mřížku ve formátu YAML."
-        ),
-    )
-    generate.add_argument(
-        "source",
-        type=Path,
-        metavar="SLOVNÍK.json",
-        help="vstupní JSON slovník; - znamená standardní vstup",
-    )
-    generate.add_argument(
-        "-o",
-        "--output",
-        type=Path,
-        metavar="MŘÍŽKA.yaml",
-        help="cílový YAML soubor; bez volby standardní výstup",
-    )
-    generate.add_argument(
-        "--width",
-        type=int,
-        default=DEFAULT_GRID_WIDTH,
-        metavar="POČET",
-        help=f"počet sloupců; výchozí je {DEFAULT_GRID_WIDTH}",
-    )
-    generate.add_argument(
-        "--height",
-        type=int,
-        default=DEFAULT_GRID_HEIGHT,
-        metavar="POČET",
-        help=f"počet řádků; výchozí je {DEFAULT_GRID_HEIGHT}",
-    )
-    _add_layout_argument(generate)
-    generate.add_argument(
-        "--seed",
-        type=int,
-        default=DEFAULT_SEED,
-        metavar="ČÍSLO",
-        help=f"počáteční hodnota náhodných voleb; výchozí je {DEFAULT_SEED}",
-    )
-    _add_secret_arguments(generate, allow_lengths=False)
-    generate.add_argument(
-        "--force",
-        action="store_true",
-        help="povolí přepsání existujícího YAML souboru",
-    )
-    generate.set_defaults(handler=_generate)
 
     validate = commands.add_parser(
         "validate",
@@ -772,51 +717,6 @@ def _fill(arguments: argparse.Namespace) -> int:
         f"Křížovka vyplněna: {_output_description(arguments.output)} "
         f"({crossword.grid.width} × {crossword.grid.height}, "
         f"{_localized_count(len(crossword.slots), 'heslo', 'hesel')}, "
-        f"seed {arguments.seed})",
-        arguments.output,
-    )
-    return 0
-
-
-def _generate(arguments: argparse.Namespace) -> int:
-    try:
-        secret = _secret_requirement(arguments)
-        dictionary = load_dictionary(_input_source(arguments.source))
-        generate_grid = (
-            generate_numbered_grid
-            if arguments.layout == "numbered"
-            else generate_swedish_grid
-        )
-        crossword = generate_grid(
-            dictionary,
-            width=arguments.width,
-            height=arguments.height,
-            seed=arguments.seed,
-            secret=secret,
-        )
-        if arguments.output is None:
-            dump_crossword_grid(crossword, sys.stdout)
-        else:
-            write_crossword_grid(
-                crossword,
-                arguments.output,
-                overwrite=arguments.force,
-            )
-    except (DictionaryError, GenerationError, ModelError) as error:
-        print(f"chyba: {error}", file=sys.stderr)
-        return 2
-
-    assert crossword.grid.cells is not None
-    word_count = len(crossword.clues) + sum(
-        len(cell.texts)
-        for row in crossword.grid.cells
-        for cell in row
-        if isinstance(cell, LegendCell)
-    )
-    _print_success(
-        f"Mřížka vytvořena: {_output_description(arguments.output)} "
-        f"({arguments.width} × {arguments.height}, "
-        f"{_localized_count(word_count, 'heslo', 'hesel')}, "
         f"seed {arguments.seed})",
         arguments.output,
     )

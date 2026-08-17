@@ -5,7 +5,7 @@ Křížovkář je připravovaný otevřený nástroj pro tvorbu švédských, kl
 ## Stav projektu
 
 Repozitář je v úvodní fázi. Obsahuje první verzi datového modelu,
-experimentální generátory švédské a číslované mřížky z JSON slovníku,
+experimentální plnění švédské a číslované křížovky z JSON slovníku,
 automatický převod umístěného zadání na editovatelnou křížovku, převod
 výsledku do upravitelného LaTeXového dokumentu, jeho překlad do PDF a grafické
 rozhraní se samostatnými okny YAML křížovek z vlastních hesel.
@@ -98,7 +98,8 @@ Projekt má postupně nabídnout zejména:
 - kontrolu mřížky, výrazů a křížení,
 - export pro tisk i digitální použití.
 
-Experimentální generátor ověřuje základní práci se slovníkem a křížením; konkrétní rozsah první funkční verze bude popsán v roadmapě.
+Experimentální plnění ověřuje základní práci se slovníkem a křížením;
+konkrétní rozsah první funkční verze bude popsán v roadmapě.
 
 ## Datový model
 
@@ -114,7 +115,6 @@ Křížovkář rozlišuje tři samostatné druhy YAML dokumentů:
 umístěné specification + volba rozvržení → crossword
 crossword (ruční doplňování) → grid → LaTeX → PDF
 crossword + slovník → fill → vyplněný crossword → grid → LaTeX → PDF
-požadavky + slovník → generate (= crossword + fill) → grid
 ```
 
 Dokument `kind: crossword` může obsahovat libovolný počet doplněných
@@ -285,7 +285,7 @@ Ukázka [cílové mřížky plné náhodných písmen](examples/grid-random-lett
 ## Vstup a výstup příkazů
 
 Volba `-o` neboli `--output` je u příkazů `crossword`, `grid`, `fill`,
-`generate`, `latex` a `render` nepovinná. Bez ní příkaz zapíše výsledný
+`latex` a `render` nepovinná. Bez ní příkaz zapíše výsledný
 YAML, textový LaTeX nebo binární PDF na standardní výstup, takže jej lze
 přesměrovat nebo předat dalšímu programu:
 
@@ -293,16 +293,17 @@ přesměrovat nebo předat dalšímu programu:
 uv run krizovkar crossword examples/specification-placed-words.yaml \
   --layout swedish > build/placed-crossword.yaml
 uv run krizovkar crossword --width 15 --height 10 > build/crossword.yaml
-uv run krizovkar grid build/crossword.yaml > build/unfilled-grid.yaml
-uv run krizovkar generate slovnik.json > build/grid.yaml
-uv run krizovkar latex build/grid.yaml > build/grid.tex
-uv run krizovkar render build/grid.yaml > build/grid.pdf
+uv run krizovkar fill build/crossword.yaml slovnik.json \
+  > build/filled-crossword.yaml
+uv run krizovkar grid build/filled-crossword.yaml > build/filled-grid.yaml
+uv run krizovkar latex build/filled-grid.yaml > build/filled-grid.tex
+uv run krizovkar render build/filled-grid.yaml > build/filled-grid.pdf
 ```
 
 Stavová hláška jde v tomto režimu na standardní chybový výstup a výsledná data neznečistí. Při zadaném `--output` se dál zapisuje atomicky do souboru, existující soubor se bez `--force` nepřepíše a stavová hláška se vypíše na standardní výstup.
 
 Místo vstupního souboru přijímají příkazy `crossword`, `grid`, `fill`,
-`generate`, `validate`, `latex` a `render` také `-`, které znamená standardní
+`validate`, `latex` a `render` také `-`, které znamená standardní
 vstup. U `crossword` jde o vstupní zadání. U příkazu `fill` lze tímto
 způsobem načíst křížovku nebo slovník, ale ne oba vstupy současně. Výstupy
 lze díky tomu spojovat přímo rourou. Editovatelná křížovka se může převést
@@ -448,9 +449,11 @@ pak vhodná místa tajenky samo vybere. Jednotlivé části při plnění dostan
 legendy `1. část tajenky`, `2. část tajenky` a tak dále; následný převod
 jejich pole ve výsledné mřížce zvýrazní.
 
-## Pokusné generování
+## Slovník
 
-Generátor přijímá slovník jako JSON objekt. Klíčem je heslo složené z podporovaných velkých písmen včetně diakritiky a hodnotou neprázdný seznam možných legend v preferovaném pořadí:
+Příkaz `fill` přijímá slovník jako JSON objekt. Klíčem je heslo
+složené z podporovaných velkých písmen včetně diakritiky a hodnotou neprázdný
+seznam možných legend v preferovaném pořadí:
 
 ```json
 {
@@ -459,45 +462,22 @@ Generátor přijímá slovník jako JSON objekt. Klíčem je heslo složené z p
 }
 ```
 
-Vyplněnou mřížku lze vytvořit jedním příkazem a následně vykreslit:
+Nejprve se vytvoří nevyplněná křížovka, potom se naplní slovníkem a
+nakonec se převede nebo rovnou vykreslí:
 
 ```shell
-uv run krizovkar generate slovnik.json \
-  --width 15 \
-  --height 10 \
-  --seed 10 \
-  --output build/generated-grid.yaml
-uv run krizovkar render build/generated-grid.yaml \
-  --output build/generated-grid.pdf
+uv run krizovkar crossword --width 15 --height 10 \
+  --output build/crossword.yaml
+uv run krizovkar fill build/crossword.yaml slovnik.json \
+  --seed 10 --output build/filled-crossword.yaml
+uv run krizovkar render build/filled-crossword.yaml \
+  --output build/filled-crossword.pdf
 ```
 
-Bez volby `--layout` vznikne švédská mřížka. Číslovanou mřížku s vnějšími legendami vytvoří:
-
-```shell
-uv run krizovkar generate slovnik.json \
-  --layout numbered \
-  --width 15 \
-  --height 10 \
-  --seed 10 \
-  --output build/generated-numbered-grid.yaml
-```
-
-`generate` skládá pro obě rozvržení stejné operace jako samostatné
-`crossword` a `fill`. Konkrétní tajenku může vložit rovnou; samotná délka bez
-odpovědi je určená jen pro uložení editovatelné křížovky:
-
-```shell
-uv run krizovkar generate slovnik.json \
-  --width 15 \
-  --height 10 \
-  --secret ZELENÍ \
-  --secret-prompt 'Lidové rčení: „Komu se nelení, tomu se …“' \
-  --output build/generated-secret-grid.yaml
-```
-
-Automatické dělení víceslovné tajenky používá `--secret`; pevné rozdělení vznikne opakováním `--secret-part`.
-
-Stejný slovník, rozvržení, rozměr a seed vytvoří stejnou mřížku. Výchozí švédský generátor rozdělí plochu legendovými řádky a sloupci na písmenné obdélníky; prázdné zůstávají pouze průsečíky legendových os. Číslovaný generátor použije celou plochu pro písmena, začátky hesel očísluje po řádcích a jejich texty zapíše jako vnější legendy. Další hesla v témže řádku nebo sloupci oddělí silným předělem. V obou případech patří každá písmenná buňka jednomu vodorovnému i jednomu svislému výrazu.
+Rozvržení `numbered` se volí u prvního příkazu `crossword`; konkrétní
+nebo rezervovaná tajenka se zadá při vytvoření křížovky nebo při jejím
+pozdějším plnění. Stejná křížovka, slovník a seed vytvoří stejný vyplněný
+dokument.
 
 Pokud švédská maska obsahuje více písmenných obdélníků oddělených legendovými osami, jejich hesla se navzájem nekříží. Kvalitativní validace proto upozorní, že výsledná slova tvoří oddělené ostrovy; číslovaná varianta má naproti tomu souvislou písmennou plochu.
 
@@ -508,7 +488,7 @@ Ve švédské variantě legendy pokrývají horní a levou stranu každého pís
 Datový formát a pravidla dobré křížovky jsou dvě oddělené vrstvy. Příkaz `validate` nejprve ověří, zda lze YAML bezpečně načíst jako cílovou mřížku, a potom posoudí společná pravidla jejího rozložení:
 
 ```shell
-uv run krizovkar validate build/generated-grid.yaml
+uv run krizovkar validate build/filled-grid.yaml
 ```
 
 Chyba znamená neplatný nebo vnitřně rozporný datový model a příkaz skončí návratovým kódem `2`. Varování znamená platnou mřížku, kterou lze dál zpracovat a vykreslit, ale porušuje některé pravidlo kvality; návratový kód zůstává `0`.
