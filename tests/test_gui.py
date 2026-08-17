@@ -21,6 +21,7 @@ from krizovkar.gui import (
     CrosswordSourceWindow,
     CrosswordSettings,
     GuiInputError,
+    _add_source_window_menu_item,
     _configure_tk_runtime,
     _configure_utility_window,
     _create_help_menu,
@@ -413,6 +414,26 @@ class GuiTest(unittest.TestCase):
             postcommand=refresh,
         )
         self.assertIs(window_menu, created)
+
+    def test_macos_window_menu_separates_source_from_system_items(self) -> None:
+        menu = Mock()
+        command = Mock()
+
+        with patch("krizovkar.gui.sys.platform", "darwin"):
+            _add_source_window_menu_item(menu, command)
+
+        self.assertEqual(
+            [
+                call.add_separator(),
+                call.add_command(
+                    label="Zdroj YAML",
+                    state="normal",
+                    command=command,
+                ),
+                call.add_separator(),
+            ],
+            menu.method_calls,
+        )
 
     def test_window_menu_lists_open_windows_and_marks_current(self) -> None:
         application = CrosswordApplication.__new__(CrosswordApplication)

@@ -269,6 +269,8 @@ def _add_source_window_menu_item(
     menu: tk.Menu,
     command: Callable[[], None] | None,
 ) -> None:
+    if sys.platform == "darwin":
+        menu.add_separator()
     options: dict[str, object] = {
         "label": "Zdroj YAML",
         "state": "normal" if command is not None else "disabled",
