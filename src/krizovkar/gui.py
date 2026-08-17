@@ -51,6 +51,8 @@ _MAX_CROSSWORD_DIMENSION = 50
 _MAX_RECENT_DOCUMENTS = 10
 _CROSSWORD_RESIZE_DELAY_MS = 150
 _WINDOW_MENU_SELECTION_VARIABLE = "krizovkar_active_window"
+_DIMENSION_PANEL_BACKGROUND = "#d0d5dd"
+_DIMENSION_PANEL_FOREGROUND = "#1d2939"
 _DIRECTION_LABELS = {
     "horizontal": "Vodorovně",
     "vertical": "Svisle",
@@ -1140,6 +1142,15 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _configure_styles(self) -> None:
         style = ttk.Style(self.root)
         style.configure("Muted.TLabel", foreground="#667085")
+        style.configure(
+            "Dimensions.TFrame",
+            background=_DIMENSION_PANEL_BACKGROUND,
+        )
+        style.configure(
+            "Dimensions.TLabel",
+            background=_DIMENSION_PANEL_BACKGROUND,
+            foreground=_DIMENSION_PANEL_FOREGROUND,
+        )
 
     def _build_menu(self) -> None:
         new_shortcut = _keyboard_shortcut("n")
@@ -1339,14 +1350,22 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._build_slot_list(workspace)
 
     def _build_crossword_dimensions(self, parent: ttk.Frame) -> None:
-        controls = ttk.Frame(parent)
+        controls = ttk.Frame(
+            parent,
+            style="Dimensions.TFrame",
+            padding=(12, 7),
+        )
         parent.configure(labelwidget=controls)
         minimum = _minimum_generated_dimension(self._template_layout)
         validate_dimension = (
             self.register(self._validate_dimension_input),
             "%P",
         )
-        ttk.Label(controls, text="Řádky").grid(
+        ttk.Label(
+            controls,
+            text="Řádky",
+            style="Dimensions.TLabel",
+        ).grid(
             row=0,
             column=0,
             sticky="w",
@@ -1361,11 +1380,15 @@ class CrosswordDocumentWindow(ttk.Frame):
             validatecommand=validate_dimension,
         )
         self.height_spinbox.grid(row=0, column=1, sticky="w", padx=(6, 0))
-        ttk.Label(controls, text="Sloupce").grid(
+        ttk.Label(
+            controls,
+            text="Sloupce",
+            style="Dimensions.TLabel",
+        ).grid(
             row=0,
             column=2,
             sticky="w",
-            padx=(14, 0),
+            padx=(16, 0),
         )
         self.width_spinbox = ttk.Spinbox(
             controls,

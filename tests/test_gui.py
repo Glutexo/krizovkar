@@ -677,7 +677,11 @@ class GuiTest(unittest.TestCase):
         ):
             window._build_crossword_dimensions(parent)
 
-        frame_type.assert_called_once_with(parent)
+        frame_type.assert_called_once_with(
+            parent,
+            style="Dimensions.TFrame",
+            padding=(12, 7),
+        )
         parent.configure.assert_called_once_with(labelwidget=controls)
         self.assertEqual(
             [
@@ -704,10 +708,39 @@ class GuiTest(unittest.TestCase):
         )
         self.assertEqual("Řádky", label_type.call_args_list[0].kwargs["text"])
         self.assertEqual("Sloupce", label_type.call_args_list[1].kwargs["text"])
+        self.assertTrue(
+            all(
+                item.kwargs["style"] == "Dimensions.TLabel"
+                for item in label_type.call_args_list
+            )
+        )
         self.assertEqual(2, label_type.call_count)
         window.register.assert_called_once_with(window._validate_dimension_input)
         self.assertIs(height_spinbox, window.height_spinbox)
         self.assertIs(width_spinbox, window.width_spinbox)
+
+    def test_dimension_panel_uses_darker_common_style(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window.root = Mock()
+        style = Mock()
+
+        with patch("krizovkar.gui.ttk.Style", return_value=style):
+            window._configure_styles()
+
+        style.configure.assert_has_calls(
+            [
+                call("Muted.TLabel", foreground="#667085"),
+                call(
+                    "Dimensions.TFrame",
+                    background="#d0d5dd",
+                ),
+                call(
+                    "Dimensions.TLabel",
+                    background="#d0d5dd",
+                    foreground="#1d2939",
+                ),
+            ]
+        )
 
     def test_dimension_input_rejects_values_outside_layout_range(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
