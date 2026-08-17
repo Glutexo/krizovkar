@@ -51,6 +51,9 @@ from krizovkar.renderer import (
 _MAX_CROSSWORD_DIMENSION = 50
 _MAX_RECENT_DOCUMENTS = 10
 _CROSSWORD_RESIZE_DELAY_MS = 150
+_GRID_RESIZE_HIT_RADIUS = 7
+_GRID_RESIZE_HANDLE_RADIUS = 3
+_GRID_RESIZE_FEEDBACK_TAG = "grid-resize-feedback"
 _WINDOW_MENU_SELECTION_VARIABLE = "krizovkar_active_window"
 _DIMENSION_PANEL_BACKGROUND = "#d0d5dd"
 _DIMENSION_PANEL_FOREGROUND = "#1d2939"
@@ -71,6 +74,19 @@ class CrosswordSettings:
 
     width: int
     height: int
+
+
+@dataclass(frozen=True, slots=True)
+class _GridResizeDrag:
+    """Počáteční stav tažení jednoho okraje nebo rohu náhledu."""
+
+    horizontal_edge: int
+    vertical_edge: int
+    start_x: float
+    start_y: float
+    start_width: int
+    start_height: int
+    cell_size: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -610,6 +626,7 @@ class CrosswordPreview(tk.Canvas):
     _HELP_FILL = "#dcfce7"
     _LETTER_COLOR = "#101828"
     _MUTED_COLOR = "#667085"
+    _RESIZE_COLOR = "#2563eb"
 
     def __init__(self, master: tk.Misc, **kwargs: object) -> None:
         super().__init__(
@@ -625,14 +642,37 @@ class CrosswordPreview(tk.Canvas):
         self._empty_message = "Vytvořte rozvržení mřížky."
         self._grid_geometry: tuple[float, float, float] | None = None
         self._cell_click_handler: Callable[[Coordinate], None] | None = None
+        self._grid_resize_handler: Callable[[int, int], None] | None = None
+        self._minimum_dimension = 1
+        self._maximum_dimension = _MAX_CROSSWORD_DIMENSION
+        self._resize_drag: _GridResizeDrag | None = None
+        self._resize_target: tuple[int, int] | None = None
         self.bind("<Configure>", self._redraw)
-        self.bind("<Button-1>", self._cell_clicked)
+        self.bind("<Button-1>", self._pointer_pressed)
+        self.bind("<B1-Motion>", self._resize_dragged)
+        self.bind("<ButtonRelease-1>", self._resize_released)
+        self.bind("<Motion>", self._pointer_moved)
+        self.bind("<Leave>", self._pointer_left)
 
     def set_cell_click_handler(
         self,
         handler: Callable[[Coordinate], None],
     ) -> None:
         self._cell_click_handler = handler
+
+    def set_grid_resize_handler(
+        self,
+        handler: Callable[[int, int], None],
+        *,
+        minimum_dimension: int,
+        maximum_dimension: int,
+    ) -> None:
+        """Zapne změnu rozměru tažením okrajů vykreslené mřížky."""
+
+        self._grid_resize_handler = handler
+        self._minimum_dimension = minimum_dimension
+        self._maximum_dimension = maximum_dimension
+        self._redraw()
 
     def show_crossword(
         self,
@@ -653,6 +693,9 @@ class CrosswordPreview(tk.Canvas):
         self._selected_coordinates = frozenset()
         self._empty_message = message
         self._grid_geometry = None
+        self._resize_drag = None
+        self._resize_target = None
+        self.configure(cursor="")
         self._redraw()
 
     def _redraw(self, _event: tk.Event[tk.Misc] | None = None) -> None:
@@ -801,6 +844,254 @@ class CrosswordPreview(tk.Canvas):
             outline="#101828",
             width=2,
         )
+
+        if self._grid_resize_handler is not None:
+            self._draw_resize_handles(
+                left,
+                top,
+                left + grid_width,
+                top + grid_height,
+            )
+
+    def _draw_resize_handles(
+        self,
+        left: float,
+        top: float,
+        right: float,
+        bottom: float,
+    ) -> None:
+        radius = _GRID_RESIZE_HANDLE_RADIUS
+        horizontal_center = (left + right) / 2
+        vertical_center = (top + bottom) / 2
+        positions = (
+            (left, top),
+            (horizontal_center, top),
+            (right, top),
+            (left, vertical_center),
+            (right, vertical_center),
+            (left, bottom),
+            (horizontal_center, bottom),
+            (right, bottom),
+        )
+        for x, y in positions:
+            self.create_rectangle(
+                x - radius,
+                y - radius,
+                x + radius,
+                y + radius,
+                fill="#ffffff",
+                outline=self._RESIZE_COLOR,
+                width=1,
+            )
+
+    def _resize_edges_at(self, x: float, y: float) -> tuple[int, int]:
+        crossword = self._crossword
+        geometry = self._grid_geometry
+        if (
+            crossword is None
+            or geometry is None
+            or self._grid_resize_handler is None
+        ):
+            return (0, 0)
+
+        left, top, cell_size = geometry
+        right = left + crossword.grid.width * cell_size
+        bottom = top + crossword.grid.height * cell_size
+        radius = min(
+            _GRID_RESIZE_HIT_RADIUS,
+            max(_GRID_RESIZE_HANDLE_RADIUS, cell_size / 3),
+        )
+        within_rows = top - radius <= y <= bottom + radius
+        within_columns = left - radius <= x <= right + radius
+
+        horizontal_edge = 0
+        if within_rows and abs(x - left) <= radius:
+            horizontal_edge = -1
+        elif within_rows and abs(x - right) <= radius:
+            horizontal_edge = 1
+
+        vertical_edge = 0
+        if within_columns and abs(y - top) <= radius:
+            vertical_edge = -1
+        elif within_columns and abs(y - bottom) <= radius:
+            vertical_edge = 1
+        return (horizontal_edge, vertical_edge)
+
+    def _set_resize_cursor(self, edges: tuple[int, int]) -> None:
+        horizontal_edge, vertical_edge = edges
+        if horizontal_edge and vertical_edge:
+            cursor = "sizing"
+        elif horizontal_edge:
+            cursor = "sb_h_double_arrow"
+        elif vertical_edge:
+            cursor = "sb_v_double_arrow"
+        else:
+            cursor = ""
+        try:
+            self.configure(cursor=cursor)
+        except tk.TclError:
+            self.configure(cursor="")
+
+    def _pointer_moved(self, event: tk.Event[tk.Misc]) -> None:
+        if self._resize_drag is None:
+            self._set_resize_cursor(self._resize_edges_at(event.x, event.y))
+
+    def _pointer_left(self, _event: tk.Event[tk.Misc]) -> None:
+        if self._resize_drag is None:
+            self._set_resize_cursor((0, 0))
+
+    def _pointer_pressed(self, event: tk.Event[tk.Misc]) -> str | None:
+        edges = self._resize_edges_at(event.x, event.y)
+        if edges == (0, 0):
+            self._cell_clicked(event)
+            return None
+
+        assert self._crossword is not None
+        assert self._grid_geometry is not None
+        _, _, cell_size = self._grid_geometry
+        horizontal_edge, vertical_edge = edges
+        self._resize_drag = _GridResizeDrag(
+            horizontal_edge=horizontal_edge,
+            vertical_edge=vertical_edge,
+            start_x=event.x,
+            start_y=event.y,
+            start_width=self._crossword.grid.width,
+            start_height=self._crossword.grid.height,
+            cell_size=cell_size,
+        )
+        self._resize_target = (
+            self._crossword.grid.width,
+            self._crossword.grid.height,
+        )
+        self._set_resize_cursor(edges)
+        self._draw_resize_feedback()
+        return "break"
+
+    @staticmethod
+    def _rounded_grid_steps(value: float) -> int:
+        if value >= 0:
+            return int(value + 0.5)
+        return int(value - 0.5)
+
+    def _resize_target_at(self, x: float, y: float) -> tuple[int, int]:
+        drag = self._resize_drag
+        assert drag is not None
+        width_delta = self._rounded_grid_steps(
+            drag.horizontal_edge * (x - drag.start_x) / drag.cell_size
+        )
+        height_delta = self._rounded_grid_steps(
+            drag.vertical_edge * (y - drag.start_y) / drag.cell_size
+        )
+        width = (
+            self._bounded_drag_dimension(drag.start_width, width_delta)
+            if drag.horizontal_edge
+            else drag.start_width
+        )
+        height = (
+            self._bounded_drag_dimension(drag.start_height, height_delta)
+            if drag.vertical_edge
+            else drag.start_height
+        )
+        return (width, height)
+
+    def _bounded_drag_dimension(self, current: int, delta: int) -> int:
+        if delta == 0:
+            return current
+        if current < self._minimum_dimension and delta < 0:
+            return current
+        if current > self._maximum_dimension and delta > 0:
+            return current
+        return min(
+            self._maximum_dimension,
+            max(self._minimum_dimension, current + delta),
+        )
+
+    def _resize_dragged(self, event: tk.Event[tk.Misc]) -> str | None:
+        if self._resize_drag is None:
+            return None
+        self._resize_target = self._resize_target_at(event.x, event.y)
+        self._draw_resize_feedback()
+        return "break"
+
+    def _draw_resize_feedback(self) -> None:
+        drag = self._resize_drag
+        target = self._resize_target
+        geometry = self._grid_geometry
+        if drag is None or target is None or geometry is None:
+            return
+        self.delete(_GRID_RESIZE_FEEDBACK_TAG)
+
+        left, top, cell_size = geometry
+        current_right = left + drag.start_width * cell_size
+        current_bottom = top + drag.start_height * cell_size
+        target_width, target_height = target
+        if drag.horizontal_edge < 0:
+            target_left = current_right - target_width * cell_size
+            target_right = current_right
+        else:
+            target_left = left
+            target_right = left + target_width * cell_size
+        if drag.vertical_edge < 0:
+            target_top = current_bottom - target_height * cell_size
+            target_bottom = current_bottom
+        else:
+            target_top = top
+            target_bottom = top + target_height * cell_size
+
+        self.create_rectangle(
+            target_left,
+            target_top,
+            target_right,
+            target_bottom,
+            outline=self._RESIZE_COLOR,
+            width=3,
+            dash=(5, 3),
+            tags=_GRID_RESIZE_FEEDBACK_TAG,
+        )
+        label_x = min(
+            max((target_left + target_right) / 2, 42),
+            max(self.winfo_width() - 42, 42),
+        )
+        label_y = min(
+            max((target_top + target_bottom) / 2, 18),
+            max(self.winfo_height() - 18, 18),
+        )
+        label = self.create_text(
+            label_x,
+            label_y,
+            text=f"{target_width} × {target_height}",
+            fill=self._RESIZE_COLOR,
+            font=("TkDefaultFont", 11, "bold"),
+            tags=_GRID_RESIZE_FEEDBACK_TAG,
+        )
+        bounds = self.bbox(label)
+        if bounds is not None:
+            background = self.create_rectangle(
+                bounds[0] - 6,
+                bounds[1] - 3,
+                bounds[2] + 6,
+                bounds[3] + 3,
+                fill="#ffffff",
+                outline=self._RESIZE_COLOR,
+                width=1,
+                tags=_GRID_RESIZE_FEEDBACK_TAG,
+            )
+            self.tag_lower(background, label)
+
+    def _resize_released(self, event: tk.Event[tk.Misc]) -> str | None:
+        drag = self._resize_drag
+        if drag is None:
+            return None
+        target = self._resize_target_at(event.x, event.y)
+        changed = target != (drag.start_width, drag.start_height)
+        handler = self._grid_resize_handler
+        self._resize_drag = None
+        self._resize_target = None
+        self.delete(_GRID_RESIZE_FEEDBACK_TAG)
+        if changed and handler is not None:
+            handler(*target)
+        self._set_resize_cursor(self._resize_edges_at(event.x, event.y))
+        return "break"
 
     def _cell_clicked(self, event: tk.Event[tk.Misc]) -> None:
         if self._crossword is None or self._grid_geometry is None:
@@ -1548,6 +1839,13 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         self.crossword_preview.grid(row=0, column=0, sticky="nsew")
         self.crossword_preview.set_cell_click_handler(self._preview_cell_clicked)
+        self.crossword_preview.set_grid_resize_handler(
+            self._preview_grid_resized,
+            minimum_dimension=_minimum_generated_dimension(
+                self._template_layout
+            ),
+            maximum_dimension=_MAX_CROSSWORD_DIMENSION,
+        )
 
     def _build_slot_list(self, parent: ttk.Frame) -> None:
         slots_frame = ttk.LabelFrame(
@@ -1602,6 +1900,20 @@ class CrosswordDocumentWindow(ttk.Frame):
             _CROSSWORD_RESIZE_DELAY_MS,
             self._regenerate_template_from_inputs,
         )
+
+    def _preview_grid_resized(self, width: int, height: int) -> None:
+        if not self._save_inline_slot_edit():
+            return
+        if self._resize_job is not None:
+            self.after_cancel(self._resize_job)
+            self._resize_job = None
+        self._changing_dimension_values = True
+        try:
+            self.width_value.set(str(width))
+            self.height_value.set(str(height))
+        finally:
+            self._changing_dimension_values = False
+        self._regenerate_template_from_inputs()
 
     def _regenerate_template_from_inputs(self) -> None:
         self._resize_job = None

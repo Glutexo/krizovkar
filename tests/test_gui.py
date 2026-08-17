@@ -17,6 +17,7 @@ from krizovkar.generator import (
 from krizovkar.gui import (
     CrosswordApplication,
     CrosswordDocumentWindow,
+    CrosswordPreview,
     CrosswordSourceWindow,
     CrosswordSettings,
     GuiInputError,
@@ -73,6 +74,25 @@ def _filled_numbered_crossword():
     for identifier, (answer, clue) in entries.items():
         crossword = fill_crossword_slot(crossword, identifier, answer, clue)
     return crossword
+
+
+def _resizable_preview() -> tuple[CrosswordPreview, Mock]:
+    preview = CrosswordPreview.__new__(CrosswordPreview)
+    preview._crossword = create_grid_from_crossword(
+        create_blank_template(CrosswordSettings(7, 6), "numbered")
+    )
+    preview._grid_geometry = (100.0, 50.0, 20.0)
+    resize_handler = Mock()
+    preview._grid_resize_handler = resize_handler
+    preview._minimum_dimension = 3
+    preview._maximum_dimension = 50
+    preview._resize_drag = None
+    preview._resize_target = None
+    preview._draw_resize_feedback = Mock()
+    preview._set_resize_cursor = Mock()
+    preview._cell_clicked = Mock()
+    preview.delete = Mock()
+    return preview, resize_handler
 
 
 class GuiTest(unittest.TestCase):
@@ -900,6 +920,7 @@ class GuiTest(unittest.TestCase):
         parent = Mock()
         window._preview_cell_clicked = Mock()
         window._build_crossword_dimensions = Mock()
+        window._template_layout = "swedish"
         preview_frame = Mock()
         preview = Mock()
 
@@ -929,7 +950,109 @@ class GuiTest(unittest.TestCase):
         preview.set_cell_click_handler.assert_called_once_with(
             window._preview_cell_clicked
         )
+        preview.set_grid_resize_handler.assert_called_once_with(
+            window._preview_grid_resized,
+            minimum_dimension=4,
+            maximum_dimension=50,
+        )
         label_type.assert_not_called()
+
+    def test_crossword_preview_detects_every_edge_and_corner(self) -> None:
+        preview, _resize_handler = _resizable_preview()
+        positions = {
+            (100, 110): (-1, 0),
+            (240, 110): (1, 0),
+            (170, 50): (0, -1),
+            (170, 170): (0, 1),
+            (100, 50): (-1, -1),
+            (240, 50): (1, -1),
+            (100, 170): (-1, 1),
+            (240, 170): (1, 1),
+            (170, 110): (0, 0),
+        }
+
+        for position, expected in positions.items():
+            with self.subTest(position=position):
+                self.assertEqual(expected, preview._resize_edges_at(*position))
+
+    def test_crossword_preview_resizes_from_opposite_edges_and_corner(
+        self,
+    ) -> None:
+        cases = (
+            ("levý", (100, 110), (60, 110), (9, 6)),
+            ("pravý", (240, 110), (200, 110), (5, 6)),
+            ("horní", (170, 50), (170, 10), (7, 8)),
+            ("dolní", (170, 170), (170, 130), (7, 4)),
+            ("roh", (100, 50), (120, 70), (6, 5)),
+        )
+
+        for label, start, end, expected in cases:
+            with self.subTest(edge=label):
+                preview, resize_handler = _resizable_preview()
+
+                pressed = preview._pointer_pressed(
+                    Mock(x=start[0], y=start[1])
+                )
+                released = preview._resize_released(Mock(x=end[0], y=end[1]))
+
+                self.assertEqual("break", pressed)
+                self.assertEqual("break", released)
+                resize_handler.assert_called_once_with(*expected)
+                self.assertIsNone(preview._resize_drag)
+                self.assertIsNone(preview._resize_target)
+
+    def test_crossword_preview_limits_dragged_dimensions(self) -> None:
+        preview, resize_handler = _resizable_preview()
+        preview._maximum_dimension = 8
+
+        preview._pointer_pressed(Mock(x=240, y=170))
+        preview._resize_released(Mock(x=1_000, y=1_000))
+
+        resize_handler.assert_called_once_with(8, 8)
+
+        preview, resize_handler = _resizable_preview()
+        preview._pointer_pressed(Mock(x=100, y=50))
+        preview._resize_released(Mock(x=1_000, y=1_000))
+
+        resize_handler.assert_called_once_with(3, 3)
+
+    def test_crossword_preview_keeps_untouched_axis_below_minimum(self) -> None:
+        preview, resize_handler = _resizable_preview()
+        preview._minimum_dimension = 8
+
+        preview._pointer_pressed(Mock(x=240, y=110))
+        preview._resize_released(Mock(x=240, y=110))
+
+        resize_handler.assert_not_called()
+
+        preview._pointer_pressed(Mock(x=240, y=110))
+        preview._resize_released(Mock(x=260, y=110))
+
+        resize_handler.assert_called_once_with(8, 6)
+
+    def test_crossword_preview_applies_resize_only_after_release(self) -> None:
+        preview, resize_handler = _resizable_preview()
+
+        preview._pointer_pressed(Mock(x=240, y=110))
+        preview._resize_dragged(Mock(x=260, y=110))
+
+        resize_handler.assert_not_called()
+        self.assertEqual((8, 6), preview._resize_target)
+
+        preview._resize_released(Mock(x=260, y=110))
+
+        resize_handler.assert_called_once_with(8, 6)
+
+    def test_crossword_preview_keeps_cell_clicks_away_from_border(self) -> None:
+        preview, resize_handler = _resizable_preview()
+        event = Mock(x=170, y=110)
+
+        result = preview._pointer_pressed(event)
+
+        self.assertIsNone(result)
+        preview._cell_clicked.assert_called_once_with(event)
+        resize_handler.assert_not_called()
+        self.assertIsNone(preview._resize_drag)
 
     def test_crossword_document_uses_full_width_workspace(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
@@ -1116,6 +1239,22 @@ class GuiTest(unittest.TestCase):
             window._regenerate_template_from_inputs,
         )
         self.assertEqual("nová", window._resize_job)
+
+    def test_preview_resize_updates_controls_and_regenerates_once(self) -> None:
+        window = Mock()
+        window._save_inline_slot_edit.return_value = True
+        window._resize_job = "čekající"
+        window._changing_dimension_values = False
+
+        CrosswordDocumentWindow._preview_grid_resized(window, 9, 8)
+
+        window._save_inline_slot_edit.assert_called_once_with()
+        window.after_cancel.assert_called_once_with("čekající")
+        window.width_value.set.assert_called_once_with("9")
+        window.height_value.set.assert_called_once_with("8")
+        self.assertFalse(window._changing_dimension_values)
+        self.assertIsNone(window._resize_job)
+        window._regenerate_template_from_inputs.assert_called_once_with()
 
     def test_live_resize_changes_only_its_document_window(self) -> None:
         window = Mock()
