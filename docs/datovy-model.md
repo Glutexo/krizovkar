@@ -280,9 +280,9 @@ Volitelné `arrows` lze uvést jen společně s `texts`:
 - LaTeX text automaticky zalamuje a podle prostoru zmenšuje; české znaky sází LuaLaTeX pomocí fontu Latin Modern Sans.
 
 Počet textů ani shoda počtu textů a šipek nejsou estetickým omezením datového
-formátu. Experimentální švédský generátor přesto vytváří pro každou vyplněnou
-vepsanou legendu jediný text bez šipky a rozloží okolní buňky tak, aby z ní
-vedl právě jeden možný směr hesla doprava nebo dolů.
+formátu. Převod švédské šablony do cílové mřížky přesto vytváří pro každou
+vyplněnou vepsanou legendu jediný text bez šipky; generátor šablonu rozloží
+tak, aby z legendy vedl právě jeden možný směr hesla doprava nebo dolů.
 
 Švédskou mřížku dělí souvislé legendové řádky a sloupce na písmenné
 obdélníky. Jejich průsečíky jsou nevyplňované buňky. Každý písmenný řádek

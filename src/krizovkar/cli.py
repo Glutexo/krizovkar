@@ -15,6 +15,7 @@ from krizovkar.generator import (
     DEFAULT_GRID_HEIGHT,
     DEFAULT_GRID_WIDTH,
     DEFAULT_SEED,
+    FillingError,
     GenerationError,
     SecretRequirement,
     create_grid_from_crossword,
@@ -716,7 +717,10 @@ def _fill(arguments: argparse.Namespace) -> int:
                 "standardní vstup nelze u příkazu fill použít zároveň "
                 "pro šablonu nebo křížovku a slovník"
             )
-        secret = _secret_requirement(arguments)
+        try:
+            secret = _secret_requirement(arguments)
+        except GenerationError as error:
+            raise FillingError(str(error)) from error
         document = _load_template_or_crossword(
             _reusable_input_source(arguments.document)
         )
@@ -735,7 +739,7 @@ def _fill(arguments: argparse.Namespace) -> int:
                 arguments.output,
                 overwrite=arguments.force,
             )
-    except (DictionaryError, GenerationError, ModelError) as error:
+    except (DictionaryError, FillingError, ModelError) as error:
         print(f"chyba: {error}", file=sys.stderr)
         return 2
 

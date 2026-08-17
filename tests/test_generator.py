@@ -1,4 +1,4 @@
-"""Testy hustého generátoru švédské křížovky."""
+"""Testy generování šablon a plnění křížovek."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pathlib import Path
 
 from krizovkar.dictionary import CrosswordDictionary, DictionaryEntry
 from krizovkar.generator import (
+    FillingError,
     GenerationError,
     SecretRequirement,
     create_grid_from_crossword,
@@ -69,14 +70,14 @@ def _filled_swedish_grid(
     seed: int = 0,
     secret: SecretRequirement | None = None,
 ) -> CrosswordGrid:
-    crossword = generate_swedish_template(
+    template = generate_swedish_template(
         width=width,
         height=height,
         seed=seed,
         secret=secret,
     )
     return create_grid_from_crossword(
-        fill_crossword(crossword, dictionary, seed=seed)
+        fill_crossword(template, dictionary, seed=seed)
     )
 
 
@@ -88,14 +89,14 @@ def _filled_numbered_grid(
     seed: int = 0,
     secret: SecretRequirement | None = None,
 ) -> CrosswordGrid:
-    crossword = generate_numbered_template(
+    template = generate_numbered_template(
         width=width,
         height=height,
         seed=seed,
         secret=secret,
     )
     return create_grid_from_crossword(
-        fill_crossword(crossword, dictionary, seed=seed)
+        fill_crossword(template, dictionary, seed=seed)
     )
 
 
@@ -115,32 +116,34 @@ SPECIFICATION_SECRET_PROMPT_EXAMPLE = (
 )
 
 
-class GeneratorTest(unittest.TestCase):
+class TemplateGenerationAndFillingTest(unittest.TestCase):
     def test_creates_swedish_template_from_specification(self) -> None:
         specification = load_crossword_specification(
             SPECIFICATION_PLACED_WORDS_EXAMPLE
         )
 
-        crossword = create_template_from_specification(specification)
+        template = create_template_from_specification(specification)
 
         self.assertEqual(("h1", "v1", "v2"), tuple(
-            slot.identifier for slot in crossword.slots
+            slot.identifier for slot in template.slots
         ))
         self.assertEqual(
             ("LABE", "LES", "EMU"),
-            tuple(slot.answer for slot in crossword.slots),
+            tuple(slot.answer for slot in template.slots),
         )
         self.assertEqual(
             ("2,1", "1,2", "1,5"),
             tuple(
                 f"{slot.legend_position.row},{slot.legend_position.column}"
-                for slot in crossword.slots
+                for slot in template.slots
                 if slot.legend_position is not None
             ),
         )
-        self.assertIsInstance(crossword.grid.cells[0][0], HelpCellRole)
+        self.assertEqual("template", template.kind)
+        self.assertNotIsInstance(template, CrosswordDocument)
+        self.assertIsInstance(template.grid.cells[0][0], HelpCellRole)
 
-        grid = create_grid_from_template(crossword)
+        grid = create_grid_from_template(template)
         assert grid.grid.cells is not None
         self.assertEqual(
             ("L", "A", "B", "E"),
@@ -175,15 +178,15 @@ class GeneratorTest(unittest.TestCase):
             ),
         )
 
-        crossword = create_template_from_specification(
+        template = create_template_from_specification(
             specification,
             layout="numbered",
         )
-        grid = create_grid_from_template(crossword)
+        grid = create_grid_from_template(template)
 
         self.assertEqual(
             ("v1", "h1"),
-            tuple(slot.identifier for slot in crossword.slots),
+            tuple(slot.identifier for slot in template.slots),
         )
         assert grid.grid.cells is not None
         help_cell = grid.grid.cells[0][1]
@@ -196,20 +199,20 @@ class GeneratorTest(unittest.TestCase):
             SPECIFICATION_SECRETS_EXAMPLE
         )
 
-        crossword = create_template_from_specification(
+        template = create_template_from_specification(
             specification,
             layout="numbered",
         )
-        grid = create_grid_from_template(crossword)
+        grid = create_grid_from_template(template)
 
         self.assertTrue(
-            all(slot.legend_position is None for slot in crossword.slots)
+            all(slot.legend_position is None for slot in template.slots)
         )
         self.assertIsInstance(
-            crossword.secrets[0].parts[0],
+            template.secrets[0].parts[0],
             CrosswordSecretCellsPart,
         )
-        self.assertEqual(("KŘÍŽOVKÁŘ",), crossword.secrets[1].words)
+        self.assertEqual(("KŘÍŽOVKÁŘ",), template.secrets[1].words)
         assert grid.grid.cells is not None
         self.assertEqual("right", grid.grid.cells[1][1].arrow)
         self.assertEqual("down", grid.grid.cells[1][4].arrow)
@@ -237,12 +240,12 @@ class GeneratorTest(unittest.TestCase):
         specification = load_crossword_specification(
             SPECIFICATION_MULTIPART_SECRETS_EXAMPLE
         )
-        crossword = create_template_from_specification(
+        template = create_template_from_specification(
             specification,
             layout="numbered",
         )
 
-        grid = create_grid_from_template(crossword)
+        grid = create_grid_from_template(template)
 
         assert grid.grid.cells is not None
         self.assertTrue(
@@ -336,22 +339,22 @@ class GeneratorTest(unittest.TestCase):
             normalize_secret_text("TAJENKA 1")
 
     def test_places_secret_by_total_and_part_lengths(self) -> None:
-        crossword = generate_swedish_template(width=5, height=5)
+        template = generate_swedish_template(width=5, height=5)
 
         single = place_secret_in_template(
-            crossword,
+            template,
             SecretRequirement(total_length=4),
             seed=7,
         )
         multipart = place_secret_in_template(
-            crossword,
+            template,
             SecretRequirement(part_lengths=(4, 4)),
             seed=7,
         )
 
         self.assertEqual(1, len(single.secrets[0].parts))
         self.assertEqual(2, len(multipart.secrets[0].parts))
-        slots = {slot.identifier: slot for slot in crossword.slots}
+        slots = {slot.identifier: slot for slot in template.slots}
         self.assertEqual(
             (4, 4),
             tuple(
@@ -550,7 +553,7 @@ class GeneratorTest(unittest.TestCase):
             ),
         )
 
-        with self.assertRaisesRegex(GenerationError, "na hranicích slov"):
+        with self.assertRaisesRegex(FillingError, "na hranicích slov"):
             fill_crossword(
                 crossword,
                 TEST_DICTIONARY,
@@ -731,11 +734,11 @@ class GeneratorTest(unittest.TestCase):
         self.assertFalse(legend.arrows)
 
     def test_crossword_fill_rejects_missing_length(self) -> None:
-        crossword = generate_swedish_template(width=5, height=5)
+        template = generate_swedish_template(width=5, height=5)
         dictionary = _complete_dictionary(3)
 
-        with self.assertRaisesRegex(GenerationError, "délky: 4"):
-            fill_crossword(crossword, dictionary)
+        with self.assertRaisesRegex(FillingError, "délky: 4"):
+            fill_crossword(template, dictionary)
 
     def test_crossword_fill_rejects_unsatisfiable_crossing(self) -> None:
         crossword = CrosswordDocument(
@@ -772,7 +775,7 @@ class GeneratorTest(unittest.TestCase):
             )
         )
 
-        with self.assertRaisesRegex(GenerationError, "nepodařilo se vyplnit"):
+        with self.assertRaisesRegex(FillingError, "nepodařilo se vyplnit"):
             fill_crossword(crossword, dictionary)
 
     def test_generates_dense_template_without_dictionary(self) -> None:
@@ -859,23 +862,23 @@ class GeneratorTest(unittest.TestCase):
         )
 
     def test_creates_unfilled_grid_from_swedish_template(self) -> None:
-        crossword = generate_swedish_template(width=5, height=5)
+        template = generate_swedish_template(width=5, height=5)
 
-        grid = create_grid_from_template(crossword)
+        grid = create_grid_from_template(template)
 
         self.assertEqual("grid", grid.kind)
         self.assertEqual(5, grid.grid.width)
         self.assertEqual(5, grid.grid.height)
         assert grid.grid.cells is not None
-        for crossword_row, grid_row in zip(
-            crossword.grid.cells,
+        for template_row, grid_row in zip(
+            template.grid.cells,
             grid.grid.cells,
         ):
-            for crossword_cell, grid_cell in zip(crossword_row, grid_row):
-                if isinstance(crossword_cell, LetterCellRole):
+            for template_cell, grid_cell in zip(template_row, grid_row):
+                if isinstance(template_cell, LetterCellRole):
                     self.assertIsInstance(grid_cell, LetterCell)
                     self.assertIsNone(grid_cell.value)
-                elif isinstance(crossword_cell, LegendCellRole):
+                elif isinstance(template_cell, LegendCellRole):
                     self.assertIsInstance(grid_cell, LegendCell)
                     self.assertTrue(grid_cell.texts)
                     self.assertTrue(
@@ -895,9 +898,9 @@ class GeneratorTest(unittest.TestCase):
             self.assertIn("- null", output.read_text(encoding="utf-8"))
 
     def test_unfilled_numbered_grid_keeps_numbers_and_bars(self) -> None:
-        crossword = generate_numbered_template(width=7, height=7)
+        template = generate_numbered_template(width=7, height=7)
 
-        grid = create_grid_from_template(crossword)
+        grid = create_grid_from_template(template)
 
         assert grid.grid.cells is not None
         cells = tuple(cell for row in grid.grid.cells for cell in row)
@@ -912,13 +915,13 @@ class GeneratorTest(unittest.TestCase):
 
     def test_unfilled_grid_keeps_secret_cells_and_prompt(self) -> None:
         prompt = SecretPrompt(text="Doplňte tajenku")
-        crossword = generate_numbered_template(
+        template = generate_numbered_template(
             width=7,
             height=7,
             secret=SecretRequirement(total_length=4, prompt=prompt),
         )
 
-        grid = create_grid_from_template(crossword)
+        grid = create_grid_from_template(template)
 
         assert grid.grid.cells is not None
         secret_cells = tuple(
@@ -1132,7 +1135,7 @@ class GeneratorTest(unittest.TestCase):
     def test_rejects_dictionary_without_required_length(self) -> None:
         dictionary = _complete_dictionary(3)
 
-        with self.assertRaisesRegex(GenerationError, "délky: 4"):
+        with self.assertRaisesRegex(FillingError, "délky: 4"):
             _filled_swedish_grid(dictionary, width=5, height=5)
 
 

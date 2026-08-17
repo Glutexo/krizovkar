@@ -7,6 +7,7 @@ from krizovkar.dictionary import (
     load_dictionary,
 )
 from krizovkar.generator import (
+    FillingError,
     GenerationError,
     SecretRequirement,
     SpecificationLayout,
@@ -113,6 +114,7 @@ __all__ = [
     "EmptyCell",
     "EmptyCellRole",
     "ExternalClue",
+    "FillingError",
     "GenerationError",
     "Grid",
     "GridCell",

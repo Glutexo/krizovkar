@@ -70,7 +70,11 @@ SpecificationLayout = Literal["swedish", "numbered"]
 
 
 class GenerationError(RuntimeError):
-    """Šablonu se nepodařilo vygenerovat nebo křížovku vyplnit."""
+    """Šablonu se nepodařilo vygenerovat."""
+
+
+class FillingError(RuntimeError):
+    """Křížovku se nepodařilo vyplnit."""
 
 
 class _SearchFailed(RuntimeError):
@@ -938,23 +942,29 @@ def _resolve_crossword_secrets(
     )
     if requirement is None:
         if unknown_indices:
-            raise GenerationError(
+            raise FillingError(
                 "dokument rezervuje tajenku bez známého znění; "
                 "při plnění je nutné zadat konkrétní tajenku"
             )
         return crossword
 
-    _validate_secret_requirement(requirement)
+    try:
+        _validate_secret_requirement(requirement)
+    except GenerationError as error:
+        raise FillingError(str(error)) from error
     if not requirement.words:
-        raise GenerationError(
+        raise FillingError(
             "při plnění je nutné zadat konkrétní slova tajenky"
         )
     if not crossword.secrets:
-        return place_secret_in_template(crossword, requirement, seed=seed)
+        try:
+            return place_secret_in_template(crossword, requirement, seed=seed)
+        except GenerationError as error:
+            raise FillingError(str(error)) from error
     if not unknown_indices:
-        raise GenerationError("dokument už obsahuje konkrétní tajenku")
+        raise FillingError("dokument už obsahuje konkrétní tajenku")
     if len(unknown_indices) > 1:
-        raise GenerationError(
+        raise FillingError(
             "dokument obsahuje více neznámých tajenek; "
             "jedním zadáním je nelze jednoznačně doplnit"
         )
@@ -974,14 +984,14 @@ def _resolve_crossword_secrets(
     if requirement.part_word_counts:
         counts = requirement.part_word_counts
         if _part_lengths_from_word_counts(requirement.words, counts) != lengths:
-            raise GenerationError(
+            raise FillingError(
                 "pevné rozdělení tajenky neodpovídá délkám "
                 "připravených slotů"
             )
     else:
         counts = _word_counts_for_exact_lengths(requirement.words, lengths)
         if counts is None:
-            raise GenerationError(
+            raise FillingError(
                 "tajenku nelze rozdělit na hranicích slov podle délek "
                 "připravených slotů"
             )
@@ -1390,7 +1400,7 @@ def fill_crossword(
         fixed = fixed_assignments.get(identifier)
         if fixed is not None:
             if fixed.answer != assignment.answer:
-                raise GenerationError(
+                raise FillingError(
                     f"pevné heslo {fixed.answer!r} ve slotu {identifier!r} "
                     f"neodpovídá tajence {assignment.answer!r}"
                 )
@@ -1405,7 +1415,7 @@ def fill_crossword(
     missing_lengths = sorted(required_lengths - entries_by_length.keys())
     if missing_lengths:
         missing = ", ".join(str(length) for length in missing_lengths)
-        raise GenerationError(
+        raise FillingError(
             f"slovník neobsahuje použitelná hesla délky: {missing}"
         )
 
@@ -1434,6 +1444,6 @@ def fill_crossword(
         except _SearchFailed:
             continue
 
-    raise GenerationError(
+    raise FillingError(
         "nepodařilo se vyplnit všechny sloty platnými křížícími se hesly"
     )

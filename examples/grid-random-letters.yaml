@@ -1,4 +1,4 @@
-# Náhodná písmena vytvořená generátorem se seedem 20260725.
+# Náhodná písmena pro ukázku vykreslení cílové mřížky.
 format: krizovkar
 kind: grid
 version: 1

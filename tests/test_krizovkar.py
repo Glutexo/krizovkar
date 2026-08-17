@@ -1536,12 +1536,12 @@ class CommandTest(unittest.TestCase):
             )
 
         self.assertEqual(0, result)
-        crossword = load_crossword_template(io.StringIO(stdout.getvalue()))
+        template = load_crossword_template(io.StringIO(stdout.getvalue()))
         self.assertEqual(("LABE", "LES", "EMU"), tuple(
-            slot.answer for slot in crossword.slots
+            slot.answer for slot in template.slots
         ))
         self.assertTrue(
-            all(slot.legend_position is not None for slot in crossword.slots)
+            all(slot.legend_position is not None for slot in template.slots)
         )
         self.assertIn("(7 × 6, 3 hesla)", stderr.getvalue())
 
@@ -1560,9 +1560,9 @@ class CommandTest(unittest.TestCase):
             result = main(["template", "-", "--layout", "numbered"])
 
         self.assertEqual(0, result)
-        crossword = load_crossword_template(io.StringIO(stdout.getvalue()))
-        self.assertEqual("ZELENÍ", crossword.slots[0].answer)
-        self.assertIsNone(crossword.slots[0].legend_position)
+        template = load_crossword_template(io.StringIO(stdout.getvalue()))
+        self.assertEqual("ZELENÍ", template.slots[0].answer)
+        self.assertIsNone(template.slots[0].legend_position)
         self.assertIn("standardní výstup", stderr.getvalue())
 
     def test_template_rejects_dense_options_with_specification(self) -> None:
@@ -1954,17 +1954,17 @@ class CommandTest(unittest.TestCase):
                 )
 
             self.assertEqual(0, result)
-            crossword = load_crossword_template(output)
-            self.assertEqual(28, len(crossword.slots))
+            template = load_crossword_template(output)
+            self.assertEqual(28, len(template.slots))
             self.assertTrue(
                 all(
                     isinstance(cell, LetterCellRole)
-                    for row in crossword.grid.cells
+                    for row in template.grid.cells
                     for cell in row
                 )
             )
             self.assertTrue(
-                all(slot.legend_position is None for slot in crossword.slots)
+                all(slot.legend_position is None for slot in template.slots)
             )
 
 

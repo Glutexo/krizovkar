@@ -1,4 +1,4 @@
-"""Testy načítání slovníku pro generátor."""
+"""Testy načítání slovníku pro plnění křížovek."""
 
 from __future__ import annotations
 
