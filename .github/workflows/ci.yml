@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   checks:
-    name: Python 3.14.1 / Tk 9
+    name: Python 3.14 / Tk 9
     runs-on: macos-latest
     timeout-minutes: 15
 
@@ -28,7 +28,8 @@ jobs:
       - name: Nastavit Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version-file: .python-version
+          # Oficiální macOS balíky obsahují Tk 9 od Pythonu 3.14.5.
+          python-version: "3.14"
 
       - name: Nainstalovat uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -46,7 +47,7 @@ jobs:
           import sys
           import tkinter as tk
 
-          assert sys.version_info[:3] == (3, 14, 1), sys.version
+          assert (3, 14, 1) <= sys.version_info[:3] < (3, 15), sys.version
           assert tk.TkVersion >= 9.0, tk.TkVersion
           print(f"Python {sys.version.split()[0]}, Tk {tk.TkVersion:.1f}")
           PY
