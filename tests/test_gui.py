@@ -539,39 +539,36 @@ class GuiTest(unittest.TestCase):
         self.assertIsInstance(filled, CrosswordDocument)
         self.assertEqual("crossword", filled.kind)
 
-    def test_dimension_controls_form_the_crossword_preview_heading(self) -> None:
+    def test_dimension_controls_are_built_in_crossword_document(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         parent = Mock()
         window.height_value = Mock()
         window.width_value = Mock()
         window.dimension_error_value = Mock()
-        window._preview_cell_clicked = Mock()
-        preview_frame = Mock()
         controls = Mock()
         height_spinbox = Mock()
         width_spinbox = Mock()
-        preview = Mock()
 
         with (
             patch(
-                "krizovkar.gui.ttk.LabelFrame",
-                return_value=preview_frame,
-            ) as label_frame_type,
-            patch("krizovkar.gui.ttk.Frame", return_value=controls),
+                "krizovkar.gui.ttk.Frame",
+                return_value=controls,
+            ) as frame_type,
             patch("krizovkar.gui.ttk.Label") as label_type,
             patch(
                 "krizovkar.gui.ttk.Spinbox",
                 side_effect=(height_spinbox, width_spinbox),
             ) as spinbox_type,
-            patch(
-                "krizovkar.gui.CrosswordPreview",
-                return_value=preview,
-            ) as preview_type,
         ):
-            window._build_crossword_preview(parent)
+            window._build_crossword_dimensions(parent)
 
-        label_frame_type.assert_called_once_with(parent, padding=12)
-        preview_frame.configure.assert_called_once_with(labelwidget=controls)
+        frame_type.assert_called_once_with(parent)
+        controls.grid.assert_called_once_with(
+            row=1,
+            column=0,
+            sticky="w",
+            pady=(10, 0),
+        )
         self.assertEqual(
             [
                 call(
@@ -593,13 +590,43 @@ class GuiTest(unittest.TestCase):
         )
         self.assertEqual("Řádky", label_type.call_args_list[0].kwargs["text"])
         self.assertEqual("Sloupce", label_type.call_args_list[1].kwargs["text"])
+        self.assertIs(
+            window.dimension_error_value,
+            label_type.call_args_list[2].kwargs["textvariable"],
+        )
+        self.assertIs(height_spinbox, window.height_spinbox)
+        self.assertIs(width_spinbox, window.width_spinbox)
+
+    def test_crossword_preview_has_its_own_heading(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        parent = Mock()
+        window._preview_cell_clicked = Mock()
+        preview_frame = Mock()
+        preview = Mock()
+
+        with (
+            patch(
+                "krizovkar.gui.ttk.LabelFrame",
+                return_value=preview_frame,
+            ) as label_frame_type,
+            patch("krizovkar.gui.ttk.Label"),
+            patch(
+                "krizovkar.gui.CrosswordPreview",
+                return_value=preview,
+            ) as preview_type,
+        ):
+            window._build_crossword_preview(parent)
+
+        label_frame_type.assert_called_once_with(
+            parent,
+            text="Náhled křížovky",
+            padding=12,
+        )
         preview_type.assert_called_once_with(
             preview_frame,
             width=620,
             height=390,
         )
-        self.assertIs(height_spinbox, window.height_spinbox)
-        self.assertIs(width_spinbox, window.width_spinbox)
         self.assertIs(preview, window.crossword_preview)
         preview.set_cell_click_handler.assert_called_once_with(
             window._preview_cell_clicked

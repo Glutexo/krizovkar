@@ -1265,6 +1265,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             style="Muted.TLabel",
             wraplength=310,
         ).grid(row=0, column=0, sticky="w")
+        self._build_crossword_dimensions(document)
 
         editor = ttk.LabelFrame(
             controls,
@@ -1281,6 +1282,43 @@ class CrosswordDocumentWindow(ttk.Frame):
         workspace.rowconfigure(0, weight=1)
         self._build_crossword_preview(workspace)
         self._build_slot_list(workspace)
+
+    def _build_crossword_dimensions(self, parent: ttk.Frame) -> None:
+        controls = ttk.Frame(parent)
+        controls.grid(row=1, column=0, sticky="w", pady=(10, 0))
+        ttk.Label(controls, text="Řádky").grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
+        self.height_spinbox = ttk.Spinbox(
+            controls,
+            from_=1,
+            to=_MAX_CROSSWORD_DIMENSION,
+            width=5,
+            textvariable=self.height_value,
+        )
+        self.height_spinbox.grid(row=0, column=1, sticky="w", padx=(6, 0))
+        ttk.Label(controls, text="Sloupce").grid(
+            row=0,
+            column=2,
+            sticky="w",
+            padx=(14, 0),
+        )
+        self.width_spinbox = ttk.Spinbox(
+            controls,
+            from_=1,
+            to=_MAX_CROSSWORD_DIMENSION,
+            width=5,
+            textvariable=self.width_value,
+        )
+        self.width_spinbox.grid(row=0, column=3, sticky="w", padx=(6, 0))
+        ttk.Label(
+            parent,
+            textvariable=self.dimension_error_value,
+            style="Error.TLabel",
+            wraplength=310,
+        ).grid(row=2, column=0, sticky="w", pady=(6, 0))
 
     def _build_crossword_editor(self, parent: ttk.Frame) -> None:
         ttk.Label(
@@ -1353,46 +1391,14 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
 
     def _build_crossword_preview(self, parent: ttk.Frame) -> None:
-        preview_frame = ttk.LabelFrame(parent, padding=12)
+        preview_frame = ttk.LabelFrame(
+            parent,
+            text="Náhled křížovky",
+            padding=12,
+        )
         preview_frame.grid(row=0, column=0, sticky="nsew")
         preview_frame.columnconfigure(0, weight=1)
         preview_frame.rowconfigure(0, weight=1)
-
-        controls = ttk.Frame(preview_frame)
-        preview_frame.configure(labelwidget=controls)
-        ttk.Label(controls, text="Řádky").grid(
-            row=0,
-            column=0,
-            sticky="w",
-        )
-        self.height_spinbox = ttk.Spinbox(
-            controls,
-            from_=1,
-            to=_MAX_CROSSWORD_DIMENSION,
-            width=5,
-            textvariable=self.height_value,
-        )
-        self.height_spinbox.grid(row=0, column=1, sticky="w", padx=(6, 0))
-        ttk.Label(controls, text="Sloupce").grid(
-            row=0,
-            column=2,
-            sticky="w",
-            padx=(14, 0),
-        )
-        self.width_spinbox = ttk.Spinbox(
-            controls,
-            from_=1,
-            to=_MAX_CROSSWORD_DIMENSION,
-            width=5,
-            textvariable=self.width_value,
-        )
-        self.width_spinbox.grid(row=0, column=3, sticky="w", padx=(6, 0))
-        ttk.Label(
-            controls,
-            textvariable=self.dimension_error_value,
-            style="Error.TLabel",
-            wraplength=380,
-        ).grid(row=0, column=4, sticky="w", padx=(14, 4))
 
         self.crossword_preview = CrosswordPreview(
             preview_frame,
