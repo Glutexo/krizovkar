@@ -575,10 +575,6 @@ class GuiTest(unittest.TestCase):
         CrosswordDocumentWindow.create_crossword_from_template(window)
 
         window.application.new_crossword_document.assert_called_once_with(template)
-        window._set_template_status.assert_called_once_with(
-            "Křížovka podle této šablony byla otevřena v novém okně.",
-            success=True,
-        )
 
     def test_application_creates_crossword_as_new_document(self) -> None:
         application = Mock()
@@ -795,16 +791,12 @@ class GuiTest(unittest.TestCase):
                     filled=False,
                     title="Exportovat křížovku bez písmen",
                     initialfile="krizovka.pdf",
-                    success_message="Křížovka bez písmen byla uložena",
-                    document="crossword",
                 ),
                 call(
                     grid,
                     filled=True,
                     title="Exportovat řešení s písmeny",
                     initialfile="reseni.pdf",
-                    success_message="Řešení bylo uloženo",
-                    document="crossword",
                 ),
             ],
             application._save_pdf.call_args_list,
@@ -826,8 +818,6 @@ class GuiTest(unittest.TestCase):
             filled=False,
             title="Exportovat šablonu k tisku",
             initialfile="sablona.pdf",
-            success_message="Šablona k tisku byla uložena",
-            document="template",
         )
 
     def test_export_actions_follow_window_document(self) -> None:
@@ -1107,8 +1097,6 @@ class GuiTest(unittest.TestCase):
                     filled=False,
                     title="Exportovat křížovku bez písmen",
                     initialfile="krizovka.pdf",
-                    success_message="Křížovka bez písmen byla uložena",
-                    document="crossword",
                 )
 
             self.assertEqual(PDF_BYTES, output.read_bytes())
@@ -1122,17 +1110,6 @@ class GuiTest(unittest.TestCase):
             extension=".pdf",
             filetypes=(("PDF soubory", "*.pdf"), ("Všechny soubory", "*")),
             overwrite_title="Přepsat PDF?",
-        )
-        self.assertEqual(
-            [
-                call("crossword", "Vytvářím PDF…"),
-                call(
-                    "crossword",
-                    f"Křížovka bez písmen byla uložena: {output}",
-                    success=True,
-                ),
-            ],
-            application._set_document_status.call_args_list,
         )
         self.assertEqual(
             [call(cursor="watch"), call(cursor="")],
@@ -1151,12 +1128,9 @@ class GuiTest(unittest.TestCase):
             filled=False,
             title="Exportovat šablonu k tisku",
             initialfile="sablona.pdf",
-            success_message="Šablona k tisku byla uložena",
-            document="template",
         )
 
         application._choose_output.assert_not_called()
-        application._set_document_status.assert_not_called()
 
     def test_pdf_render_error_is_shown_and_restores_cursor(self) -> None:
         application = Mock()
@@ -1173,18 +1147,11 @@ class GuiTest(unittest.TestCase):
                 filled=False,
                 title="Exportovat šablonu k tisku",
                 initialfile="sablona.pdf",
-                success_message="Šablona k tisku byla uložena",
-                document="template",
             )
 
         application._show_action_error.assert_called_once_with(
             "PDF nelze vytvořit",
             "nainstalujte TeX Live",
-            document="template",
-        )
-        application._set_document_status.assert_called_once_with(
-            "template",
-            "Vytvářím PDF…",
         )
         self.assertEqual(
             [call(cursor="watch"), call(cursor="")],
