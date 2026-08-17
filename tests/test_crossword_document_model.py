@@ -62,14 +62,22 @@ class CrosswordDocumentModelTest(unittest.TestCase):
             load_crossword_document(StringIO(output.getvalue())),
         )
 
-    def test_template_and_crossword_schemas_are_distinct(self) -> None:
+    def test_legacy_template_is_loaded_as_crossword_document(self) -> None:
+        crossword = load_crossword_document(TEMPLATE_MINIMAL_EXAMPLE)
+
+        self.assertIsInstance(crossword, CrosswordDocument)
+        self.assertEqual("crossword", crossword.kind)
+        self.assertIsNone(crossword.slots[0].answer)
+
+        output = StringIO()
+        dump_crossword_document(crossword, output)
+
+        self.assertIn("kind: crossword\n", output.getvalue())
+        self.assertNotIn("kind: template\n", output.getvalue())
+
+    def test_legacy_template_loader_rejects_crossword_document(self) -> None:
         with self.assertRaisesRegex(ModelError, "očekává se hodnota 'template'"):
             load_crossword_template(CROSSWORD_MINIMAL_EXAMPLE)
-        with self.assertRaisesRegex(
-            ModelError,
-            "očekává se hodnota 'crossword'",
-        ):
-            load_crossword_document(TEMPLATE_MINIMAL_EXAMPLE)
 
     def test_writers_reject_wrong_document_kind(self) -> None:
         template = load_crossword_template(TEMPLATE_MINIMAL_EXAMPLE)

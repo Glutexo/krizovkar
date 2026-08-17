@@ -761,9 +761,15 @@ def load_crossword_template(source: YamlSource) -> CrosswordTemplate:
 
 
 def load_crossword_document(source: YamlSource) -> CrosswordDocument:
-    """Načte editovatelnou křížovku ze souboru nebo proudu YAML."""
+    """Načte křížovku a transparentně převede starý dokument šablony."""
 
-    data = _validated_data(source, "crossword-v1.schema.json")
+    data = _yaml_data(source)
+    schema_name = (
+        "template-v1.schema.json"
+        if isinstance(data, dict) and data.get("kind") == "template"
+        else "crossword-v1.schema.json"
+    )
+    data = _validate_data(data, schema_name)
     template = _crossword_template_from_data(data)
     return create_crossword_document(template)
 
