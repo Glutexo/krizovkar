@@ -741,6 +741,20 @@ class GuiTest(unittest.TestCase):
             ]
         )
 
+    def test_document_window_opens_at_minimum_width(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window.root = Mock()
+        window._content_row = 0
+        window.grid = Mock()
+        window.columnconfigure = Mock()
+        window.rowconfigure = Mock()
+        window.request_close = Mock()
+
+        window._configure_window()
+
+        window.root.geometry.assert_called_once_with("980x850")
+        window.root.minsize.assert_called_once_with(980, 700)
+
     def test_dimension_input_rejects_values_outside_layout_range(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         window._template_layout = "swedish"
