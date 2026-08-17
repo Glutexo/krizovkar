@@ -831,7 +831,7 @@ def _load_renderable_crossword(source_path: Path) -> CrosswordGrid:
         source.seek(0)
     if document_kind == "grid":
         return load_crossword_grid(source)
-    if document_kind in {"template", "crossword"}:
+    if document_kind == "crossword":
         crossword = load_crossword_document(source)
         return create_grid_from_crossword(crossword)
     raise ModelError(

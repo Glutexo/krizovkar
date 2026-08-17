@@ -13,7 +13,6 @@ from unittest.mock import Mock, call, patch
 
 from krizovkar.generator import (
     create_grid_from_crossword,
-    generate_numbered_template,
 )
 from krizovkar.gui import (
     CrosswordSettings,
@@ -42,7 +41,6 @@ from krizovkar.model import (
     LetterCell,
     load_crossword_document,
     write_crossword_document,
-    write_crossword_template,
 )
 from krizovkar.renderer import RenderError
 
@@ -540,22 +538,6 @@ class GuiTest(unittest.TestCase):
 
         self.assertIsInstance(filled, CrosswordDocument)
         self.assertEqual("crossword", filled.kind)
-
-    def test_gui_loader_converts_legacy_template_to_crossword(self) -> None:
-        legacy_template = generate_numbered_template(width=3, height=3)
-        crossword = create_blank_crossword(CrosswordSettings(3, 3), "numbered")
-        with tempfile.TemporaryDirectory() as directory:
-            template_path = Path(directory) / "sablona.yaml"
-            crossword_path = Path(directory) / "krizovka.yaml"
-            write_crossword_template(legacy_template, template_path)
-            write_crossword_document(crossword, crossword_path)
-
-            converted_template = load_editable_document(template_path)
-            loaded_crossword = load_editable_document(crossword_path)
-
-        self.assertIsInstance(converted_template, CrosswordDocument)
-        self.assertEqual("crossword", converted_template.kind)
-        self.assertIsInstance(loaded_crossword, CrosswordDocument)
 
     def test_dimension_controls_form_the_crossword_preview_heading(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)

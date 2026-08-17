@@ -807,10 +807,10 @@ class ScrollablePanel(ttk.Frame):
 def load_editable_document(
     source: str | Path,
 ) -> CrosswordDocument:
-    """Načte křížovku včetně transparentního převodu staré šablony."""
+    """Načte editovatelnou křížovku."""
 
     kind = load_crossword_document_kind(source)
-    if kind in {"template", "crossword"}:
+    if kind == "crossword":
         return load_crossword_document(source)
     raise ModelError(
         "grafické rozhraní otevírá pouze křížovku kind: crossword; "

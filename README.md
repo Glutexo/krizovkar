@@ -122,10 +122,6 @@ hesel, a proto sám slouží i jako znovu použitelný základ. Zápis bez odpov
 ukazuje [nevyplněná křížovka](examples/crossword-unfilled.yaml), hotovou
 variantu [minimální křížovka](examples/crossword-minimal.yaml).
 
-Starší soubory `kind: template` zůstávají čitelné. Model, CLI i grafické
-rozhraní je při otevření převedou na `kind: crossword`; nové soubory už tento
-historický druh nepoužívají.
-
 Nejmenší platná cílová mřížka zatím určuje pouze rozměr:
 
 ```yaml

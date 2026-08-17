@@ -1435,7 +1435,6 @@ class CommandTest(unittest.TestCase):
                 "nelze použít společně s argumentem --secret",
             ),
             (["crossword", "--neznamy"], "nerozpoznané argumenty: --neznamy"),
-            (["template"], "argument příkaz: neplatná volba: 'template'"),
             (["neznamy"], "argument příkaz: neplatná volba: 'neznamy'"),
         )
         for arguments, expected_message in cases:
@@ -1511,7 +1510,6 @@ class CommandTest(unittest.TestCase):
         self.assertEqual(0, result)
         self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
         self.assertIn("kind: crossword\n", stdout.getvalue())
-        self.assertNotIn("kind: template\n", stdout.getvalue())
         self.assertNotIn("Křížovka vytvořena", stdout.getvalue())
         self.assertIn("Křížovka vytvořena: standardní výstup", stderr.getvalue())
         with tempfile.TemporaryDirectory() as directory:

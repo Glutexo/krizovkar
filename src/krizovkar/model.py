@@ -753,23 +753,10 @@ def _crossword_template_from_data(data: dict[str, Any]) -> CrosswordTemplate:
     return template
 
 
-def load_crossword_template(source: YamlSource) -> CrosswordTemplate:
-    """Načte a ověří šablonu křížovky ze souboru nebo proudu YAML."""
-
-    data = _validated_data(source, "template-v1.schema.json")
-    return _crossword_template_from_data(data)
-
-
 def load_crossword_document(source: YamlSource) -> CrosswordDocument:
-    """Načte křížovku a transparentně převede starý dokument šablony."""
+    """Načte a ověří editovatelnou křížovku ze souboru nebo YAML."""
 
-    data = _yaml_data(source)
-    schema_name = (
-        "template-v1.schema.json"
-        if isinstance(data, dict) and data.get("kind") == "template"
-        else "crossword-v1.schema.json"
-    )
-    data = _validate_data(data, schema_name)
+    data = _validated_data(source, "crossword-v1.schema.json")
     template = _crossword_template_from_data(data)
     return create_crossword_document(template)
 
@@ -1815,35 +1802,6 @@ def dump_crossword_specification(
         _crossword_specification_data(specification),
         output,
         subject="zadání křížovky",
-    )
-
-
-def write_crossword_template(
-    template: CrosswordTemplate,
-    output: str | Path,
-    *,
-    overwrite: bool = False,
-) -> Path:
-    """Zapíše šablonu křížovky atomicky jako YAML."""
-
-    return _write_yaml_document(
-        _structural_document_data(template, "template-v1.schema.json"),
-        output,
-        overwrite=overwrite,
-        subject="šablonu křížovky",
-    )
-
-
-def dump_crossword_template(
-    template: CrosswordTemplate,
-    output: TextIO,
-) -> None:
-    """Zapíše šablonu křížovky jako YAML do textového proudu."""
-
-    _dump_yaml_document_safely(
-        _structural_document_data(template, "template-v1.schema.json"),
-        output,
-        subject="šablonu křížovky",
     )
 
 

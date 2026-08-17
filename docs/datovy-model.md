@@ -151,10 +151,6 @@ dělením. Požadavek obsahující jen délku nelze použít pro vyplněnou mř�
 ale příkazy `grid`, `latex` a `render` jej zachovají jako označená nevyplněná
 tajenková pole.
 
-Starší dokumenty `kind: template` mají stejnou strukturu a zůstávají čitelné.
-Aktuální loader je při načtení převede na `kind: crossword`; nové dokumenty
-už historický druh `template` nepoužívají.
-
 ## Cílová mřížka, verze 1
 
 Cílová mřížka popisuje obdélníkový rozměr a případný obsah buněk:
