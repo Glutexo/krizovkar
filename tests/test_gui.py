@@ -37,12 +37,9 @@ from krizovkar.gui import (
 )
 from krizovkar.model import (
     CrosswordDocument,
-    CrosswordTemplate,
     LetterCell,
     load_crossword_document,
-    load_crossword_template,
     write_crossword_document,
-    write_crossword_template,
 )
 from krizovkar.renderer import RenderError
 
@@ -384,9 +381,8 @@ class GuiTest(unittest.TestCase):
             "swedish",
         )
 
-        self.assertIsInstance(crossword, CrosswordTemplate)
-        self.assertNotIsInstance(crossword, CrosswordDocument)
-        self.assertEqual("template", crossword.kind)
+        self.assertIsInstance(crossword, CrosswordDocument)
+        self.assertEqual("crossword", crossword.kind)
         self.assertTrue(crossword.slots)
         self.assertTrue(all(slot.answer is None for slot in crossword.slots))
         self.assertTrue(
@@ -530,7 +526,7 @@ class GuiTest(unittest.TestCase):
         self.assertEqual("swedish", _template_generation_layout(swedish))
         self.assertEqual("numbered", _template_generation_layout(numbered))
 
-    def test_filling_template_creates_crossword_document(self) -> None:
+    def test_filling_template_keeps_the_same_crossword_document_kind(self) -> None:
         crossword = create_blank_template(CrosswordSettings(7, 6), "swedish")
 
         filled = fill_crossword_slot(
@@ -757,7 +753,7 @@ class GuiTest(unittest.TestCase):
         application._open_window.assert_called_once_with(template, dirty=True)
         self.assertIs(expected_window, result)
 
-    def test_crossword_progress_does_not_assign_a_global_type(self) -> None:
+    def test_crossword_progress_uses_the_common_document_name(self) -> None:
         window = Mock()
         window._crossword = create_blank_template(
             CrosswordSettings(3, 3),
@@ -768,7 +764,7 @@ class GuiTest(unittest.TestCase):
         CrosswordDocumentWindow._refresh_crossword_view(window)
 
         message = window.progress_value.set.call_args.args[0]
-        self.assertTrue(message.startswith("Šablona 3 × 3. "))
+        self.assertTrue(message.startswith("Křížovka 3 × 3. "))
         self.assertNotIn("švéd", message)
         self.assertNotIn("číslovan", message)
         window._refresh_crossword_preview.assert_called_once_with()
@@ -833,13 +829,13 @@ class GuiTest(unittest.TestCase):
         application.root.deiconify.assert_not_called()
         application.root.lift.assert_not_called()
 
-    def test_application_opens_template_in_new_document_window(self) -> None:
+    def test_application_opens_crossword_used_as_template(self) -> None:
         application = Mock()
         parent = Mock()
         crossword = create_blank_template(CrosswordSettings(3, 3), "numbered")
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "sablona.yaml"
-            write_crossword_template(crossword, source)
+            write_crossword_document(crossword, source)
 
             result = CrosswordApplication.open_document(
                 application,
@@ -879,7 +875,7 @@ class GuiTest(unittest.TestCase):
             parent=parent,
         )
 
-    def test_crossword_window_writes_template_document_kind(self) -> None:
+    def test_crossword_window_writes_template_as_crossword_document(self) -> None:
         window = Mock()
         crossword = create_blank_template(CrosswordSettings(3, 3), "numbered")
         window._document.return_value = crossword
@@ -892,7 +888,7 @@ class GuiTest(unittest.TestCase):
                 overwrite=False,
             )
 
-            self.assertEqual(crossword, load_crossword_template(output))
+            self.assertEqual(crossword, load_crossword_document(output))
 
         self.assertTrue(saved)
         self.assertEqual(output, window._path)
@@ -964,7 +960,7 @@ class GuiTest(unittest.TestCase):
         solution = Mock()
         application._complete_grid_or_error.return_value = solution
 
-        with patch("krizovkar.gui.create_grid_from_template") as create_grid:
+        with patch("krizovkar.gui.create_grid_from_crossword") as create_grid:
             CrosswordDocumentWindow.save_crossword_pdf(application)
             CrosswordDocumentWindow.save_solution_pdf(application)
 
@@ -1106,8 +1102,8 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                call(4, label="Uložit šablonu"),
-                call(5, label="Uložit šablonu jako…"),
+                call(4, label="Uložit křížovku"),
+                call(5, label="Uložit křížovku jako…"),
             ],
             application.file_menu.entryconfigure.call_args_list,
         )

@@ -2,20 +2,18 @@
 
 Křížovkář ukládá data jako textové dokumenty v YAML 1.2. Model je nezávislý na budoucím editoru, aby stejné soubory mohly používat různé nástroje.
 
-Existují čtyři samostatné druhy dokumentů:
+Existují tři samostatné druhy dokumentů:
 
 - zadání `specification` popisuje, co se má do křížovky vložit,
-- vygenerovaná šablona `template` popisuje role buněk a místa pro budoucí
-  hesla,
-- editovatelná křížovka `crossword` vzniká ručním nebo automatickým
-  vyplňováním šablony,
+- editovatelná křížovka `crossword` popisuje role buněk, místa pro hesla a
+  jejich případně doplněný obsah; v libovolném stavu může sloužit jako šablona,
 - cílová mřížka `grid` popisuje konkrétní role buněk a volitelně jejich obsah.
 
 ```text
-umístěné specification + volba rozvržení → template
-rozměr + volba rozvržení → generování → template
-template + ruční doplňování → crossword → grid → LaTeX → PDF
-template nebo crossword + slovník → plnění → crossword → grid → LaTeX → PDF
+umístěné specification + volba rozvržení → generování šablony → crossword
+rozměr + volba rozvržení → generování šablony → crossword
+crossword + ruční doplňování → crossword → grid → LaTeX → PDF
+crossword + slovník → plnění → crossword → grid → LaTeX → PDF
 ```
 
 LaTeXový zdroj není dalším druhem YAML dokumentu a nemá položku `kind`.
@@ -24,19 +22,22 @@ do PDF.
 
 Každý druh má vlastní JSON Schema a vlastní Pythonový loader. Dokument proto vždy obsahuje povinnou položku `kind`; nástroj nemusí jeho význam odhadovat z ostatních položek.
 
-Položka `kind` rozlišuje fázi dat, nikoli švédskou, čárkovanou nebo jinou podobu křížovky. Všechny používají stejné zadání i stejný model cílové mřížky. Způsob uvedení legendy je vlastnost konkrétního rozložení a jednotlivá hesla v jedné mřížce mohou používat různé způsoby.
+Položka `kind` rozlišuje strukturu a účel dokumentu, nikoli míru vyplnění ani
+švédskou, čárkovanou nebo jinou podobu křížovky. Všechny používají stejné
+zadání i stejný model cílové mřížky. Způsob uvedení legendy je vlastnost
+konkrétního rozložení a jednotlivá hesla v jedné mřížce mohou používat různé
+způsoby.
 
-## Šablona a editovatelná křížovka, verze 1
+## Editovatelná křížovka, verze 1
 
-Šablona `kind: template` a křížovka `kind: crossword` sdílejí strukturu.
-Generátor vždy vrací šablonu; první ruční doplnění nebo příkaz `fill` z ní
-vytvoří křížovku. Křížovka může zůstat rozpracovaná nebo být hotová a
-lze ji později znovu doplňovat. Hustá nevyplněná šablona obsah odpovědí
-nezná:
+Dokument `kind: crossword` může být prázdný, rozpracovaný nebo hotový. Míra
+vyplnění není součástí jeho typu: nevyplněná i částečně vyplněná křížovka
+může sloužit jako šablona a hotová křížovka pouze nemá žádné zbývající místo
+k doplnění. Hustá nevyplněná křížovka obsah odpovědí nezná:
 
 ```yaml
 format: krizovkar
-kind: template
+kind: crossword
 version: 1
 grid:
   width: 3
@@ -61,8 +62,8 @@ Každý `slot` popisuje jedno budoucí heslo. Povinné `id` je v dokumentu jedin
 
 Volitelná souřadnice `legend` označuje vepsanou legendovou buňku. Musí ležet bezprostředně vlevo od vodorovného slotu nebo nad svislým slotem. Její vynechání znamená budoucí vnější legendu, takže stejný model podporuje švédské, klasické i smíšené rozložení.
 
-Šablona převedená ze zadání může slotu přidat společně položky
-`answer` a `clue`. Jde o pevnou odpověď a její legendu; musí být uvedené obě
+Křížovka převedená ze zadání může slotu přidat společně položky
+`answer` a `clue`. Jde o doplněnou odpověď a její legendu; musí být uvedené obě
 nebo ani jedna a počet písmenných polí `answer` musí odpovídat `length`.
 Volitelné `in_help: true` zařadí odpověď do jediné buňky `type: help`.
 Křížící se odpovědi musí mít na společném poli stejné písmeno. Ucelený
@@ -127,7 +128,7 @@ nepřekrývající sloty a u známého textu ukládá výsledné `word_count`.
 Prohledává seřazené varianty délek 3 až 8 a vybere první, která obsahuje
 všechny požadované délky a dovolí jejich umístění.
 
-Příkaz `fill` přijímá libovolnou platnou šablonu nebo křížovku a slovník. Doplněné
+Příkaz `fill` přijímá libovolnou platnou křížovku a slovník. Doplněné
 sloty použije jako počáteční omezení. Pomocí zpětného prohledávání přiřadí
 každému zbývajícímu běžnému slotu jiné heslo správné délky a průběžně
 omezuje kandidáty podle již známých písmen na kříženích. Tajenkové sloty
@@ -137,12 +138,13 @@ rezervovanou tajenku musí doplnit konkrétní text; není-li v dokumentu
 rezervace, `fill` vhodné sloty automaticky vybere. Rozdělení je přípustné
 jen tehdy, pokud každá část končí na hranici slova.
 
-Výsledkem `fill` je vždy dokument `kind: crossword`; každému vyplněnému
-slotu přibude `answer` a `clue`. Rozvržení, tajenky a pomůcka zůstanou
-editovatelné a celou křížovku lze znovu použít jako základ. Seed určuje
-pořadí kandidátů a zachovává opakovatelnost výsledku.
+Vstupem i výsledkem `fill` je dokument `kind: crossword`; každému nově
+vyplněnému slotu přibude `answer` a `clue`. Rozvržení, tajenky a pomůcka
+zůstanou editovatelné a celou křížovku lze znovu použít jako šablonu. U hotové
+křížovky není co doplnit. Seed určuje pořadí kandidátů a zachovává
+opakovatelnost výsledku.
 
-Příkaz `grid` převádí platnou šablonu nebo křížovku na cílovou mřížku bez slovníku. Role
+Příkaz `grid` převádí platnou křížovku na cílovou mřížku bez slovníku. Role
 `letter`, `legend`, `help` a `empty` zachová, u číslovaných slotů doplní čísla
 začátků a silné mezislovní předěly a připravené tajenky převede na buňky
 `secret`. Přenese také jejich zobáčky a `prompt`. Nevyplněné sloty zůstanou
@@ -153,8 +155,7 @@ na číslovaná hesla s vnějšími legendami. Společný začátek vodorovného
 a svislého slotu sdílí jedno číslo. Samotná `secrets.words` u slotu bez
 pevného `answer` se při tomto
 převodu dál nezveřejňují. Příkazy `latex` a `render` umějí stejný převod
-provést automaticky, dostanou-li přímo `kind: template` nebo
-`kind: crossword`. První z
+provést automaticky, dostanou-li přímo `kind: crossword`. První z
 nich vypíše upravitelný LaTeX, druhý stejný zdroj přeloží LuaLaTeXem do PDF.
 
 ## Cílová mřížka, verze 1
@@ -315,8 +316,8 @@ Nemá položku `value` ani `texts`. Renderer před seznam vloží tučný nadpis
 ## Zadání, verze 1
 
 Zadání je zdrojový dokument, který popisuje rozměr mřížky a umístěná
-slova. Příkaz `template` z něj vytvoří šablonu, kterou lze
-převést na cílový dokument `grid`:
+slova. Příkaz `template` z něj vytvoří křížovku použitelnou jako šablona,
+kterou lze převést na cílový dokument `grid`:
 
 ```yaml
 format: krizovkar
@@ -354,8 +355,8 @@ Tento popis hesla je společný pro švédské i čárkované rozložení.
 legendové buňky, nebo jako číselná legenda mimo mřížku. Legendové buňky
 však zabírají souřadnice, a proto může stejné zadání vyhovět rozměru
 čárkované mřížky, ale po vložení vepsaných legend už nevyhovět rozměru
-švédské mřížky. Tuto platnost posoudí zvolené `--layout` při převodu na
-`template`.
+švédské mřížky. Tuto platnost posoudí zvolené `--layout` při převodu
+příkazem `template`.
 
 Souřadnice používají `row` a `column`, počítají se od 1 a jejich počátek leží v levém horním rohu. Řádky rostou směrem dolů a sloupce doprava. Slova se mohou křížit pouze tehdy, mají-li na společné souřadnici stejné písmeno.
 
@@ -461,17 +462,16 @@ Blok `help` je platný jen tehdy, když má alespoň jedno slovo `in_help: true`
 
 Loader již ověřuje rozměry, rozsah běžných i tajenkových slov, shodu
 písmen na kříženích, obsazenost vybraných tajenkových polí a základní platnost
-výslovné polohy pomůcky. Převod `specification → template` navíc odmítne
+výslovné polohy pomůcky. Převod `specification → crossword` navíc odmítne
 překryv dvou slotů ve stejném směru, kolizi legendy a písmene nebo pomůcky a
-jiné buňky. Příkazy `latex` a `render` přijímají `grid`, `template` nebo
-`crossword`; zadání lze převést rourou `template ZADÁNÍ.yaml | latex -` nebo rovnou
+jiné buňky. Příkazy `latex` a `render` přijímají `grid` nebo `crossword`;
+zadání lze převést rourou `template ZADÁNÍ.yaml | latex -` nebo rovnou
 sestavit jako PDF pomocí `template ZADÁNÍ.yaml | render -`.
 
 ## Validace
 
 Strojová pravidla jsou v samostatných schématech pro
 [cílovou mřížku](../src/krizovkar/schemas/grid-v1.schema.json),
-[šablonu](../src/krizovkar/schemas/template-v1.schema.json),
 [editovatelnou křížovku](../src/krizovkar/schemas/crossword-v1.schema.json) a
 [zadání](../src/krizovkar/schemas/specification-v1.schema.json). Schémata
 odmítají neznámé a chybně napsané položky i nulové, záporné nebo neceločíselné

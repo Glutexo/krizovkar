@@ -34,7 +34,6 @@ from krizovkar.model import (
     load_crossword_document,
     load_crossword_grid,
     load_crossword_specification,
-    load_crossword_template,
     secret_path_arrows,
     write_crossword_grid,
 )
@@ -1511,13 +1510,13 @@ class CommandTest(unittest.TestCase):
 
         self.assertEqual(0, result)
         self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
-        self.assertIn("kind: template\n", stdout.getvalue())
+        self.assertIn("kind: crossword\n", stdout.getvalue())
         self.assertNotIn("Šablona vygenerována", stdout.getvalue())
         self.assertIn("Šablona vygenerována: standardní výstup", stderr.getvalue())
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "template.yaml"
             source.write_text(stdout.getvalue(), encoding="utf-8")
-            template = load_crossword_template(source)
+            template = load_crossword_document(source)
             self.assertEqual(5, template.grid.width)
             self.assertEqual(5, template.grid.height)
 
@@ -1536,7 +1535,7 @@ class CommandTest(unittest.TestCase):
             )
 
         self.assertEqual(0, result)
-        template = load_crossword_template(io.StringIO(stdout.getvalue()))
+        template = load_crossword_document(io.StringIO(stdout.getvalue()))
         self.assertEqual(("LABE", "LES", "EMU"), tuple(
             slot.answer for slot in template.slots
         ))
@@ -1560,7 +1559,7 @@ class CommandTest(unittest.TestCase):
             result = main(["template", "-", "--layout", "numbered"])
 
         self.assertEqual(0, result)
-        template = load_crossword_template(io.StringIO(stdout.getvalue()))
+        template = load_crossword_document(io.StringIO(stdout.getvalue()))
         self.assertEqual("ZELENÍ", template.slots[0].answer)
         self.assertIsNone(template.slots[0].legend_position)
         self.assertIn("standardní výstup", stderr.getvalue())
@@ -1703,7 +1702,7 @@ class CommandTest(unittest.TestCase):
 
         self.assertEqual(2, result)
         self.assertIn(
-            "zároveň pro šablonu nebo křížovku a slovník",
+            "zároveň pro křížovku a slovník",
             stderr.getvalue(),
         )
 
@@ -1770,7 +1769,7 @@ class CommandTest(unittest.TestCase):
                 )
 
             self.assertEqual(0, result)
-            template = load_crossword_template(output)
+            template = load_crossword_document(output)
             self.assertEqual(1, len(template.secrets))
             self.assertEqual(("ABCD",), template.secrets[0].words)
             self.assertEqual(1, template.secrets[0].parts[0].word_count)
@@ -1917,7 +1916,7 @@ class CommandTest(unittest.TestCase):
 
             self.assertEqual(0, result)
             self.assertIn("Šablona vygenerována:", stdout.getvalue())
-            template = load_crossword_template(output)
+            template = load_crossword_document(output)
             self.assertEqual(9, template.grid.width)
             self.assertEqual(9, template.grid.height)
             self.assertEqual(28, len(template.slots))
@@ -1954,7 +1953,7 @@ class CommandTest(unittest.TestCase):
                 )
 
             self.assertEqual(0, result)
-            template = load_crossword_template(output)
+            template = load_crossword_document(output)
             self.assertEqual(28, len(template.slots))
             self.assertTrue(
                 all(

@@ -33,7 +33,6 @@ from krizovkar.model import (
     CrosswordSecretCellsPart,
     CrosswordSecretSlotPart,
     CrosswordSpecification,
-    CrosswordTemplate,
     EmptyCell,
     EmptyCellRole,
     ExternalClue,
@@ -53,7 +52,6 @@ from krizovkar.model import (
     SecretWord,
     WordDirection,
     WordSlot,
-    create_crossword_document,
     secret_path_arrows,
 )
 
@@ -201,7 +199,7 @@ def create_template_from_specification(
     specification: CrosswordSpecification,
     *,
     layout: SpecificationLayout = "swedish",
-) -> CrosswordTemplate:
+) -> CrosswordDocument:
     """Rozvrhne umístěné zadání do šablony křížovky."""
 
     if layout not in {"swedish", "numbered"}:
@@ -427,9 +425,9 @@ def create_template_from_specification(
             )
         )
 
-    return CrosswordTemplate(
+    return CrosswordDocument(
         format_name="krizovkar",
-        kind="template",
+        kind="crossword",
         version=1,
         grid=CrosswordLayout(
             width=width,
@@ -447,7 +445,7 @@ def generate_swedish_template(
     height: int = DEFAULT_GRID_HEIGHT,
     seed: int = DEFAULT_SEED,
     secret: SecretRequirement | None = None,
-) -> CrosswordTemplate:
+) -> CrosswordDocument:
     """Vytvoří nevyplněnou šablonu s vepsanými legendami."""
 
     if secret is None:
@@ -492,7 +490,7 @@ def generate_numbered_template(
     height: int = DEFAULT_GRID_HEIGHT,
     seed: int = DEFAULT_SEED,
     secret: SecretRequirement | None = None,
-) -> CrosswordTemplate:
+) -> CrosswordDocument:
     """Vytvoří nevyplněnou šablonu s vnějšími legendami."""
 
     if secret is None:
@@ -531,7 +529,7 @@ def generate_numbered_template(
     )
 
 
-def _swedish_template_from_layout(layout: SwedishLayout) -> CrosswordTemplate:
+def _swedish_template_from_layout(layout: SwedishLayout) -> CrosswordDocument:
 
     cells = []
     for row in range(layout.height):
@@ -589,9 +587,9 @@ def _swedish_template_from_layout(layout: SwedishLayout) -> CrosswordTemplate:
                 )
                 vertical_number += 1
 
-    return CrosswordTemplate(
+    return CrosswordDocument(
         format_name="krizovkar",
-        kind="template",
+        kind="crossword",
         version=1,
         grid=CrosswordLayout(
             width=layout.width,
@@ -604,7 +602,7 @@ def _swedish_template_from_layout(layout: SwedishLayout) -> CrosswordTemplate:
 
 def _numbered_template_from_layout(
     layout: NumberedLayout,
-) -> CrosswordTemplate:
+) -> CrosswordDocument:
     cells = tuple(
         tuple(LetterCellRole() for _ in range(layout.width))
         for _ in range(layout.height)
@@ -643,9 +641,9 @@ def _numbered_template_from_layout(
             )
             vertical_number += 1
 
-    return CrosswordTemplate(
+    return CrosswordDocument(
         format_name="krizovkar",
-        kind="template",
+        kind="crossword",
         version=1,
         grid=CrosswordLayout(
             width=layout.width,
@@ -849,11 +847,11 @@ def _select_slots_for_total_length(
 
 
 def place_secret_in_template(
-    template: CrosswordTemplate,
+    template: CrosswordDocument,
     requirement: SecretRequirement,
     *,
     seed: int = DEFAULT_SEED,
-) -> CrosswordTemplate:
+) -> CrosswordDocument:
     """Rezervuje v šabloně nepřekrývající se sloty pro tajenku."""
 
     if template.secrets:
@@ -927,10 +925,10 @@ def _word_counts_for_exact_lengths(
 
 
 def _resolve_crossword_secrets(
-    crossword: CrosswordTemplate,
+    crossword: CrosswordDocument,
     requirement: SecretRequirement | None,
     seed: int,
-) -> CrosswordTemplate:
+) -> CrosswordDocument:
     unknown_indices = tuple(
         index
         for index, secret in enumerate(crossword.secrets)
@@ -1019,7 +1017,7 @@ def _resolve_crossword_secrets(
 
 
 def _secret_assignments(
-    crossword: CrosswordTemplate,
+    crossword: CrosswordDocument,
 ) -> dict[str, _Entry]:
     assignments: dict[str, _Entry] = {}
     for secret in crossword.secrets:
@@ -1048,7 +1046,7 @@ def _secret_assignments(
 
 
 def _fixed_crossword_assignments(
-    crossword: CrosswordTemplate,
+    crossword: CrosswordDocument,
 ) -> dict[str, _Entry]:
     return {
         slot.identifier: _Entry(
@@ -1062,7 +1060,7 @@ def _fixed_crossword_assignments(
 
 
 def _fill_crossword_slots(
-    crossword: CrosswordTemplate,
+    crossword: CrosswordDocument,
     entries_by_length: dict[int, tuple[_Entry, ...]],
     randomizer: random.Random,
     fixed_assignments: dict[str, _Entry] | None = None,
@@ -1160,7 +1158,7 @@ def _fill_crossword_slots(
 
 
 def _crossword_grid_annotations(
-    crossword: CrosswordTemplate,
+    crossword: CrosswordDocument,
 ) -> tuple[dict[GridCoordinate, int], dict[GridCoordinate, set[str]]]:
     external_starts = sorted(
         {
@@ -1211,7 +1209,7 @@ def _crossword_grid_annotations(
 
 
 def _crossword_secret_metadata(
-    crossword: CrosswordTemplate,
+    crossword: CrosswordDocument,
 ) -> tuple[
     frozenset[GridCoordinate],
     dict[GridCoordinate, SecretArrow],
@@ -1250,7 +1248,7 @@ def _crossword_secret_metadata(
 
 
 def _crossword_grid_from_assignments(
-    crossword: CrosswordTemplate,
+    crossword: CrosswordDocument,
     assignments: dict[str, _Entry],
 ) -> CrosswordGrid:
     letters: dict[GridCoordinate, str] = {}
@@ -1369,29 +1367,23 @@ def _crossword_grid_from_assignments(
     )
 
 
-def create_grid_from_template(template: CrosswordTemplate) -> CrosswordGrid:
-    """Převede šablonu na cílovou mřížku bez použití slovníku."""
+def create_grid_from_crossword(crossword: CrosswordDocument) -> CrosswordGrid:
+    """Převede prázdnou, rozpracovanou nebo hotovou křížovku na mřížku."""
 
     return _crossword_grid_from_assignments(
-        template,
-        _fixed_crossword_assignments(template),
+        crossword,
+        _fixed_crossword_assignments(crossword),
     )
 
 
-def create_grid_from_crossword(crossword: CrosswordDocument) -> CrosswordGrid:
-    """Převede editovatelnou křížovku na cílovou mřížku."""
-
-    return create_grid_from_template(crossword)
-
-
 def fill_crossword(
-    crossword: CrosswordTemplate,
+    crossword: CrosswordDocument,
     dictionary: CrosswordDictionary,
     *,
     seed: int = DEFAULT_SEED,
     secret: SecretRequirement | None = None,
 ) -> CrosswordDocument:
-    """Vyplní šablonu nebo rozpracovanou křížovku ze slovníku."""
+    """Doplní ze slovníku všechna prázdná místa křížovky."""
 
     crossword = _resolve_crossword_secrets(crossword, secret, seed)
     secret_assignments = _secret_assignments(crossword)
@@ -1428,17 +1420,15 @@ def fill_crossword(
                 random.Random(attempt_seed),
                 fixed_assignments,
             )
-            return create_crossword_document(
-                replace(
-                    crossword,
-                    slots=tuple(
-                        replace(
-                            slot,
-                            answer=assignments[slot.identifier].answer,
-                            clue=assignments[slot.identifier].clue,
-                        )
-                        for slot in crossword.slots
+            return replace(
+                crossword,
+                slots=tuple(
+                    replace(
+                        slot,
+                        answer=assignments[slot.identifier].answer,
+                        clue=assignments[slot.identifier].clue,
                     )
+                    for slot in crossword.slots
                 )
             )
         except _SearchFailed:

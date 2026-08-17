@@ -20,7 +20,6 @@ from krizovkar.generator import (
     GenerationError,
     SpecificationLayout,
     create_grid_from_crossword,
-    create_grid_from_template,
     generate_numbered_template,
     generate_swedish_template,
 )
@@ -29,7 +28,6 @@ from krizovkar.model import (
     Coordinate,
     CrosswordDocument,
     CrosswordGrid,
-    CrosswordTemplate,
     EmptyCell,
     HelpCell,
     LegendCell,
@@ -37,13 +35,9 @@ from krizovkar.model import (
     ModelError,
     SecretCell,
     WordSlot,
-    create_crossword_document,
     dump_crossword_document,
     load_crossword_document,
-    load_crossword_document_kind,
-    load_crossword_template,
     write_crossword_document,
-    write_crossword_template,
 )
 from krizovkar.renderer import (
     DEFAULT_PAGE_FORMAT,
@@ -329,7 +323,7 @@ def parse_crossword_settings(width: str, height: str) -> CrosswordSettings:
 def create_blank_template(
     settings: CrosswordSettings,
     layout: SpecificationLayout,
-) -> CrosswordTemplate:
+) -> CrosswordDocument:
     """Vygeneruje hustou prázdnou šablonu z rozvržení a rozměru."""
 
     if layout not in {"swedish", "numbered"}:
@@ -386,7 +380,7 @@ def slot_coordinates(slot: WordSlot) -> tuple[Coordinate, ...]:
 
 
 def _crossword_slot(
-    crossword: CrosswordTemplate,
+    crossword: CrosswordDocument,
     identifier: str,
 ) -> tuple[int, WordSlot]:
     for index, slot in enumerate(crossword.slots):
@@ -396,7 +390,7 @@ def _crossword_slot(
 
 
 def fill_crossword_slot(
-    crossword: CrosswordTemplate,
+    crossword: CrosswordDocument,
     identifier: str,
     answer: str,
     clue: str,
@@ -444,9 +438,7 @@ def fill_crossword_slot(
         answer=normalized_answer,
         clue=normalized_clue,
     )
-    result = create_crossword_document(
-        replace(crossword, slots=tuple(slots))
-    )
+    result = replace(crossword, slots=tuple(slots))
     try:
         dump_crossword_document(result, StringIO())
     except ModelError as error:
@@ -455,9 +447,9 @@ def fill_crossword_slot(
 
 
 def clear_crossword_slot(
-    crossword: CrosswordTemplate,
+    crossword: CrosswordDocument,
     identifier: str,
-) -> CrosswordTemplate:
+) -> CrosswordDocument:
     """Odstraní ručně zadaný obsah jednoho slotu dokumentu."""
 
     slot_index, slot = _crossword_slot(crossword, identifier)
@@ -472,7 +464,7 @@ def clear_crossword_slot(
 
 
 def crossword_slot_pattern(
-    crossword: CrosswordTemplate,
+    crossword: CrosswordDocument,
     identifier: str,
 ) -> tuple[str | None, ...]:
     """Vrátí písmena známá z ostatních hesel křížících vybraný slot."""
@@ -492,7 +484,7 @@ def crossword_slot_pattern(
     )
 
 
-def crossword_is_complete(crossword: CrosswordTemplate) -> bool:
+def crossword_is_complete(crossword: CrosswordDocument) -> bool:
     """Určí, zda mají všechny sloty odpověď i nápovědu."""
 
     return all(
@@ -502,7 +494,7 @@ def crossword_is_complete(crossword: CrosswordTemplate) -> bool:
 
 
 def _template_generation_layout(
-    document: CrosswordTemplate,
+    document: CrosswordDocument,
 ) -> SpecificationLayout:
     """Určí rozvržení pro nové vygenerování šablony."""
 
@@ -813,27 +805,16 @@ class ScrollablePanel(ttk.Frame):
 
 def load_editable_document(
     source: str | Path,
-) -> CrosswordTemplate:
-    """Načte editovatelnou šablonu nebo křížovku."""
+) -> CrosswordDocument:
+    """Načte prázdnou, rozpracovanou nebo hotovou křížovku."""
 
-    kind = load_crossword_document_kind(source)
-    if kind == "template":
-        return load_crossword_template(source)
-    if kind == "crossword":
-        return load_crossword_document(source)
-    raise ModelError(
-        "grafické rozhraní otevírá pouze šablonu kind: template nebo "
-        "křížovku kind: crossword; "
-        f"soubor má kind: {kind!r}"
-    )
+    return load_crossword_document(source)
 
 
 def _grid_from_editable_document(
-    document: CrosswordTemplate,
+    document: CrosswordDocument,
 ) -> CrosswordGrid:
-    if isinstance(document, CrosswordDocument):
-        return create_grid_from_crossword(document)
-    return create_grid_from_template(document)
+    return create_grid_from_crossword(document)
 
 
 class CrosswordApplication:
@@ -1015,7 +996,7 @@ class CrosswordApplication:
 
     def _open_window(
         self,
-        document: CrosswordTemplate,
+        document: CrosswordDocument,
         *,
         path: Path | None = None,
         dirty: bool,
@@ -1048,7 +1029,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         root: tk.Toplevel,
         *,
         application: CrosswordApplication,
-        document: CrosswordTemplate,
+        document: CrosswordDocument,
         path: Path | None,
         dirty: bool,
     ) -> None:
@@ -1521,7 +1502,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._rebuild_slot_tree()
         self._refresh_crossword_view()
 
-    def _restore_dimension_values(self, crossword: CrosswordTemplate) -> None:
+    def _restore_dimension_values(self, crossword: CrosswordDocument) -> None:
         self._changing_dimension_values = True
         try:
             self.width_value.set(str(crossword.grid.width))
@@ -1532,16 +1513,13 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _refresh_file_menu(self) -> None:
         crossword = self._crossword
         complete = crossword is not None and crossword_is_complete(crossword)
-        subject = (
-            "šablonu" if crossword.kind == "template" else "křížovku"
-        )
         self.file_menu.entryconfigure(
             self._save_menu_index,
-            label=f"Uložit {subject}",
+            label="Uložit křížovku",
         )
         self.file_menu.entryconfigure(
             self._save_as_menu_index,
-            label=f"Uložit {subject} jako…",
+            label="Uložit křížovku jako…",
         )
         self.export_menu.entryconfigure(
             0,
@@ -1731,10 +1709,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             return
         filled = self._filled_slot_count()
         remaining = len(crossword.slots) - filled
-        subject = "Šablona" if crossword.kind == "template" else "Křížovka"
-        document = (
-            f"{subject} {crossword.grid.width} × {crossword.grid.height}. "
-        )
+        document = f"Křížovka {crossword.grid.width} × {crossword.grid.height}. "
         if remaining:
             self.progress_value.set(
                 document + f"Vyplněno {_word_count_text(filled)} z "
@@ -1887,7 +1862,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         finally:
             self.root.configure(cursor="")
 
-    def _document(self) -> CrosswordTemplate:
+    def _document(self) -> CrosswordDocument:
         return self._crossword
 
     def save_document(self) -> bool:
@@ -1899,16 +1874,9 @@ class CrosswordDocumentWindow(ttk.Frame):
         if self._path is not None:
             initialfile = self._path.name
         else:
-            initialfile = (
-                "sablona.yaml"
-                if self._crossword.kind == "template"
-                else "krizovka.yaml"
-            )
-        subject = (
-            "šablonu" if self._crossword.kind == "template" else "křížovku"
-        )
+            initialfile = "sablona.yaml"
         selected = self._choose_output(
-            title=f"Uložit {subject} jako",
+            title="Uložit křížovku jako",
             initialfile=initialfile,
             extension=".yaml",
             filetypes=(
@@ -1925,18 +1893,11 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _write_document(self, output: Path, *, overwrite: bool) -> bool:
         document = self._document()
         try:
-            if isinstance(document, CrosswordDocument):
-                write_crossword_document(
-                    document,
-                    output,
-                    overwrite=overwrite,
-                )
-            else:
-                write_crossword_template(
-                    document,
-                    output,
-                    overwrite=overwrite,
-                )
+            write_crossword_document(
+                document,
+                output,
+                overwrite=overwrite,
+            )
         except ModelError as error:
             self._show_action_error(
                 "Dokument nelze uložit",
@@ -1962,11 +1923,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         if self._path is not None:
             name = self._path.name
         else:
-            name = (
-                "Nová šablona"
-                if self._crossword.kind == "template"
-                else "Nová křížovka"
-            )
+            name = "Nová šablona"
         marker = "*" if self._dirty else ""
         self.root.title(f"{marker}{name} — Křížovkář")
         if sys.platform == "darwin":

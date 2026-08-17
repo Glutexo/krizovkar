@@ -15,9 +15,7 @@ from krizovkar.model import (
     SecretPrompt,
     dump_crossword_document,
     load_crossword_document,
-    load_crossword_template,
     write_crossword_document,
-    write_crossword_template,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -57,7 +55,7 @@ class CrosswordModelTest(unittest.TestCase):
             self.assertEqual(crossword, load_crossword_document(output))
 
     def test_loads_fixed_template_created_from_specification(self) -> None:
-        template = load_crossword_template(
+        template = load_crossword_document(
             TEMPLATE_FROM_SPECIFICATION_EXAMPLE
         )
 
@@ -73,8 +71,8 @@ class CrosswordModelTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "written.yaml"
-            write_crossword_template(template, output)
-            self.assertEqual(template, load_crossword_template(output))
+            write_crossword_document(template, output)
+            self.assertEqual(template, load_crossword_document(output))
 
     def test_loads_cell_based_secret_part(self) -> None:
         crossword = self._load(
@@ -147,7 +145,7 @@ class CrosswordModelTest(unittest.TestCase):
             self.assertEqual(crossword, load_crossword_document(source))
 
     def test_loads_and_writes_template_with_known_secret(self) -> None:
-        template = load_crossword_template(TEMPLATE_SECRET_EXAMPLE)
+        template = load_crossword_document(TEMPLATE_SECRET_EXAMPLE)
 
         self.assertEqual(1, len(template.secrets))
         secret = template.secrets[0]
@@ -165,8 +163,8 @@ class CrosswordModelTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "secret.yaml"
-            write_crossword_template(template, output)
-            self.assertEqual(template, load_crossword_template(output))
+            write_crossword_document(template, output)
+            self.assertEqual(template, load_crossword_document(output))
 
     def test_accepts_reserved_secret_without_known_words(self) -> None:
         crossword = self._load(
