@@ -20,10 +20,17 @@ from krizovkar.model import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "template-minimal.yaml"
-TEMPLATE_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "template-secret.yaml"
+TEMPLATE_MINIMAL_EXAMPLE = (
+    PROJECT_ROOT / "tests" / "fixtures" / "legacy-template-minimal.yaml"
+)
+TEMPLATE_SECRET_EXAMPLE = (
+    PROJECT_ROOT / "tests" / "fixtures" / "legacy-template-secret.yaml"
+)
 TEMPLATE_FROM_SPECIFICATION_EXAMPLE = (
-    PROJECT_ROOT / "examples" / "template-from-specification.yaml"
+    PROJECT_ROOT
+    / "tests"
+    / "fixtures"
+    / "legacy-template-from-specification.yaml"
 )
 
 

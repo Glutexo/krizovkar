@@ -22,7 +22,9 @@ from krizovkar.model import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CROSSWORD_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "crossword-minimal.yaml"
-TEMPLATE_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "template-minimal.yaml"
+TEMPLATE_MINIMAL_EXAMPLE = (
+    PROJECT_ROOT / "tests" / "fixtures" / "legacy-template-minimal.yaml"
+)
 
 
 class CrosswordDocumentModelTest(unittest.TestCase):
