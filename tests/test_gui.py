@@ -911,7 +911,6 @@ class GuiTest(unittest.TestCase):
     def test_document_window_opens_at_minimum_width(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         window.root = Mock()
-        window._content_row = 0
         window.grid = Mock()
         window.columnconfigure = Mock()
         window.rowconfigure = Mock()
@@ -921,6 +920,7 @@ class GuiTest(unittest.TestCase):
 
         window.root.geometry.assert_called_once_with("600x850")
         window.root.minsize.assert_called_once_with(600, 700)
+        window.rowconfigure.assert_called_once_with(0, weight=1)
         window.root.bind.assert_called_once_with(
             "<FocusIn>",
             window._document_focus_in,
@@ -1683,38 +1683,6 @@ class GuiTest(unittest.TestCase):
             crossword_window.export_menu.add_command.call_args_list,
         )
 
-    def test_toolbar_offers_export_with_tk_on_macos(self) -> None:
-        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
-        window.export_menu = Mock()
-        toolbar = Mock()
-        export_button = Mock()
-
-        with (
-            patch("krizovkar.gui.sys.platform", "darwin"),
-            patch(
-                "krizovkar.gui.ttk.Frame",
-                return_value=toolbar,
-            ) as frame_type,
-            patch(
-                "krizovkar.gui.ttk.Menubutton",
-                return_value=export_button,
-            ) as menubutton_type,
-            patch("krizovkar.gui.ttk.Button") as button_type,
-        ):
-            CrosswordDocumentWindow._build_toolbar(window)
-
-        frame_type.assert_called_once_with(window, padding=(14, 0, 14, 10))
-        toolbar.grid.assert_called_once_with(row=0, column=0, sticky="ew")
-        button_type.assert_not_called()
-        menubutton_type.assert_called_once_with(
-            toolbar,
-            text="Exportovat",
-            menu=window.export_menu,
-        )
-        export_button.pack.assert_called_once_with(side="left", padx=(0, 6))
-        self.assertIs(toolbar, window.toolbar)
-        self.assertEqual({"export": export_button}, window._toolbar_controls)
-
     def test_file_menu_enables_complete_crossword_outputs(self) -> None:
         application = Mock()
         application._save_menu_index = 4
@@ -1737,11 +1705,6 @@ class GuiTest(unittest.TestCase):
             ],
             application.export_menu.entryconfigure.call_args_list,
         )
-        application._configure_toolbar_action.assert_called_once_with(
-            "export",
-            "normal",
-        )
-
     def test_file_menu_disables_incomplete_crossword_outputs(self) -> None:
         application = Mock()
         application._save_menu_index = 4
@@ -1764,11 +1727,6 @@ class GuiTest(unittest.TestCase):
             [call(0, state="normal"), call(1, state="disabled")],
             application.export_menu.entryconfigure.call_args_list,
         )
-        application._configure_toolbar_action.assert_called_once_with(
-            "export",
-            "normal",
-        )
-
     def test_page_format_is_chosen_in_export_dialog_and_remembered(self) -> None:
         window = Mock()
         window._page_format = "A4"

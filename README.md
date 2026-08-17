@@ -82,13 +82,10 @@ deset naposledy otevřených nebo uložených dokumentů. Neexistující soubor
 při pokusu o otevření ze seznamu odstraní; celý seznam smaže volba **Vymazat
 nabídku**.
 
-Panel nástrojů dokumentového okna obsahuje rozbalovací akci **Exportovat**.
-Na všech systémech zůstává nad pracovní plochou. Export nabízí stejné výstupy
-jako podnabídka **Soubor →
-Exportovat** podle právě otevřeného dokumentu. Formát stránky se volí přímo
-v dialogu vybraného exportu; poté naváže systémový dialog pro výběr umístění
-PDF. Tisková podoba bez písmen je dostupná vždy; řešení se zpřístupní po
-vyplnění všech hesel.
+Podnabídka **Soubor → Exportovat** nabízí výstupy podle právě otevřeného
+dokumentu. Formát stránky se volí přímo v dialogu vybraného exportu; poté
+naváže systémový dialog pro výběr umístění PDF. Tisková podoba bez písmen je
+dostupná vždy; řešení se zpřístupní po vyplnění všech hesel.
 
 Hesla s vepsanou legendou mají místo pro nápovědu přímo v předem vytvořené
 mřížce. Hesla s vnější legendou dostanou číslo a nápovědu pod mřížkou. Ruční

@@ -104,21 +104,11 @@ class _KeyboardShortcut:
 
 @dataclass(frozen=True, slots=True)
 class _ExportAction:
-    """Jedna položka exportu sdílená nabídkou a panelem nástrojů."""
+    """Jedna položka nabídky exportu."""
 
     identifier: str
     label: str
     command: Callable[[], None]
-
-
-@dataclass(frozen=True, slots=True)
-class _ToolbarItem:
-    """Přímá nebo rozbalovací položka panelu nástrojů."""
-
-    identifier: str
-    label: str
-    command: Callable[[], None] | None = None
-    menu_actions: tuple[_ExportAction, ...] = ()
 
 
 def _keyboard_shortcut(key: str, *, shift: bool = False) -> _KeyboardShortcut:
@@ -1543,13 +1533,11 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._slot_edit_identifier: str | None = None
         self._slot_answer_editor: ttk.Entry | None = None
         self._slot_clue_editor: ttk.Entry | None = None
-        self._content_row = 1
         self._page_format = DEFAULT_PAGE_FORMAT
 
         self._configure_window()
         self._build_menu()
         self._build_content()
-        self._build_toolbar()
         self._rebuild_slot_tree()
         self._refresh_crossword_view()
         self._update_title()
@@ -1562,7 +1550,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.root.rowconfigure(0, weight=1)
         self.grid(row=0, column=0, sticky="nsew")
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(self._content_row, weight=1)
+        self.rowconfigure(0, weight=1)
         self.root.protocol("WM_DELETE_WINDOW", self.request_close)
         self.root.bind("<FocusIn>", self._document_focus_in, add="+")
 
@@ -1658,40 +1646,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             ),
         )
 
-    def _toolbar_items(self) -> tuple[_ToolbarItem, ...]:
-        return (
-            _ToolbarItem(
-                identifier="export",
-                label="Exportovat",
-                menu_actions=self._export_actions(),
-            ),
-        )
-
-    def _build_toolbar(self) -> None:
-        items = self._toolbar_items()
-        self.toolbar = ttk.Frame(self, padding=(14, 0, 14, 10))
-        self.toolbar.grid(row=0, column=0, sticky="ew")
-        self._toolbar_controls: dict[str, ttk.Widget] = {}
-        for item in items:
-            if item.menu_actions:
-                control = ttk.Menubutton(
-                    self.toolbar,
-                    text=item.label,
-                    menu=self.export_menu,
-                )
-            else:
-                assert item.command is not None
-                control = ttk.Button(
-                    self.toolbar,
-                    text=item.label,
-                    command=item.command,
-                )
-            control.pack(side="left", padx=(0, 6))
-            self._toolbar_controls[item.identifier] = control
-
-    def _configure_toolbar_action(self, identifier: str, state: str) -> None:
-        self._toolbar_controls[identifier].configure(state=state)
-
     def _refresh_recent_documents_menu(self) -> None:
         self.recent_documents_menu.delete(0, "end")
         paths = self.application.recent_document_paths
@@ -1732,7 +1686,7 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _build_content(self) -> None:
         document_frame = ttk.Frame(self, padding=14)
         document_frame.grid(
-            row=self._content_row,
+            row=0,
             column=0,
             sticky="nsew",
         )
@@ -1871,7 +1825,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             1,
             state="normal" if complete else "disabled",
         )
-        self._configure_toolbar_action("export", "normal")
 
     def _slot_label(self, selected: WordSlot) -> str:
         assert self._crossword is not None
