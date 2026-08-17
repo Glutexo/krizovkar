@@ -783,8 +783,8 @@ class GuiTest(unittest.TestCase):
 
         window._configure_window()
 
-        window.root.geometry.assert_called_once_with("900x850")
-        window.root.minsize.assert_called_once_with(900, 700)
+        window.root.geometry.assert_called_once_with("840x850")
+        window.root.minsize.assert_called_once_with(840, 700)
 
     def test_dimension_input_rejects_values_outside_layout_range(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
