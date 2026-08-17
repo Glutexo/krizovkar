@@ -55,13 +55,6 @@ _GRID_RESIZE_HIT_RADIUS = 7
 _GRID_RESIZE_HANDLE_RADIUS = 3
 _GRID_RESIZE_FEEDBACK_TAG = "grid-resize-feedback"
 _WINDOW_MENU_SELECTION_VARIABLE = "krizovkar_active_window"
-_SOURCE_WINDOW_NAME = "source"
-_MACOS_UTILITY_WINDOW_STYLE = (
-    "titled",
-    "closable",
-    "resizable",
-    "utility",
-)
 _PROJECT_REPOSITORY_URL = "https://github.com/Glutexo/krizovkar"
 _DIRECTION_LABELS = {
     "horizontal": "Vodorovně",
@@ -260,44 +253,6 @@ def _add_source_window_menu_item(
         options["command"] = command
     menu.add_command(**options)
     menu.add_separator()
-
-
-def _configure_utility_window(window: tk.Toplevel) -> None:
-    """Požádá systém o dekoraci interaktivního nástrojového okna."""
-
-    try:
-        if sys.platform == "win32":
-            window.attributes("-toolwindow", True)
-        elif sys.platform != "darwin":
-            window.attributes("-type", "utility")
-    except tk.TclError:
-        # Některé správce oken zvláštní dekorace nepodporují.
-        pass
-
-
-def _create_utility_window(parent: tk.Misc) -> tk.Toplevel:
-    """Vytvoří aktivovatelné nástrojové okno dané platformy."""
-
-    if sys.platform == "darwin":
-        parent_path = str(parent)
-        separator = "" if parent_path == "." else "."
-        window_path = f"{parent_path}{separator}{_SOURCE_WINDOW_NAME}"
-        # Tk 9 musí třídu nativního okna uložit ještě před vytvořením
-        # Toplevel. Styl záměrně neobsahuje neaktivující panel.
-        parent.tk.call(
-            "wm",
-            "attributes",
-            window_path,
-            "-class",
-            "nspanel",
-        )
-        window = tk.Toplevel(parent, name=_SOURCE_WINDOW_NAME)
-        window.attributes(stylemask=_MACOS_UTILITY_WINDOW_STYLE)
-        return window
-
-    window = tk.Toplevel(parent)
-    _configure_utility_window(window)
-    return window
 
 
 def _create_help_menu(parent: tk.Menu) -> tk.Menu:
@@ -1136,7 +1091,7 @@ class _ReadOnlyText(tk.Text):
 
 
 class CrosswordSourceWindow(ttk.Frame):
-    """Nástrojové okno s YAML podobou právě aktivního dokumentu."""
+    """Samostatné okno s YAML podobou právě aktivního dokumentu."""
 
     def __init__(self, root: tk.Toplevel) -> None:
         super().__init__(root, padding=8)
@@ -1193,7 +1148,6 @@ class CrosswordSourceWindow(ttk.Frame):
         dump_crossword_document(window._document(), output)
 
         self._document_window = window
-        self.root.transient(window.root)
         label = _document_window_label(window._path, window._dirty)
         self.root.title(f"Zdroj YAML — {label}")
         self.source_text.replace_content(output.getvalue())
@@ -1359,7 +1313,7 @@ class CrosswordApplication:
             return None
         self._active_window = target
         if self._source_window is None:
-            source_root = _create_utility_window(self.root)
+            source_root = tk.Toplevel(self.root)
             self._source_window = CrosswordSourceWindow(source_root)
         self._source_window.show_document(target, reveal=True)
         return self._source_window

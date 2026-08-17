@@ -23,9 +23,7 @@ from krizovkar.gui import (
     GuiInputError,
     _add_source_window_menu_item,
     _configure_tk_runtime,
-    _configure_utility_window,
     _create_help_menu,
-    _create_utility_window,
     _create_window_menu,
     _keyboard_shortcut,
     _ReadOnlyText,
@@ -338,77 +336,6 @@ class GuiTest(unittest.TestCase):
             "https://github.com/Glutexo/krizovkar"
         )
 
-    def test_macos_source_window_is_activating_utility_panel(self) -> None:
-        parent = Mock()
-        parent.__str__ = Mock(return_value=".")
-        window = Mock()
-
-        with (
-            patch("krizovkar.gui.sys.platform", "darwin"),
-            patch("krizovkar.gui.tk.Toplevel", return_value=window) as toplevel,
-        ):
-            created = _create_utility_window(parent)
-
-        parent.tk.call.assert_called_once_with(
-            "wm",
-            "attributes",
-            ".source",
-            "-class",
-            "nspanel",
-        )
-        toplevel.assert_called_once_with(parent, name="source")
-        window.attributes.assert_called_once_with(
-            stylemask=("titled", "closable", "resizable", "utility")
-        )
-        self.assertIs(window, created)
-
-    def test_macos_source_window_builds_child_path_for_non_root_parent(self) -> None:
-        parent = Mock()
-        parent.__str__ = Mock(return_value=".application")
-
-        with (
-            patch("krizovkar.gui.sys.platform", "darwin"),
-            patch("krizovkar.gui.tk.Toplevel", return_value=Mock()),
-        ):
-            _create_utility_window(parent)
-
-        parent.tk.call.assert_called_once_with(
-            "wm",
-            "attributes",
-            ".application.source",
-            "-class",
-            "nspanel",
-        )
-
-    def test_source_window_uses_platform_tool_decoration(self) -> None:
-        window = Mock()
-
-        with patch("krizovkar.gui.sys.platform", "win32"):
-            _configure_utility_window(window)
-
-        window.attributes.assert_called_once_with("-toolwindow", True)
-
-        window.reset_mock()
-        with patch("krizovkar.gui.sys.platform", "linux"):
-            _configure_utility_window(window)
-
-        window.attributes.assert_called_once_with("-type", "utility")
-
-    def test_other_platforms_create_configured_utility_window(self) -> None:
-        parent = Mock()
-        window = Mock()
-
-        with (
-            patch("krizovkar.gui.sys.platform", "linux"),
-            patch("krizovkar.gui.tk.Toplevel", return_value=window) as toplevel,
-            patch("krizovkar.gui._configure_utility_window") as configure,
-        ):
-            created = _create_utility_window(parent)
-
-        toplevel.assert_called_once_with(parent)
-        configure.assert_called_once_with(window)
-        self.assertIs(window, created)
-
     def test_source_window_shows_read_only_yaml_for_document(self) -> None:
         source_window = CrosswordSourceWindow.__new__(CrosswordSourceWindow)
         source_window.root = Mock()
@@ -425,7 +352,7 @@ class GuiTest(unittest.TestCase):
 
         source_window.show_document(document_window, reveal=True)
 
-        source_window.root.transient.assert_called_once_with(document_window.root)
+        source_window.root.transient.assert_not_called()
         source_window.root.title.assert_called_once_with(
             "Zdroj YAML — *krizovka.yaml"
         )
@@ -1372,9 +1299,9 @@ class GuiTest(unittest.TestCase):
 
         with (
             patch(
-                "krizovkar.gui._create_utility_window",
+                "krizovkar.gui.tk.Toplevel",
                 return_value=source_root,
-            ) as create_utility_window,
+            ) as toplevel,
             patch(
                 "krizovkar.gui.CrosswordSourceWindow",
                 return_value=source_window,
@@ -1383,7 +1310,7 @@ class GuiTest(unittest.TestCase):
             first_result = application.show_source_window(document_window)
             second_result = application.show_source_window(document_window)
 
-        create_utility_window.assert_called_once_with(application.root)
+        toplevel.assert_called_once_with(application.root)
         source_type.assert_called_once_with(source_root)
         self.assertIs(source_window, first_result)
         self.assertIs(source_window, second_result)
