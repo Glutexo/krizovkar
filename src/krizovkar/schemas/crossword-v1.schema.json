@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/master/src/krizovkar/schemas/crossword-v1.schema.json",
   "title": "Editovatelná křížovka Křížovkáře, verze 1",
-  "description": "Editovatelná křížovka s vlastní kopií šablony, postupně doplňovanými hesly, pomůckou a tajenkami.",
+  "description": "Editovatelná křížovka s rolemi buněk, místy pro hesla, volitelně doplněným obsahem, pomůckou a tajenkami.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -26,7 +26,7 @@
       "const": 1
     },
     "grid": {
-      "description": "Obdélníková matice rolí všech buněk převzatá ze šablony.",
+      "description": "Obdélníková matice rolí všech buněk křížovky.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -50,7 +50,7 @@
             "type": "array",
             "minItems": 1,
             "items": {
-              "$ref": "#/$defs/templateCell"
+              "$ref": "#/$defs/cellRole"
             }
           }
         }
@@ -69,7 +69,7 @@
       "type": "array",
       "minItems": 1,
       "items": {
-        "$ref": "#/$defs/templateSecret"
+        "$ref": "#/$defs/secret"
       }
     }
   },
@@ -92,7 +92,7 @@
         }
       }
     },
-    "templateCell": {
+    "cellRole": {
       "description": "Nevyplněné písmeno, budoucí legenda, pomůcka nebo nevyplňovaná buňka.",
       "type": "object",
       "additionalProperties": false,
@@ -215,7 +215,7 @@
         }
       }
     },
-    "templateSecretSlotPart": {
+    "secretSlotPart": {
       "description": "Jedna část tajenky přiřazená slotu.",
       "type": "object",
       "additionalProperties": false,
@@ -234,7 +234,7 @@
         }
       }
     },
-    "templateSecretCellsPart": {
+    "secretCellsPart": {
       "description": "Jedna část tajenky určená vybranými písmennými poli.",
       "type": "object",
       "additionalProperties": false,
@@ -256,17 +256,17 @@
         }
       }
     },
-    "templateSecretPart": {
+    "secretPart": {
       "oneOf": [
         {
-          "$ref": "#/$defs/templateSecretSlotPart"
+          "$ref": "#/$defs/secretSlotPart"
         },
         {
-          "$ref": "#/$defs/templateSecretCellsPart"
+          "$ref": "#/$defs/secretCellsPart"
         }
       ]
     },
-    "templateSecret": {
+    "secret": {
       "description": "Připravená tajenka ze slotů nebo vybraných polí s volitelně již známými slovy.",
       "type": "object",
       "additionalProperties": false,
@@ -287,7 +287,7 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "$ref": "#/$defs/templateSecretPart"
+            "$ref": "#/$defs/secretPart"
           }
         },
         "prompt": {

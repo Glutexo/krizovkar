@@ -222,13 +222,13 @@ class CrosswordTemplate:
 
 @dataclass(frozen=True, slots=True)
 class CrosswordDocument(CrosswordTemplate):
-    """Editovatelná křížovka s vlastní kopií šablony a hesly."""
+    """Editovatelná křížovka s rolemi buněk a místy pro hesla."""
 
 
 def create_crossword_document(
     template: CrosswordTemplate,
 ) -> CrosswordDocument:
-    """Vytvoří samostatný dokument křížovky z dané šablony."""
+    """Převede starší strukturální dokument na křížovku."""
 
     return CrosswordDocument(
         format_name=template.format_name,
