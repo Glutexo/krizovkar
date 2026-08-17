@@ -20,6 +20,7 @@ from krizovkar.gui import (
     CrosswordSettings,
     GuiInputError,
     _configure_tk_runtime,
+    _create_window_menu,
     _template_generation_layout,
     _keyboard_shortcut,
     _recent_document_label,
@@ -167,6 +168,7 @@ class GuiTest(unittest.TestCase):
         file_menu = Mock()
         recent_documents_menu = Mock()
         export_menu = Mock()
+        window_menu = Mock()
 
         with (
             patch("krizovkar.gui.sys.platform", "darwin"),
@@ -177,8 +179,9 @@ class GuiTest(unittest.TestCase):
                     file_menu,
                     recent_documents_menu,
                     export_menu,
+                    window_menu,
                 ),
-            ),
+            ) as menu_type,
         ):
             CrosswordDocumentWindow._build_menu(window)
 
@@ -209,6 +212,13 @@ class GuiTest(unittest.TestCase):
             label="Otevřít poslední",
             menu=recent_documents_menu,
         )
+        menu_type.assert_any_call(menu, name="window")
+        menu.add_cascade.assert_has_calls(
+            [
+                call(label="Soubor", menu=file_menu),
+                call(label="Okno", menu=window_menu),
+            ]
+        )
 
     def test_application_menu_is_available_without_document(self) -> None:
         application = CrosswordApplication.__new__(CrosswordApplication)
@@ -217,13 +227,19 @@ class GuiTest(unittest.TestCase):
         menu = Mock()
         file_menu = Mock()
         recent_documents_menu = Mock()
+        window_menu = Mock()
 
         with (
             patch("krizovkar.gui.sys.platform", "darwin"),
             patch(
                 "krizovkar.gui.tk.Menu",
-                side_effect=(menu, file_menu, recent_documents_menu),
-            ),
+                side_effect=(
+                    menu,
+                    file_menu,
+                    recent_documents_menu,
+                    window_menu,
+                ),
+            ) as menu_type,
         ):
             application._build_menu()
 
@@ -242,9 +258,12 @@ class GuiTest(unittest.TestCase):
             label="Otevřít poslední",
             menu=recent_documents_menu,
         )
-        menu.add_cascade.assert_called_once_with(
-            label="Soubor",
-            menu=file_menu,
+        menu_type.assert_any_call(menu, name="window")
+        menu.add_cascade.assert_has_calls(
+            [
+                call(label="Soubor", menu=file_menu),
+                call(label="Okno", menu=window_menu),
+            ]
         )
         application.root.configure.assert_called_once_with(menu=menu)
         self.assertEqual(
@@ -253,6 +272,100 @@ class GuiTest(unittest.TestCase):
                 call("<Command-o>", application._open_event),
             ],
             application.root.bind.call_args_list,
+        )
+
+    def test_other_platforms_refresh_window_menu_before_opening(self) -> None:
+        parent = Mock()
+        refresh = Mock()
+        window_menu = Mock()
+
+        with (
+            patch("krizovkar.gui.sys.platform", "linux"),
+            patch(
+                "krizovkar.gui.tk.Menu",
+                return_value=window_menu,
+            ) as menu_type,
+        ):
+            created = _create_window_menu(parent, refresh)
+
+        menu_type.assert_called_once_with(
+            parent,
+            name="window",
+            postcommand=refresh,
+        )
+        self.assertIs(window_menu, created)
+
+    def test_window_menu_lists_open_windows_and_marks_current(self) -> None:
+        application = CrosswordApplication.__new__(CrosswordApplication)
+        first = Mock()
+        first._path = None
+        first._dirty = True
+        second = Mock()
+        second._path = Path("krizovka.yaml")
+        second._dirty = False
+        application._windows = [first, second]
+        application.activate_window = Mock()
+        window_menu = Mock()
+
+        application._populate_window_menu(window_menu, current=second)
+
+        window_menu.delete.assert_called_once_with(0, "end")
+        window_menu.setvar.assert_called_once_with(
+            "krizovkar_active_window",
+            str(id(second)),
+        )
+        items = window_menu.add_radiobutton.call_args_list
+        self.assertEqual(
+            ["*Nová šablona", "krizovka.yaml"],
+            [item.kwargs["label"] for item in items],
+        )
+        self.assertEqual(
+            [str(id(first)), str(id(second))],
+            [item.kwargs["value"] for item in items],
+        )
+        self.assertTrue(
+            all(
+                item.kwargs["variable"] == "krizovkar_active_window"
+                for item in items
+            )
+        )
+
+        items[0].kwargs["command"]()
+
+        application.activate_window.assert_called_once_with(first)
+
+    def test_empty_window_menu_has_disabled_message(self) -> None:
+        application = CrosswordApplication.__new__(CrosswordApplication)
+        application._windows = []
+        window_menu = Mock()
+
+        application._populate_window_menu(window_menu, current=None)
+
+        window_menu.add_command.assert_called_once_with(
+            label="Žádná otevřená okna",
+            state="disabled",
+        )
+        window_menu.add_radiobutton.assert_not_called()
+
+    def test_window_menu_restores_and_activates_selected_window(self) -> None:
+        application = CrosswordApplication.__new__(CrosswordApplication)
+        window = Mock()
+        application._windows = [window]
+
+        application.activate_window(window)
+
+        window.root.deiconify.assert_called_once_with()
+        window.root.lift.assert_called_once_with()
+        window.root.focus_force.assert_called_once_with()
+
+    def test_document_window_menu_marks_its_owner_current(self) -> None:
+        window = Mock()
+
+        CrosswordDocumentWindow._refresh_window_menu(window)
+
+        window.application._populate_window_menu.assert_called_once_with(
+            window.window_menu,
+            current=window,
         )
 
     def test_application_recent_menu_works_without_document(self) -> None:

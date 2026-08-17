@@ -64,6 +64,9 @@ uložení. Po zavření posledního okna zůstane aplikace spuštěná bez
 dokumentu. Každé otevřené okno je nezávislé; změna jednoho proto obsah
 druhého neovlivní.
 
+Nabídka **Okno** uvádí všechna otevřená dokumentová okna. Aktuální okno
+označí a výběrem jiné položky přenese příslušný dokument dopředu.
+
 Podnabídka **Soubor → Otevřít poslední** uchovává mezi spuštěními až
 deset naposledy otevřených nebo uložených dokumentů. Neexistující soubor
 při pokusu o otevření ze seznamu odstraní; celý seznam smaže volba **Vymazat

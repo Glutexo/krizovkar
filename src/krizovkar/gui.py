@@ -49,6 +49,7 @@ from krizovkar.renderer import (
 _MAX_CROSSWORD_DIMENSION = 50
 _MAX_RECENT_DOCUMENTS = 10
 _CROSSWORD_RESIZE_DELAY_MS = 150
+_WINDOW_MENU_SELECTION_VARIABLE = "krizovkar_active_window"
 _DIRECTION_LABELS = {
     "horizontal": "Vodorovně",
     "vertical": "Svisle",
@@ -229,6 +230,21 @@ def _recent_document_label(path: Path, paths: Sequence[Path]) -> str:
     if sum(item.name == path.name for item in paths) == 1:
         return path.name
     return f"{path.name} — {path.parent}"
+
+
+def _document_window_label(path: Path | None, dirty: bool) -> str:
+    name = path.name if path is not None else "Nová šablona"
+    marker = "*" if dirty else ""
+    return f"{marker}{name}"
+
+
+def _create_window_menu(
+    parent: tk.Menu,
+    refresh: Callable[[], None],
+) -> tk.Menu:
+    if sys.platform == "darwin":
+        return tk.Menu(parent, name="window")
+    return tk.Menu(parent, name="window", postcommand=refresh)
 
 
 class PdfExportDialog(simpledialog.Dialog):
@@ -884,6 +900,11 @@ class CrosswordApplication:
             menu=self.recent_documents_menu,
         )
         menu.add_cascade(label="Soubor", menu=self.file_menu)
+        self.window_menu = _create_window_menu(
+            menu,
+            self._refresh_window_menu,
+        )
+        menu.add_cascade(label="Okno", menu=self.window_menu)
         self.root.configure(menu=menu)
         self.root.bind(new_shortcut.sequence, self._new_event)
         self.root.bind(open_shortcut.sequence, self._open_event)
@@ -910,6 +931,33 @@ class CrosswordApplication:
             label="Vymazat nabídku",
             command=self.clear_recent_documents,
         )
+
+    def _refresh_window_menu(self) -> None:
+        self._populate_window_menu(self.window_menu, current=None)
+
+    def _populate_window_menu(
+        self,
+        menu: tk.Menu,
+        *,
+        current: CrosswordDocumentWindow | None,
+    ) -> None:
+        menu.delete(0, "end")
+        windows = tuple(self._windows)
+        selected = str(id(current)) if current in windows else ""
+        menu.setvar(_WINDOW_MENU_SELECTION_VARIABLE, selected)
+        if not windows:
+            menu.add_command(
+                label="Žádná otevřená okna",
+                state="disabled",
+            )
+            return
+        for window in windows:
+            menu.add_radiobutton(
+                label=_document_window_label(window._path, window._dirty),
+                value=str(id(window)),
+                variable=_WINDOW_MENU_SELECTION_VARIABLE,
+                command=lambda target=window: self.activate_window(target),
+            )
 
     def _no_document_dialog_parent(self) -> tk.Misc | None:
         return None if sys.platform == "darwin" else self.root
@@ -1012,6 +1060,13 @@ class CrosswordApplication:
         )
         self._windows.append(window)
         return window
+
+    def activate_window(self, window: CrosswordDocumentWindow) -> None:
+        if window not in self._windows:
+            return
+        window.root.deiconify()
+        window.root.lift()
+        window.root.focus_force()
 
     def close_window(self, window: CrosswordDocumentWindow) -> None:
         if window in self._windows:
@@ -1131,6 +1186,11 @@ class CrosswordDocumentWindow(ttk.Frame):
             command=self.request_close,
         )
         menu.add_cascade(label="Soubor", menu=self.file_menu)
+        self.window_menu = _create_window_menu(
+            menu,
+            self._refresh_window_menu,
+        )
+        menu.add_cascade(label="Okno", menu=self.window_menu)
         self.root.configure(menu=menu)
         self.root.bind(new_shortcut.sequence, self._new_event)
         self.root.bind(open_shortcut.sequence, self._open_event)
@@ -1230,6 +1290,12 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.recent_documents_menu.add_command(
             label="Vymazat nabídku",
             command=self.application.clear_recent_documents,
+        )
+
+    def _refresh_window_menu(self) -> None:
+        self.application._populate_window_menu(
+            self.window_menu,
+            current=self,
         )
 
     def _build_content(self) -> None:
@@ -1900,12 +1966,8 @@ class CrosswordDocumentWindow(ttk.Frame):
         messagebox.showerror(title, message, parent=self.root)
 
     def _update_title(self) -> None:
-        if self._path is not None:
-            name = self._path.name
-        else:
-            name = "Nová šablona"
-        marker = "*" if self._dirty else ""
-        self.root.title(f"{marker}{name} — Křížovkář")
+        label = _document_window_label(self._path, self._dirty)
+        self.root.title(f"{label} — Křížovkář")
         if sys.platform == "darwin":
             title_path = (
                 str(self._path.absolute()) if self._path is not None else ""
