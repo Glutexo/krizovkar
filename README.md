@@ -41,9 +41,10 @@ přetáhnout stejně jako soubor ve Finderu.
 
 Podle kořenového klíče `kind` má okno jednu ze dvou podob:
 
-- **Šablona** určuje rozměr, švédskou nebo číslovanou podobu a všechna místa
-  pro vodorovná a svislá hesla. V záhlaví náhledu se vybírá typ křížovky,
-  počet řádků a sloupců; změny se do náhledu promítají živě. Akce **Vytvořit
+- **Šablona** určuje rozměr a všechna místa pro vodorovná a svislá hesla.
+  Každé heslo může mít legendu uvnitř mřížky, nebo číslo a legendu pod ní;
+  oba způsoby lze v jedné šabloně kombinovat. V záhlaví náhledu se nastavuje
+  počet řádků a sloupců a změny se do náhledu promítají živě. Akce **Vytvořit
   křížovku** v panelu nástrojů a nabídce **Soubor** otevře nové okno s
   nezávislým dokumentem `kind: crossword`.
 - **Křížovka** drží vlastní kopii zvolené šablony a doplněná hesla. Místo se
@@ -74,12 +75,11 @@ v dialogu vybraného exportu; poté naváže systémový dialog pro výběr umí
 PDF. U křížovky se tisková podoba i řešení zpřístupní až po vyplnění
 všech hesel.
 
-Ve švédské podobě jsou místa pro nápovědy součástí předem vytvořené mřížky.
-Číslovaná podoba ponechá všechna pole pro písmena a nápovědy vysází pod
-mřížkou. Ruční zadávání souřadnic ani směru proto není potřeba. Nesprávnou
-délku, opakované heslo nebo rozporné písmeno aplikace odmítne konkrétní
-zprávou. Editor zatím nezadává tajenky, vlastní pomůcku ani automatické
-vyplnění ze slovníku.
+Hesla s vepsanou legendou mají místo pro nápovědu přímo v předem vytvořené
+mřížce. Hesla s vnější legendou dostanou číslo a nápovědu pod mřížkou. Ruční
+zadávání souřadnic ani směru proto není potřeba. Nesprávnou délku, opakované
+heslo nebo rozporné písmeno aplikace odmítne konkrétní zprávou. Editor zatím
+nezadává tajenky, vlastní pomůcku ani automatické vyplnění ze slovníku.
 
 Export do PDF používá LuaLaTeX a vyžaduje stejnou instalaci TeX Live
 jako příkaz `render`.

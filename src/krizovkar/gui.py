@@ -55,13 +55,6 @@ from krizovkar.renderer import (
 _MAX_TEMPLATE_DIMENSION = 50
 _MAX_RECENT_DOCUMENTS = 10
 _TEMPLATE_UPDATE_DELAY_MS = 150
-_TEMPLATE_LAYOUT_LABELS: dict[SpecificationLayout, str] = {
-    "swedish": "Švédská",
-    "numbered": "Číslovaná",
-}
-_TEMPLATE_LAYOUTS_BY_LABEL: dict[str, SpecificationLayout] = {
-    label: layout for layout, label in _TEMPLATE_LAYOUT_LABELS.items()
-}
 _DIRECTION_LABELS = {
     "horizontal": "Vodorovně",
     "vertical": "Svisle",
@@ -333,13 +326,6 @@ def parse_template_settings(width: str, height: str) -> TemplateSettings:
     return settings
 
 
-def _template_layout_from_label(value: str) -> SpecificationLayout:
-    try:
-        return _TEMPLATE_LAYOUTS_BY_LABEL[value]
-    except KeyError as error:
-        raise GuiInputError("Vyberte podporovaný typ křížovky.") from error
-
-
 def create_blank_template(
     settings: TemplateSettings,
     layout: SpecificationLayout,
@@ -515,8 +501,10 @@ def template_is_complete(template: CrosswordTemplate) -> bool:
     )
 
 
-def template_layout(template: CrosswordTemplate) -> SpecificationLayout:
-    """Odvodí podobu dokumentu z umístění jeho legend."""
+def _template_generation_layout(
+    template: CrosswordTemplate,
+) -> SpecificationLayout:
+    """Vybere generátor pro případ, že editor musí šablonu přestavět."""
 
     if any(slot.legend_position is not None for slot in template.slots):
         return "swedish"
@@ -1073,16 +1061,16 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._base_template = document if document.kind == "template" else None
         self._template = document if document.kind == "crossword" else None
         self._grid: CrosswordGrid | None = None
-        layout = template_layout(document)
-        self._crossword_layout = (
-            layout if document.kind == "crossword" else None
+        self._template_generation_layout = (
+            _template_generation_layout(document)
+            if document.kind == "template"
+            else None
         )
         self._selected_slot_identifier: str | None = None
         self._content_row = 0 if sys.platform == "darwin" else 1
 
         self.width_value = tk.StringVar(value=str(document.grid.width))
         self.height_value = tk.StringVar(value=str(document.grid.height))
-        self.layout_value = tk.StringVar(value=_TEMPLATE_LAYOUT_LABELS[layout])
         self.template_input_error_value = tk.StringVar()
         self.answer_value = tk.StringVar()
         self.clue_value = tk.StringVar()
@@ -1328,25 +1316,10 @@ class CrosswordDocumentWindow(ttk.Frame):
 
         controls = ttk.Frame(preview_frame)
         preview_frame.configure(labelwidget=controls)
-        ttk.Label(controls, text="Typ křížovky").grid(
+        ttk.Label(controls, text="Řádky").grid(
             row=0,
             column=0,
             sticky="w",
-        )
-        self.layout_selector = ttk.Combobox(
-            controls,
-            textvariable=self.layout_value,
-            values=tuple(_TEMPLATE_LAYOUTS_BY_LABEL),
-            state="readonly",
-            width=14,
-        )
-        self.layout_selector.grid(row=0, column=1, sticky="w", padx=(6, 0))
-
-        ttk.Label(controls, text="Řádky").grid(
-            row=0,
-            column=2,
-            sticky="w",
-            padx=(18, 0),
         )
         self.height_spinbox = ttk.Spinbox(
             controls,
@@ -1355,11 +1328,11 @@ class CrosswordDocumentWindow(ttk.Frame):
             width=5,
             textvariable=self.height_value,
         )
-        self.height_spinbox.grid(row=0, column=3, sticky="w", padx=(6, 0))
+        self.height_spinbox.grid(row=0, column=1, sticky="w", padx=(6, 0))
 
         ttk.Label(controls, text="Sloupce").grid(
             row=0,
-            column=4,
+            column=2,
             sticky="w",
             padx=(14, 0),
         )
@@ -1370,14 +1343,14 @@ class CrosswordDocumentWindow(ttk.Frame):
             width=5,
             textvariable=self.width_value,
         )
-        self.width_spinbox.grid(row=0, column=5, sticky="w", padx=(6, 0))
+        self.width_spinbox.grid(row=0, column=3, sticky="w", padx=(6, 0))
 
         ttk.Label(
             controls,
             textvariable=self.template_input_error_value,
             style="Error.TLabel",
             wraplength=380,
-        ).grid(row=0, column=6, sticky="w", padx=(14, 4))
+        ).grid(row=0, column=4, sticky="w", padx=(14, 4))
 
         self.template_preview = CrosswordPreview(
             preview_frame,
@@ -1558,7 +1531,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.slots_tree.bind("<<TreeviewSelect>>", self._slot_selection_changed)
 
     def _watch_inputs(self) -> None:
-        for value in (self.width_value, self.height_value, self.layout_value):
+        for value in (self.width_value, self.height_value):
             value.trace_add("write", self._template_input_changed)
 
     def _template_input_changed(self, *_args: str) -> None:
@@ -1577,21 +1550,21 @@ class CrosswordDocumentWindow(ttk.Frame):
                 self.width_value.get(),
                 self.height_value.get(),
             )
-            layout = _template_layout_from_label(self.layout_value.get())
             current = self._base_template
             if (
                 current is not None
                 and current.grid.width == settings.width
                 and current.grid.height == settings.height
-                and template_layout(current) == layout
             ):
                 return
+            layout = self._template_generation_layout or "swedish"
             template = create_blank_template(settings, layout)
         except GuiInputError as error:
             self.template_input_error_value.set(str(error))
             return
 
         self._base_template = template
+        self._template_generation_layout = layout
         self._set_dirty(True)
         self._refresh_template_view()
 
@@ -1842,12 +1815,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             return
         filled = self._filled_slot_count()
         remaining = len(template.slots) - filled
-        layout = (
-            "číslovaná" if self._crossword_layout == "numbered" else "švédská"
-        )
-        document = (
-            f"Křížovka {template.grid.width} × {template.grid.height} · {layout}. "
-        )
+        document = f"Křížovka {template.grid.width} × {template.grid.height}. "
         if remaining:
             self.progress_value.set(
                 document + f"Vyplněno {_word_count_text(filled)} z "

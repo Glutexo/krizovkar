@@ -22,6 +22,7 @@ from krizovkar.gui import (
     _keyboard_shortcut,
     _recent_document_label,
     _recent_documents_storage_path,
+    _template_generation_layout,
     clear_template_slot,
     create_blank_template,
     fill_template_slot,
@@ -31,7 +32,6 @@ from krizovkar.gui import (
     parse_template_settings,
     slot_coordinates,
     template_is_complete,
-    template_layout,
     template_slot_pattern,
 )
 from krizovkar.model import (
@@ -513,12 +513,12 @@ class GuiTest(unittest.TestCase):
 
             self.assertEqual(template, load_crossword_template(output))
 
-    def test_recognizes_layout_stored_in_document(self) -> None:
+    def test_selects_generator_for_rebuilding_template(self) -> None:
         swedish = create_blank_template(TemplateSettings(7, 6), "swedish")
         numbered = create_blank_template(TemplateSettings(7, 6), "numbered")
 
-        self.assertEqual("swedish", template_layout(swedish))
-        self.assertEqual("numbered", template_layout(numbered))
+        self.assertEqual("swedish", _template_generation_layout(swedish))
+        self.assertEqual("numbered", _template_generation_layout(numbered))
 
     def test_filling_crossword_preserves_document_kind(self) -> None:
         crossword = create_crossword_document(
@@ -553,13 +553,11 @@ class GuiTest(unittest.TestCase):
     def test_template_controls_form_the_preview_heading(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         window.template_tab = Mock()
-        window.layout_value = Mock()
         window.height_value = Mock()
         window.width_value = Mock()
         window.template_input_error_value = Mock()
         preview_frame = Mock()
         controls = Mock()
-        layout_selector = Mock()
         height_spinbox = Mock()
         width_spinbox = Mock()
         preview = Mock()
@@ -571,10 +569,6 @@ class GuiTest(unittest.TestCase):
             ) as label_frame_type,
             patch("krizovkar.gui.ttk.Frame", return_value=controls),
             patch("krizovkar.gui.ttk.Label") as label_type,
-            patch(
-                "krizovkar.gui.ttk.Combobox",
-                return_value=layout_selector,
-            ) as combobox_type,
             patch(
                 "krizovkar.gui.ttk.Spinbox",
                 side_effect=(height_spinbox, width_spinbox),
@@ -588,13 +582,6 @@ class GuiTest(unittest.TestCase):
 
         label_frame_type.assert_called_once_with(window.template_tab, padding=12)
         preview_frame.configure.assert_called_once_with(labelwidget=controls)
-        combobox_type.assert_called_once_with(
-            controls,
-            textvariable=window.layout_value,
-            values=("Švédská", "Číslovaná"),
-            state="readonly",
-            width=14,
-        )
         self.assertEqual(
             [
                 call(
@@ -615,7 +602,7 @@ class GuiTest(unittest.TestCase):
             spinbox_type.call_args_list,
         )
         self.assertEqual(
-            ["Typ křížovky", "Řádky", "Sloupce"],
+            ["Řádky", "Sloupce"],
             [
                 widget_call.kwargs["text"]
                 for widget_call in label_type.call_args_list
@@ -627,7 +614,6 @@ class GuiTest(unittest.TestCase):
             width=1080,
             height=650,
         )
-        self.assertIs(layout_selector, window.layout_selector)
         self.assertIs(height_spinbox, window.height_spinbox)
         self.assertIs(width_spinbox, window.width_spinbox)
         self.assertIs(preview, window.template_preview)
@@ -640,7 +626,6 @@ class GuiTest(unittest.TestCase):
         for value in (
             window.width_value,
             window.height_value,
-            window.layout_value,
         ):
             value.trace_add.assert_called_once_with(
                 "write",
@@ -669,10 +654,10 @@ class GuiTest(unittest.TestCase):
             TemplateSettings(4, 4),
             "numbered",
         )
+        window._template_generation_layout = "numbered"
         new_template = create_blank_template(TemplateSettings(3, 3), "numbered")
         window.width_value.get.return_value = "3"
         window.height_value.get.return_value = "3"
-        window.layout_value.get.return_value = "Číslovaná"
 
         with patch(
             "krizovkar.gui.create_blank_template",
@@ -685,6 +670,7 @@ class GuiTest(unittest.TestCase):
             "numbered",
         )
         self.assertIs(new_template, window._base_template)
+        self.assertEqual("numbered", window._template_generation_layout)
         self.assertIsNone(window._template_update_job)
         window._set_dirty.assert_called_once_with(True)
         window._refresh_template_view.assert_called_once_with()
@@ -693,9 +679,9 @@ class GuiTest(unittest.TestCase):
         window = Mock()
         template = create_blank_template(TemplateSettings(3, 3), "numbered")
         window._base_template = template
+        window._template_generation_layout = "numbered"
         window.width_value.get.return_value = "3"
         window.height_value.get.return_value = "3"
-        window.layout_value.get.return_value = "Číslovaná"
 
         with patch("krizovkar.gui.create_blank_template") as create_template:
             CrosswordDocumentWindow._update_template_from_inputs(window)
@@ -711,9 +697,9 @@ class GuiTest(unittest.TestCase):
         window = Mock()
         template = create_blank_template(TemplateSettings(3, 3), "numbered")
         window._base_template = template
+        window._template_generation_layout = "numbered"
         window.width_value.get.return_value = ""
         window.height_value.get.return_value = "3"
-        window.layout_value.get.return_value = "Číslovaná"
 
         with patch("krizovkar.gui.create_blank_template") as create_template:
             CrosswordDocumentWindow._update_template_from_inputs(window)
@@ -752,6 +738,22 @@ class GuiTest(unittest.TestCase):
         self.assertEqual("crossword", document.kind)
         application._open_window.assert_called_once_with(document, dirty=True)
         self.assertIs(expected_window, result)
+
+    def test_crossword_progress_does_not_assign_a_global_type(self) -> None:
+        window = Mock()
+        window._template = create_crossword_document(
+            create_blank_template(TemplateSettings(3, 3), "numbered")
+        )
+        window._filled_slot_count.return_value = 0
+
+        CrosswordDocumentWindow._refresh_crossword_view(window)
+
+        message = window.progress_value.set.call_args.args[0]
+        self.assertTrue(message.startswith("Křížovka 3 × 3. "))
+        self.assertNotIn("švéd", message)
+        self.assertNotIn("číslovan", message)
+        window._refresh_crossword_preview.assert_called_once_with()
+        window._refresh_file_menu.assert_called_once_with()
 
     def test_application_owner_stays_hidden_behind_document_windows(self) -> None:
         root = Mock()
