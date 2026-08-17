@@ -729,7 +729,6 @@ class GuiTest(unittest.TestCase):
 
         style.configure.assert_has_calls(
             [
-                call("Muted.TLabel", foreground="#667085"),
                 call(
                     "Dimensions.TFrame",
                     background="#d0d5dd",
@@ -792,6 +791,162 @@ class GuiTest(unittest.TestCase):
             window._preview_cell_clicked
         )
         label_type.assert_not_called()
+
+    def test_crossword_document_uses_full_width_workspace(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window.crossword_tab = Mock()
+        window._build_crossword_preview = Mock()
+        window._build_slot_list = Mock()
+        workspace = Mock()
+
+        with patch(
+            "krizovkar.gui.ttk.Frame",
+            return_value=workspace,
+        ) as frame_type:
+            window._build_crossword_document()
+
+        frame_type.assert_called_once_with(window.crossword_tab)
+        window.crossword_tab.columnconfigure.assert_called_once_with(
+            0,
+            weight=1,
+        )
+        workspace.grid.assert_called_once_with(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+        window._build_crossword_preview.assert_called_once_with(workspace)
+        window._build_slot_list.assert_called_once_with(workspace)
+
+    def test_inline_slot_edit_opens_answer_and_clue_cells(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window._crossword = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        window._selected_slot_identifier = None
+        window._slot_edit_identifier = None
+        window._slot_answer_editor = None
+        window._slot_clue_editor = None
+        window.slots_tree = Mock()
+        window.slots_tree.bbox.side_effect = (
+            (175, 24, 180, 22),
+            (355, 24, 360, 22),
+        )
+        answer_editor = Mock()
+        clue_editor = Mock()
+        window._create_slot_cell_editor = Mock(
+            side_effect=(answer_editor, clue_editor)
+        )
+        window._refresh_crossword_preview = Mock()
+
+        opened = window._open_inline_slot_edit("h1", "#4")
+
+        self.assertTrue(opened)
+        self.assertEqual("h1", window._slot_edit_identifier)
+        self.assertIs(answer_editor, window._slot_answer_editor)
+        self.assertIs(clue_editor, window._slot_clue_editor)
+        window._create_slot_cell_editor.assert_has_calls(
+            [
+                call((175, 24, 180, 22), ""),
+                call((355, 24, 360, 22), ""),
+            ]
+        )
+        clue_editor.focus_set.assert_called_once_with()
+        clue_editor.selection_range.assert_called_once_with(0, tk.END)
+
+    def test_inline_slot_edit_saves_both_values(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        original = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        window._crossword = original
+        window._slot_edit_identifier = "h1"
+        window._slot_answer_editor = Mock()
+        window._slot_clue_editor = Mock()
+        window._slot_answer_editor.get.return_value = "abc"
+        window._slot_clue_editor.get.return_value = "První řádek"
+        window._set_dirty = Mock()
+        window._rebuild_slot_tree = Mock()
+        window._refresh_crossword_view = Mock()
+        window._show_action_error = Mock()
+
+        saved = window._save_inline_slot_edit()
+
+        self.assertTrue(saved)
+        slot = next(
+            slot for slot in window._crossword.slots if slot.identifier == "h1"
+        )
+        self.assertEqual("ABC", slot.answer)
+        self.assertEqual("První řádek", slot.clue)
+        window._set_dirty.assert_called_once_with(True)
+        window._rebuild_slot_tree.assert_called_once_with()
+        window._refresh_crossword_view.assert_called_once_with()
+        window._show_action_error.assert_not_called()
+        self.assertIsNone(window._slot_edit_identifier)
+
+    def test_invalid_inline_slot_edit_stays_open(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        original = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        window._crossword = original
+        window._slot_edit_identifier = "h1"
+        answer_editor = Mock()
+        clue_editor = Mock()
+        answer_editor.get.return_value = "AB"
+        clue_editor.get.return_value = "Příliš krátké heslo"
+        window._slot_answer_editor = answer_editor
+        window._slot_clue_editor = clue_editor
+        window._set_dirty = Mock()
+        window._rebuild_slot_tree = Mock()
+        window._refresh_crossword_view = Mock()
+        window._show_action_error = Mock()
+
+        saved = window._save_inline_slot_edit()
+
+        self.assertFalse(saved)
+        self.assertIs(original, window._crossword)
+        self.assertEqual("h1", window._slot_edit_identifier)
+        window._show_action_error.assert_called_once()
+        answer_editor.focus_set.assert_called_once_with()
+        answer_editor.destroy.assert_not_called()
+        clue_editor.destroy.assert_not_called()
+        window._set_dirty.assert_not_called()
+
+    def test_empty_inline_slot_edit_clears_answer_and_clue(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        original = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        window._crossword = fill_crossword_slot(
+            original,
+            "h1",
+            "ABC",
+            "První řádek",
+        )
+        window._slot_edit_identifier = "h1"
+        window._slot_answer_editor = Mock()
+        window._slot_clue_editor = Mock()
+        window._slot_answer_editor.get.return_value = ""
+        window._slot_clue_editor.get.return_value = ""
+        window._set_dirty = Mock()
+        window._rebuild_slot_tree = Mock()
+        window._refresh_crossword_view = Mock()
+        window._show_action_error = Mock()
+
+        saved = window._save_inline_slot_edit()
+
+        self.assertTrue(saved)
+        slot = next(
+            slot for slot in window._crossword.slots if slot.identifier == "h1"
+        )
+        self.assertIsNone(slot.answer)
+        self.assertIsNone(slot.clue)
+        window._set_dirty.assert_called_once_with(True)
 
     def test_crossword_watches_dimensions_for_live_resizing(self) -> None:
         window = Mock()
@@ -1138,6 +1293,16 @@ class GuiTest(unittest.TestCase):
 
         window.save_document.assert_not_called()
         window.application.close_window.assert_called_once_with(window)
+
+    def test_invalid_inline_edit_prevents_closing_window(self) -> None:
+        window = Mock()
+        window._save_inline_slot_edit.return_value = False
+
+        with patch("krizovkar.gui.messagebox.askyesnocancel") as ask:
+            CrosswordDocumentWindow.request_close(window)
+
+        ask.assert_not_called()
+        window.application.close_window.assert_not_called()
 
     def test_crossword_pdf_actions_choose_puzzle_and_solution(self) -> None:
         application = Mock()

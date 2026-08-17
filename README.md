@@ -46,9 +46,11 @@ doplněný obsah. Prázdná i částečně vyplněná křížovka může slouži
 šablona; vyplnění proto její datový druh nemění.
 Každé heslo může mít legendu uvnitř mřížky, nebo číslo a legendu pod ní;
 oba způsoby lze v jedné křížovce kombinovat. Místo se vybírá kliknutím v
-náhledu nebo v seznamu; formulář ukazuje jeho délku a písmena známá z
-křížení. Dokument může zůstat prázdný, být rozpracovaný nebo hotový a v
-každém z těchto stavů jej lze uložit a znovu použít jako základ další práce.
+náhledu nebo v tabulce. Dvojklik na sloupec **Heslo** nebo **Nápověda** upraví
+oba údaje přímo v příslušném řádku; Enter nebo opuštění řádku změnu
+uloží, Escape ji zahodí. Vyprázdnění obou buněk nebo klávesa Delete heslo
+odstraní. Dokument může zůstat prázdný, být rozpracovaný nebo hotový a v každém
+z těchto stavů jej lze uložit a znovu použít jako základ další práce.
 
 Ve společném panelu nad náhledem křížovky se nastavuje počet řádků a sloupců.
 Číselná pole přijmou pouze rozměry, pro které lze rozvržení vytvořit. Změna

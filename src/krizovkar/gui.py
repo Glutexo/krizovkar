@@ -776,58 +776,6 @@ class CrosswordPreview(tk.Canvas):
             handler(Coordinate(row=row, column=column))
 
 
-class ScrollablePanel(ttk.Frame):
-    """Svisle posuvný panel pro delší krokový formulář."""
-
-    def __init__(
-        self,
-        master: tk.Misc,
-        *,
-        width: int,
-        height: int,
-    ) -> None:
-        super().__init__(master)
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
-        background = ttk.Style(master).lookup("TFrame", "background")
-        self.canvas = tk.Canvas(
-            self,
-            width=width,
-            height=height,
-            background=background,
-            borderwidth=0,
-            highlightthickness=0,
-        )
-        scrollbar = ttk.Scrollbar(
-            self,
-            orient="vertical",
-            command=self.canvas.yview,
-        )
-        self.content = ttk.Frame(self.canvas)
-        self._window = self.canvas.create_window(
-            (0, 0),
-            window=self.content,
-            anchor="nw",
-        )
-        self.canvas.configure(yscrollcommand=scrollbar.set)
-        self.canvas.grid(row=0, column=0, sticky="nsew")
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        self.content.bind("<Configure>", self._content_changed)
-        self.content.bind("<MouseWheel>", self._scroll_mousewheel)
-        self.canvas.bind("<Configure>", self._canvas_changed)
-        self.canvas.bind("<MouseWheel>", self._scroll_mousewheel)
-
-    def _content_changed(self, _event: tk.Event[tk.Misc]) -> None:
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def _canvas_changed(self, event: tk.Event[tk.Misc]) -> None:
-        self.canvas.itemconfigure(self._window, width=event.width)
-
-    def _scroll_mousewheel(self, event: tk.Event[tk.Misc]) -> None:
-        direction = -1 if event.delta > 0 else 1
-        self.canvas.yview_scroll(direction, "units")
-
-
 def load_editable_document(
     source: str | Path,
 ) -> CrosswordDocument:
@@ -1106,15 +1054,14 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._grid: CrosswordGrid | None = None
         self._template_layout = _template_generation_layout(document)
         self._selected_slot_identifier: str | None = None
+        self._slot_edit_identifier: str | None = None
+        self._slot_answer_editor: ttk.Entry | None = None
+        self._slot_clue_editor: ttk.Entry | None = None
         self._content_row = 0 if sys.platform == "darwin" else 1
         self._changing_dimension_values = False
 
         self.width_value = tk.StringVar(value=str(document.grid.width))
         self.height_value = tk.StringVar(value=str(document.grid.height))
-        self.answer_value = tk.StringVar()
-        self.clue_value = tk.StringVar()
-        self.slot_title_value = tk.StringVar(value="Vyberte heslo.")
-        self.slot_pattern_value = tk.StringVar(value="Vzor z křížení: —")
         self._page_format = DEFAULT_PAGE_FORMAT
         self._resize_job: str | None = None
 
@@ -1141,7 +1088,6 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _configure_styles(self) -> None:
         style = ttk.Style(self.root)
-        style.configure("Muted.TLabel", foreground="#667085")
         style.configure(
             "Dimensions.TFrame",
             background=_DIMENSION_PANEL_BACKGROUND,
@@ -1326,24 +1272,11 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _build_crossword_document(self) -> None:
         tab = self.crossword_tab
-        tab.columnconfigure(1, weight=1)
+        tab.columnconfigure(0, weight=1)
         tab.rowconfigure(0, weight=1)
 
-        controls_panel = ScrollablePanel(tab, width=360, height=650)
-        controls_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
-        controls = controls_panel.content
-
-        editor = ttk.LabelFrame(
-            controls,
-            text="Vybrané heslo",
-            padding=14,
-        )
-        editor.pack(fill="x")
-        editor.columnconfigure(0, weight=1)
-        self._build_crossword_editor(editor)
-
         workspace = ttk.Frame(tab)
-        workspace.grid(row=0, column=1, sticky="nsew")
+        workspace.grid(row=0, column=0, sticky="nsew")
         workspace.columnconfigure(0, weight=1)
         workspace.rowconfigure(0, weight=1)
         self._build_crossword_preview(workspace)
@@ -1407,76 +1340,6 @@ class CrosswordDocumentWindow(ttk.Frame):
         minimum = _minimum_generated_dimension(self._template_layout)
         return minimum <= int(proposed) <= _MAX_CROSSWORD_DIMENSION
 
-    def _build_crossword_editor(self, parent: ttk.Frame) -> None:
-        ttk.Label(
-            parent,
-            textvariable=self.slot_title_value,
-            wraplength=310,
-        ).grid(row=0, column=0, sticky="w")
-        ttk.Label(
-            parent,
-            textvariable=self.slot_pattern_value,
-            style="Muted.TLabel",
-            wraplength=310,
-        ).grid(row=1, column=0, sticky="w", pady=(3, 7))
-
-        ttk.Label(parent, text="Heslo (odpověď)").grid(
-            row=2,
-            column=0,
-            sticky="w",
-        )
-        self.answer_entry = ttk.Entry(
-            parent,
-            textvariable=self.answer_value,
-            state="disabled",
-        )
-        self.answer_entry.grid(
-            row=3,
-            column=0,
-            sticky="ew",
-            pady=(3, 7),
-        )
-        ttk.Label(parent, text="Nápověda (legenda)").grid(
-            row=4,
-            column=0,
-            sticky="w",
-        )
-        self.clue_entry = ttk.Entry(
-            parent,
-            textvariable=self.clue_value,
-            state="disabled",
-        )
-        self.clue_entry.grid(
-            row=5,
-            column=0,
-            sticky="ew",
-            pady=(3, 8),
-        )
-
-        actions = ttk.Frame(parent)
-        actions.grid(row=6, column=0, sticky="ew")
-        actions.columnconfigure(0, weight=1)
-        actions.columnconfigure(1, weight=1)
-        self.save_slot_button = ttk.Button(
-            actions,
-            text="Uložit heslo",
-            command=self.save_selected_slot,
-            state="disabled",
-        )
-        self.save_slot_button.grid(row=0, column=0, sticky="ew")
-        self.clear_slot_button = ttk.Button(
-            actions,
-            text="Vymazat heslo",
-            command=self.clear_selected_slot,
-            state="disabled",
-        )
-        self.clear_slot_button.grid(
-            row=0,
-            column=1,
-            sticky="ew",
-            padx=(6, 0),
-        )
-
     def _build_crossword_preview(self, parent: ttk.Frame) -> None:
         preview_frame = ttk.LabelFrame(parent, padding=12)
         preview_frame.grid(row=0, column=0, sticky="nsew")
@@ -1516,8 +1379,8 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.slots_tree.heading("clue", text="Nápověda")
         self.slots_tree.column("slot", width=115, stretch=False)
         self.slots_tree.column("length", width=60, stretch=False, anchor="center")
-        self.slots_tree.column("answer", width=120, stretch=False)
-        self.slots_tree.column("clue", width=250)
+        self.slots_tree.column("answer", width=180)
+        self.slots_tree.column("clue", width=360)
         self.slots_tree.grid(row=0, column=0, sticky="ew")
         scrollbar = ttk.Scrollbar(
             container,
@@ -1527,6 +1390,10 @@ class CrosswordDocumentWindow(ttk.Frame):
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.slots_tree.configure(yscrollcommand=scrollbar.set)
         self.slots_tree.bind("<<TreeviewSelect>>", self._slot_selection_changed)
+        self.slots_tree.bind("<Double-Button-1>", self._begin_slot_edit)
+        self.slots_tree.bind("<Return>", self._begin_selected_slot_edit)
+        self.slots_tree.bind("<Delete>", self._clear_selected_slot_event)
+        self.slots_tree.bind("<BackSpace>", self._clear_selected_slot_event)
 
     def _watch_inputs(self) -> None:
         for value in (self.width_value, self.height_value):
@@ -1622,6 +1489,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         return selected.identifier
 
     def _rebuild_slot_tree(self) -> None:
+        self._cancel_inline_slot_edit()
         selected_identifier = self._selected_slot_identifier
         for item in self.slots_tree.get_children():
             self.slots_tree.delete(item)
@@ -1669,40 +1537,183 @@ class CrosswordDocumentWindow(ttk.Frame):
         selection = self.slots_tree.selection()
         if not selection or self._crossword is None:
             self._selected_slot_identifier = None
-            self.slot_title_value.set("Vyberte místo v náhledu nebo seznamu.")
-            self.slot_pattern_value.set("Vzor z křížení: —")
-            self.answer_value.set("")
-            self.clue_value.set("")
-            self._set_slot_form_state("disabled")
             self._refresh_crossword_preview()
             return
 
         self._selected_slot_identifier = selection[0]
-        slot = self._selected_slot()
-        if slot is None:
-            return
-        self.slot_title_value.set(
-            f"{self._slot_label(slot)} · {_cell_count_text(slot.length)}"
-        )
-        pattern = crossword_slot_pattern(self._crossword, slot.identifier)
-        self.slot_pattern_value.set(
-            "Vzor z křížení: "
-            + " ".join(letter if letter is not None else "·" for letter in pattern)
-        )
-        self.answer_value.set(slot.answer or "")
-        self.clue_value.set(slot.clue or "")
-        self._set_slot_form_state("normal")
-        self.clear_slot_button.configure(
-            state="normal" if slot.answer is not None else "disabled"
-        )
         self._refresh_crossword_preview()
 
-    def _set_slot_form_state(self, state: str) -> None:
-        self.answer_entry.configure(state=state)
-        self.clue_entry.configure(state=state)
-        self.save_slot_button.configure(state=state)
-        if state == "disabled":
-            self.clear_slot_button.configure(state="disabled")
+    def _begin_slot_edit(self, event: tk.Event[tk.Misc]) -> str | None:
+        if self.slots_tree.identify_region(event.x, event.y) != "cell":
+            return None
+        identifier = self.slots_tree.identify_row(event.y)
+        column = self.slots_tree.identify_column(event.x)
+        if not identifier or column not in {"#3", "#4"}:
+            return None
+        self._open_inline_slot_edit(identifier, column)
+        return "break"
+
+    def _begin_selected_slot_edit(
+        self,
+        _event: tk.Event[tk.Misc] | None = None,
+    ) -> str:
+        selection = self.slots_tree.selection()
+        if selection:
+            self._open_inline_slot_edit(selection[0], "#3")
+        return "break"
+
+    def _open_inline_slot_edit(self, identifier: str, column: str) -> bool:
+        if (
+            self._slot_edit_identifier is not None
+            and not self._save_inline_slot_edit()
+        ):
+            return False
+        crossword = self._crossword
+        if crossword is None:
+            return False
+        try:
+            _, slot = _crossword_slot(crossword, identifier)
+        except GuiInputError:
+            return False
+
+        self.slots_tree.selection_set(identifier)
+        self.slots_tree.focus(identifier)
+        self.slots_tree.see(identifier)
+        self.slots_tree.update_idletasks()
+        answer_box = self.slots_tree.bbox(identifier, "#3")
+        clue_box = self.slots_tree.bbox(identifier, "#4")
+        if not answer_box or not clue_box:
+            return False
+
+        self._selected_slot_identifier = identifier
+        self._slot_edit_identifier = identifier
+        self._slot_answer_editor = self._create_slot_cell_editor(
+            answer_box,
+            slot.answer or "",
+        )
+        self._slot_clue_editor = self._create_slot_cell_editor(
+            clue_box,
+            slot.clue or "",
+        )
+        focused_editor = (
+            self._slot_clue_editor if column == "#4" else self._slot_answer_editor
+        )
+        focused_editor.focus_set()
+        focused_editor.selection_range(0, tk.END)
+        self._refresh_crossword_preview()
+        return True
+
+    def _create_slot_cell_editor(
+        self,
+        bounding_box: tuple[int, int, int, int],
+        value: str,
+    ) -> ttk.Entry:
+        x, y, width, height = bounding_box
+        editor = ttk.Entry(self.slots_tree)
+        editor.insert(0, value)
+        editor.place(
+            x=x + 1,
+            y=y + 1,
+            width=max(1, width - 2),
+            height=max(1, height - 2),
+        )
+        editor.bind("<Return>", self._commit_inline_slot_edit)
+        editor.bind("<Escape>", self._cancel_inline_slot_edit)
+        editor.bind("<FocusOut>", self._inline_slot_editor_focus_out)
+        return editor
+
+    def _inline_slot_editor_focus_out(
+        self,
+        _event: tk.Event[tk.Misc] | None = None,
+    ) -> None:
+        self.after_idle(self._save_slot_edit_if_focus_left)
+
+    def _save_slot_edit_if_focus_left(self) -> None:
+        focused = self.focus_get()
+        if focused in (
+            self._slot_answer_editor,
+            self._slot_clue_editor,
+        ):
+            return
+        self._save_inline_slot_edit()
+
+    def _commit_inline_slot_edit(
+        self,
+        _event: tk.Event[tk.Misc] | None = None,
+    ) -> str:
+        self._save_inline_slot_edit()
+        return "break"
+
+    def _save_inline_slot_edit(self) -> bool:
+        crossword = self._crossword
+        identifier = self._slot_edit_identifier
+        answer_editor = self._slot_answer_editor
+        clue_editor = self._slot_clue_editor
+        if (
+            crossword is None
+            or identifier is None
+            or answer_editor is None
+            or clue_editor is None
+        ):
+            return True
+
+        answer = answer_editor.get()
+        clue = clue_editor.get()
+        try:
+            if not answer.strip() and not clue.strip():
+                updated = clear_crossword_slot(crossword, identifier)
+            else:
+                updated = fill_crossword_slot(
+                    crossword,
+                    identifier,
+                    answer,
+                    clue,
+                )
+        except GuiInputError as error:
+            self._show_action_error(
+                "Heslo nelze uložit",
+                str(error),
+            )
+            if not answer.strip():
+                answer_editor.focus_set()
+            elif not clue.strip():
+                clue_editor.focus_set()
+            else:
+                answer_editor.focus_set()
+            return False
+
+        changed = updated != crossword
+        self._crossword = updated
+        self._close_inline_slot_edit()
+        if changed:
+            self._set_dirty(True)
+            self._rebuild_slot_tree()
+            self._refresh_crossword_view()
+        return True
+
+    def _close_inline_slot_edit(self) -> None:
+        editors = (self._slot_answer_editor, self._slot_clue_editor)
+        self._slot_edit_identifier = None
+        self._slot_answer_editor = None
+        self._slot_clue_editor = None
+        for editor in editors:
+            if editor is not None:
+                editor.destroy()
+
+    def _cancel_inline_slot_edit(
+        self,
+        _event: tk.Event[tk.Misc] | None = None,
+    ) -> str:
+        self._close_inline_slot_edit()
+        return "break"
+
+    def _clear_selected_slot_event(
+        self,
+        _event: tk.Event[tk.Misc] | None = None,
+    ) -> str:
+        if self._save_inline_slot_edit():
+            self.clear_selected_slot()
+        return "break"
 
     def _preview_cell_clicked(self, coordinate: Coordinate) -> None:
         crossword = self._crossword
@@ -1733,36 +1744,16 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._selected_slot_identifier = selected
         self._slot_selection_changed()
 
-    def save_selected_slot(self) -> None:
-        crossword = self._crossword
-        identifier = self._selected_slot_identifier
-        if crossword is None or identifier is None:
-            self._show_action_error(
-                "Heslo nelze uložit",
-                "Vyberte nejprve místo v náhledu nebo seznamu.",
-            )
-            return
-        try:
-            self._crossword = fill_crossword_slot(
-                crossword,
-                identifier,
-                self.answer_value.get(),
-                self.clue_value.get(),
-            )
-        except GuiInputError as error:
-            self._show_action_error(
-                "Heslo nelze uložit",
-                str(error),
-            )
-            return
-        self._set_dirty(True)
-        self._rebuild_slot_tree()
-        self._refresh_crossword_view()
-
     def clear_selected_slot(self) -> None:
         crossword = self._crossword
         identifier = self._selected_slot_identifier
         if crossword is None or identifier is None:
+            return
+        try:
+            _, slot = _crossword_slot(crossword, identifier)
+        except GuiInputError:
+            return
+        if slot.answer is None and slot.clue is None:
             return
         self._crossword = clear_crossword_slot(crossword, identifier)
         self._set_dirty(True)
@@ -1773,12 +1764,8 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._refresh_crossword_preview()
         crossword = self._crossword
         if crossword is None:
+            self._cancel_inline_slot_edit()
             self._selected_slot_identifier = None
-            self.slot_title_value.set("Křížovka zatím není vytvořená.")
-            self.slot_pattern_value.set("Vzor z křížení: —")
-            self.answer_value.set("")
-            self.clue_value.set("")
-            self._set_slot_form_state("disabled")
             self._refresh_file_menu()
             return
         self._refresh_file_menu()
@@ -1846,6 +1833,8 @@ class CrosswordDocumentWindow(ttk.Frame):
         return _grid_from_editable_document(crossword)
 
     def save_crossword_pdf(self) -> None:
+        if not self._save_inline_slot_edit():
+            return
         crossword = self._crossword
         if crossword is None:
             self._show_action_error(
@@ -1861,6 +1850,8 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
 
     def save_solution_pdf(self) -> None:
+        if not self._save_inline_slot_edit():
+            return
         grid = self._complete_grid_or_error()
         if grid is None:
             return
@@ -1927,11 +1918,15 @@ class CrosswordDocumentWindow(ttk.Frame):
         return self._crossword
 
     def save_document(self) -> bool:
+        if not self._save_inline_slot_edit():
+            return False
         if self._path is None:
             return self.save_document_as()
         return self._write_document(self._path, overwrite=True)
 
     def save_document_as(self) -> bool:
+        if not self._save_inline_slot_edit():
+            return False
         if self._path is not None:
             initialfile = self._path.name
         else:
@@ -1994,6 +1989,8 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._update_title()
 
     def request_close(self) -> None:
+        if not self._save_inline_slot_edit():
+            return
         if self._dirty:
             name = self._path.name if self._path is not None else "nový dokument"
             save = messagebox.askyesnocancel(
