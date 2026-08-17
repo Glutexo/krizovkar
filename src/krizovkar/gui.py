@@ -1547,8 +1547,8 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._update_title()
 
     def _configure_window(self) -> None:
-        self.root.geometry("780x850")
-        self.root.minsize(780, 700)
+        self.root.geometry("720x850")
+        self.root.minsize(720, 700)
         self.root.option_add("*tearOff", False)
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
