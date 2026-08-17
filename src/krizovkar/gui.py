@@ -1099,6 +1099,44 @@ def _grid_from_editable_document(
     return create_grid_from_crossword(document)
 
 
+class _ReadOnlyText(tk.Text):
+    """Text, který dovolí výběr a posun, ale odmítne změny obsahu."""
+
+    _MUTATING_COMMANDS = frozenset({"delete", "insert", "replace"})
+
+    def __init__(self, master: tk.Misc, **kwargs: object) -> None:
+        super().__init__(master, **kwargs)
+        self._original_widget_command = f"{self._w}_readonly_original"
+        self.tk.call("rename", self._w, self._original_widget_command)
+        self.tk.createcommand(self._w, self._dispatch_widget_command)
+
+    def _dispatch_widget_command(self, *arguments: object) -> object:
+        if arguments and arguments[0] in self._MUTATING_COMMANDS:
+            return ""
+        return self.tk.call(self._original_widget_command, *arguments)
+
+    def replace_content(self, content: str) -> None:
+        """Nahradí obsah interně, aniž by zpřístupnil jeho úpravu."""
+
+        self.tk.call(
+            self._original_widget_command,
+            "delete",
+            "1.0",
+            tk.END,
+        )
+        self.tk.call(
+            self._original_widget_command,
+            "insert",
+            "1.0",
+            content,
+        )
+
+    def destroy(self) -> None:
+        self.tk.deletecommand(self._w)
+        self.tk.call("rename", self._original_widget_command, self._w)
+        super().destroy()
+
+
 class CrosswordSourceWindow(ttk.Frame):
     """Nástrojové okno s YAML podobou právě aktivního dokumentu."""
 
@@ -1121,11 +1159,10 @@ class CrosswordSourceWindow(ttk.Frame):
         self.rowconfigure(0, weight=1)
 
     def _build_content(self) -> None:
-        self.source_text = tk.Text(
+        self.source_text = _ReadOnlyText(
             self,
             wrap="none",
             font="TkFixedFont",
-            state="disabled",
         )
         vertical_scrollbar = ttk.Scrollbar(
             self,
@@ -1161,10 +1198,7 @@ class CrosswordSourceWindow(ttk.Frame):
         self.root.transient(window.root)
         label = _document_window_label(window._path, window._dirty)
         self.root.title(f"Zdroj YAML — {label}")
-        self.source_text.configure(state="normal")
-        self.source_text.delete("1.0", tk.END)
-        self.source_text.insert("1.0", output.getvalue())
-        self.source_text.configure(state="disabled")
+        self.source_text.replace_content(output.getvalue())
         if vertical_position:
             self.source_text.yview_moveto(vertical_position[0])
         if horizontal_position:

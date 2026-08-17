@@ -71,8 +71,8 @@ druhého neovlivní.
 Nabídka **Okno** uvádí všechna otevřená dokumentová okna. Aktuální okno
 označí a výběrem jiné položky přenese příslušný dokument dopředu. Volba
 **Zdroj YAML** otevře samostatné nástrojové okno s neupravitelnou YAML podobou
-aktivního dokumentu. Při přepnutí dokumentu nebo změně jeho obsahu se zdroj
-automaticky aktualizuje.
+aktivního dokumentu. Zdroj lze posouvat a jeho text označovat a kopírovat. Při
+přepnutí dokumentu nebo změně jeho obsahu se zdroj automaticky aktualizuje.
 
 Nabídka **Nápověda** otevře [repozitář Křížovkáře na GitHubu](https://github.com/Glutexo/krizovkar)
 ve výchozím webovém prohlížeči.

@@ -26,6 +26,7 @@ from krizovkar.gui import (
     _configure_utility_window,
     _create_help_menu,
     _create_window_menu,
+    _ReadOnlyText,
     _template_generation_layout,
     _keyboard_shortcut,
     _recent_document_label,
@@ -385,14 +386,86 @@ class GuiTest(unittest.TestCase):
         source_window.root.title.assert_called_once_with(
             "Zdroj YAML — *krizovka.yaml"
         )
-        source_window.source_text.configure.assert_has_calls(
-            [call(state="normal"), call(state="disabled")]
-        )
-        yaml_source = source_window.source_text.insert.call_args.args[1]
+        yaml_source = source_window.source_text.replace_content.call_args.args[0]
         self.assertIn("format: krizovkar", yaml_source)
         self.assertIn("kind: crossword", yaml_source)
         source_window.root.deiconify.assert_called_once_with()
         source_window.root.lift.assert_called_once_with()
+
+    def test_read_only_text_forwards_selection_and_scrolling_commands(
+        self,
+    ) -> None:
+        text = _ReadOnlyText.__new__(_ReadOnlyText)
+        text.tk = Mock()
+        text._original_widget_command = "původní-widget"
+        text.tk.call.return_value = "výsledek"
+
+        scroll_result = text._dispatch_widget_command(
+            "yview",
+            "scroll",
+            1,
+            "units",
+        )
+        selection_result = text._dispatch_widget_command(
+            "tag",
+            "add",
+            "sel",
+            "1.0",
+            "1.4",
+        )
+
+        self.assertEqual("výsledek", scroll_result)
+        self.assertEqual("výsledek", selection_result)
+        self.assertEqual(
+            [
+                call("původní-widget", "yview", "scroll", 1, "units"),
+                call(
+                    "původní-widget",
+                    "tag",
+                    "add",
+                    "sel",
+                    "1.0",
+                    "1.4",
+                ),
+            ],
+            text.tk.call.call_args_list,
+        )
+
+    def test_read_only_text_blocks_user_content_changes(self) -> None:
+        text = _ReadOnlyText.__new__(_ReadOnlyText)
+        text.tk = Mock()
+        text._original_widget_command = "původní-widget"
+
+        for command in ("insert", "delete", "replace"):
+            with self.subTest(command=command):
+                self.assertEqual(
+                    "",
+                    text._dispatch_widget_command(command, "1.0", "text"),
+                )
+
+        text.tk.call.assert_not_called()
+
+    def test_read_only_text_replaces_content_through_internal_command(
+        self,
+    ) -> None:
+        text = _ReadOnlyText.__new__(_ReadOnlyText)
+        text.tk = Mock()
+        text._original_widget_command = "původní-widget"
+
+        text.replace_content("format: krizovkar\n")
+
+        self.assertEqual(
+            [
+                call("původní-widget", "delete", "1.0", tk.END),
+                call(
+                    "původní-widget",
+                    "insert",
+                    "1.0",
+                    "format: krizovkar\n",
+                ),
+            ],
+            text.tk.call.call_args_list,
+        )
 
     def test_other_platforms_refresh_window_menu_before_opening(self) -> None:
         parent = Mock()
