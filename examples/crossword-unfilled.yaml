@@ -1,0 +1,13 @@
+format: krizovkar
+kind: crossword
+version: 1
+grid:
+  width: 3
+  height: 1
+  cells:
+    - [{type: letter}, {type: letter}, {type: letter}]
+slots:
+  - id: h1
+    start: {row: 1, column: 1}
+    direction: horizontal
+    length: 3

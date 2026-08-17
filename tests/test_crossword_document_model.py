@@ -26,6 +26,15 @@ TEMPLATE_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "template-minimal.yaml"
 
 
 class CrosswordDocumentModelTest(unittest.TestCase):
+    def test_public_crossword_examples_use_current_document_kind(self) -> None:
+        sources = sorted((PROJECT_ROOT / "examples").glob("crossword-*.yaml"))
+
+        self.assertTrue(sources)
+        for source in sources:
+            with self.subTest(source=source.name):
+                crossword = load_crossword_document(source)
+                self.assertEqual("crossword", crossword.kind)
+
     def test_loads_and_writes_crossword_document(self) -> None:
         crossword = load_crossword_document(CROSSWORD_MINIMAL_EXAMPLE)
 
