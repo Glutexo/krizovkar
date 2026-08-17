@@ -875,8 +875,8 @@ class GuiTest(unittest.TestCase):
 
         window._configure_window()
 
-        window.root.geometry.assert_called_once_with("720x850")
-        window.root.minsize.assert_called_once_with(720, 700)
+        window.root.geometry.assert_called_once_with("660x850")
+        window.root.minsize.assert_called_once_with(660, 700)
         window.root.bind.assert_called_once_with(
             "<FocusIn>",
             window._document_focus_in,
