@@ -770,7 +770,7 @@ class GuiTest(unittest.TestCase):
                 "krizovkar.gui.ttk.LabelFrame",
                 return_value=preview_frame,
             ) as label_frame_type,
-            patch("krizovkar.gui.ttk.Label"),
+            patch("krizovkar.gui.ttk.Label") as label_type,
             patch(
                 "krizovkar.gui.CrosswordPreview",
                 return_value=preview,
@@ -791,6 +791,7 @@ class GuiTest(unittest.TestCase):
         preview.set_cell_click_handler.assert_called_once_with(
             window._preview_cell_clicked
         )
+        label_type.assert_not_called()
 
     def test_crossword_watches_dimensions_for_live_resizing(self) -> None:
         window = Mock()

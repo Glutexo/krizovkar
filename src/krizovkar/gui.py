@@ -1491,15 +1491,6 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         self.crossword_preview.grid(row=0, column=0, sticky="nsew")
         self.crossword_preview.set_cell_click_handler(self._preview_cell_clicked)
-        ttk.Label(
-            preview_frame,
-            text=(
-                "Kliknutím na písmenné pole vyberete jeho vodorovné nebo "
-                "svislé heslo; opakovaný klik mezi nimi přepne."
-            ),
-            style="Muted.TLabel",
-            wraplength=640,
-        ).grid(row=1, column=0, sticky="w", pady=(8, 0))
 
     def _build_slot_list(self, parent: ttk.Frame) -> None:
         slots_frame = ttk.LabelFrame(
