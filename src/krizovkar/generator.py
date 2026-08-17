@@ -1,4 +1,4 @@
-"""Deterministické plnění husté švédské křížovkové mřížky."""
+"""Generování šablon a deterministické plnění křížovek."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ DEFAULT_GRID_WIDTH = 15
 DEFAULT_GRID_HEIGHT = 10
 DEFAULT_SEED = 0
 MAX_CLUE_LENGTH = 48
-GENERATION_ATTEMPTS = 4
+FILLING_ATTEMPTS = 4
 MAX_SEARCH_NODES = 250_000
 PREFERRED_SECRET_PART_LENGTH = 4
 
@@ -70,7 +70,7 @@ SpecificationLayout = Literal["swedish", "numbered"]
 
 
 class GenerationError(RuntimeError):
-    """Požadovanou šablonu nebo křížovku se nepodařilo vytvořit."""
+    """Šablonu se nepodařilo vygenerovat nebo křížovku vyplnit."""
 
 
 class _SearchFailed(RuntimeError):
@@ -1409,7 +1409,7 @@ def fill_crossword(
             f"slovník neobsahuje použitelná hesla délky: {missing}"
         )
 
-    for attempt in range(GENERATION_ATTEMPTS):
+    for attempt in range(FILLING_ATTEMPTS):
         attempt_seed = seed + attempt * 1_000_003
         try:
             assignments = _fill_crossword_slots(

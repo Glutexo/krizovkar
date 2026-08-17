@@ -501,12 +501,12 @@ def crossword_is_complete(crossword: CrosswordTemplate) -> bool:
     )
 
 
-def _crossword_generation_layout(
-    crossword: CrosswordTemplate,
+def _template_generation_layout(
+    document: CrosswordTemplate,
 ) -> SpecificationLayout:
-    """Vybere generátor pro případ, že editor musí dokument přestavět."""
+    """Určí rozvržení pro nové vygenerování šablony."""
 
-    if any(slot.legend_position is not None for slot in crossword.slots):
+    if any(slot.legend_position is not None for slot in document.slots):
         return "swedish"
     return "numbered"
 
@@ -885,7 +885,7 @@ class CrosswordApplication:
         self.file_menu.add_command(
             label="Nová šablona",
             accelerator=new_shortcut.accelerator,
-            command=self.new_crossword_document,
+            command=self.new_template_document,
         )
         self.file_menu.add_command(
             label="Otevřít…",
@@ -939,19 +939,19 @@ class CrosswordApplication:
             self.root.lift()
 
     def _new_event(self, _event: tk.Event[tk.Misc]) -> str:
-        self.new_crossword_document()
+        self.new_template_document()
         return "break"
 
     def _open_event(self, _event: tk.Event[tk.Misc]) -> str:
         self.choose_document(parent=self._no_document_dialog_parent())
         return "break"
 
-    def new_crossword_document(self) -> CrosswordDocumentWindow:
-        crossword = create_blank_template(
+    def new_template_document(self) -> CrosswordDocumentWindow:
+        template = create_blank_template(
             CrosswordSettings(DEFAULT_GRID_WIDTH, DEFAULT_GRID_HEIGHT),
             "swedish",
         )
-        return self._open_window(crossword, dirty=True)
+        return self._open_window(template, dirty=True)
 
     def choose_document(
         self,
@@ -1059,7 +1059,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._dirty = dirty
         self._crossword = document
         self._grid: CrosswordGrid | None = None
-        self._generation_layout = _crossword_generation_layout(document)
+        self._template_layout = _template_generation_layout(document)
         self._selected_slot_identifier: str | None = None
         self._content_row = 0 if sys.platform == "darwin" else 1
         self._changing_dimension_values = False
@@ -1112,7 +1112,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.file_menu.add_command(
             label="Nová šablona",
             accelerator=new_shortcut.accelerator,
-            command=self.application.new_crossword_document,
+            command=self.application.new_template_document,
         )
         self.file_menu.add_command(
             label="Otevřít…",
@@ -1478,10 +1478,10 @@ class CrosswordDocumentWindow(ttk.Frame):
             self.after_cancel(self._resize_job)
         self._resize_job = self.after(
             _CROSSWORD_RESIZE_DELAY_MS,
-            self._resize_crossword_from_inputs,
+            self._regenerate_template_from_inputs,
         )
 
-    def _resize_crossword_from_inputs(self) -> None:
+    def _regenerate_template_from_inputs(self) -> None:
         self._resize_job = None
         try:
             settings = parse_crossword_settings(
@@ -1508,14 +1508,14 @@ class CrosswordDocumentWindow(ttk.Frame):
             ):
                 self._restore_dimension_values(current)
                 return
-            layout = self._generation_layout or "swedish"
-            crossword = create_blank_template(settings, layout)
+            layout = self._template_layout or "swedish"
+            template = create_blank_template(settings, layout)
         except GuiInputError as error:
             self.dimension_error_value.set(str(error))
             return
 
-        self._crossword = crossword
-        self._generation_layout = layout
+        self._crossword = template
+        self._template_layout = layout
         self._selected_slot_identifier = None
         self._set_dirty(True)
         self._rebuild_slot_tree()
@@ -1995,7 +1995,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.application.close_window(self)
 
     def _new_event(self, _event: tk.Event[tk.Misc]) -> str:
-        self.application.new_crossword_document()
+        self.application.new_template_document()
         return "break"
 
     def _open_event(self, _event: tk.Event[tk.Misc]) -> str:

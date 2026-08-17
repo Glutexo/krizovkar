@@ -586,11 +586,11 @@ class GeneratorTest(unittest.TestCase):
             all(isinstance(cell, SecretCell) for cell in grid.grid.cells[0])
         )
 
-    def test_fills_generated_crossword_deterministically(self) -> None:
-        crossword = generate_swedish_template(width=5, height=5)
+    def test_fills_generated_template_deterministically(self) -> None:
+        template = generate_swedish_template(width=5, height=5)
 
-        first = fill_crossword(crossword, TEST_DICTIONARY, seed=42)
-        second = fill_crossword(crossword, TEST_DICTIONARY, seed=42)
+        first = fill_crossword(template, TEST_DICTIONARY, seed=42)
+        second = fill_crossword(template, TEST_DICTIONARY, seed=42)
 
         self.assertEqual(first, second)
         self.assertEqual("crossword", first.kind)
