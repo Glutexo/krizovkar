@@ -1052,7 +1052,6 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.clue_value = tk.StringVar()
         self.slot_title_value = tk.StringVar(value="Vyberte heslo.")
         self.slot_pattern_value = tk.StringVar(value="Vzor z křížení: —")
-        self.progress_value = tk.StringVar()
         self._page_format = DEFAULT_PAGE_FORMAT
         self._resize_job: str | None = None
 
@@ -1259,12 +1258,6 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         document.pack(fill="x")
         document.columnconfigure(0, weight=1)
-        ttk.Label(
-            document,
-            textvariable=self.progress_value,
-            style="Muted.TLabel",
-            wraplength=310,
-        ).grid(row=0, column=0, sticky="w")
         self._build_crossword_dimensions(document)
 
         editor = ttk.LabelFrame(
@@ -1285,7 +1278,7 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _build_crossword_dimensions(self, parent: ttk.Frame) -> None:
         controls = ttk.Frame(parent)
-        controls.grid(row=1, column=0, sticky="w", pady=(10, 0))
+        controls.grid(row=0, column=0, sticky="w")
         ttk.Label(controls, text="Řádky").grid(
             row=0,
             column=0,
@@ -1318,7 +1311,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             textvariable=self.dimension_error_value,
             style="Error.TLabel",
             wraplength=310,
-        ).grid(row=2, column=0, sticky="w", pady=(6, 0))
+        ).grid(row=1, column=0, sticky="w", pady=(6, 0))
 
     def _build_crossword_editor(self, parent: ttk.Frame) -> None:
         ttk.Label(
@@ -1695,16 +1688,10 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._rebuild_slot_tree()
         self._refresh_crossword_view()
 
-    def _filled_slot_count(self) -> int:
-        if self._crossword is None:
-            return 0
-        return sum(slot.answer is not None for slot in self._crossword.slots)
-
     def _refresh_crossword_view(self) -> None:
         self._refresh_crossword_preview()
         crossword = self._crossword
         if crossword is None:
-            self.progress_value.set("Křížovka zatím není vytvořená.")
             self._selected_slot_identifier = None
             self.slot_title_value.set("Křížovka zatím není vytvořená.")
             self.slot_pattern_value.set("Vzor z křížení: —")
@@ -1713,19 +1700,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             self._set_slot_form_state("disabled")
             self._refresh_file_menu()
             return
-        filled = self._filled_slot_count()
-        remaining = len(crossword.slots) - filled
-        document = f"Křížovka {crossword.grid.width} × {crossword.grid.height}. "
-        if remaining:
-            self.progress_value.set(
-                document + f"Vyplněno {_word_count_text(filled)} z "
-                f"{_word_count_text(len(crossword.slots))}; zbývá "
-                f"{_word_count_text(remaining)}."
-            )
-        else:
-            self.progress_value.set(
-                document + f"Všech {_word_count_text(filled)} je vyplněno."
-            )
         self._refresh_file_menu()
 
     def _refresh_crossword_preview(self) -> None:
@@ -1782,7 +1756,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             )
             return None
         if not crossword_is_complete(crossword):
-            remaining = len(crossword.slots) - self._filled_slot_count()
+            remaining = sum(slot.answer is None for slot in crossword.slots)
             self._show_action_error(
                 "Křížovka není připravena",
                 f"Doplňte ještě {_word_count_text(remaining)}.",

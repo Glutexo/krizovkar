@@ -564,10 +564,9 @@ class GuiTest(unittest.TestCase):
 
         frame_type.assert_called_once_with(parent)
         controls.grid.assert_called_once_with(
-            row=1,
+            row=0,
             column=0,
             sticky="w",
-            pady=(10, 0),
         )
         self.assertEqual(
             [
@@ -779,23 +778,6 @@ class GuiTest(unittest.TestCase):
         )
         application._open_window.assert_called_once_with(template, dirty=True)
         self.assertIs(expected_window, result)
-
-    def test_crossword_progress_uses_the_common_document_name(self) -> None:
-        window = Mock()
-        window._crossword = create_blank_template(
-            CrosswordSettings(3, 3),
-            "numbered",
-        )
-        window._filled_slot_count.return_value = 0
-
-        CrosswordDocumentWindow._refresh_crossword_view(window)
-
-        message = window.progress_value.set.call_args.args[0]
-        self.assertTrue(message.startswith("Křížovka 3 × 3. "))
-        self.assertNotIn("švéd", message)
-        self.assertNotIn("číslovan", message)
-        window._refresh_crossword_preview.assert_called_once_with()
-        window._refresh_file_menu.assert_called_once_with()
 
     def test_application_owner_stays_hidden_behind_document_windows(self) -> None:
         root = Mock()
