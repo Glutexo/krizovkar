@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from functools import cache
 from typing import Literal
 
-
 MIN_SEGMENT_LENGTH = 3
 MAX_SEGMENT_LENGTH = 8
 PREFERRED_SEGMENT_LENGTH = 4

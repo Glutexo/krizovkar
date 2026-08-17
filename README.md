@@ -591,10 +591,13 @@ Uživatelské rozhraní je české, včetně nápovědy, stavových a chybových
 Anglicky zůstávají názvy příkazů, voleb, povolených hodnot a klíčů datového
 formátu, například `latex`, `render`, `--output`, `numbered` nebo `grid`.
 
-Testy se spouštějí příkazem:
+Před odevzdáním změny se spouští kontrola Ruffem, testy Pytestem a
+kompilace všech Pythoních modulů:
 
 ```shell
-uv run python -m unittest discover -s tests
+uv run ruff check .
+uv run pytest
+uv run python -m compileall -q src tests
 ```
 
 ## Vývoj

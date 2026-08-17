@@ -16,7 +16,6 @@ from krizovkar.model import (
     write_crossword_document,
 )
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CROSSWORD_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "crossword-minimal.yaml"
 TEMPLATE_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "template-unfilled.yaml"

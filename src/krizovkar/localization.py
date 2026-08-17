@@ -6,7 +6,6 @@ import errno
 import gettext
 from pathlib import Path
 
-
 _CZECH_TRANSLATIONS = gettext.translation(
     "krizovkar",
     localedir=Path(__file__).with_name("locale"),

@@ -14,6 +14,14 @@ Děkujeme za zájem o Křížovkář. Projekt je zatím na začátku, proto maj�
 
 Pokud push selže, nejprve vyřeš příčinu nebo nahlas blokaci. Dokončené změny se nemají hromadit pouze v lokálním repozitáři.
 
+Před každým odevzdáním vždy spusť základní kontroly:
+
+```shell
+uv run ruff check .
+uv run pytest
+uv run python -m compileall -q src tests
+```
+
 ## Historie a větve
 
 - Výchozí větev je `master`.

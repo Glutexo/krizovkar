@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from functools import cache
 import re
+from functools import cache
 
 import pyphen
-
 
 NON_BREAKING_SPACE = "\N{NO-BREAK SPACE}"
 SOFT_HYPHEN = "\N{SOFT HYPHEN}"

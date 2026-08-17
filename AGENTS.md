@@ -6,6 +6,7 @@ Tyto pokyny platí pro celý repozitář a pro lidi i automatizované nástroje.
 - Zachovej zaměření projektu na tvorbu švédských, klasických a dalších křížovek.
 - Veřejnou dokumentaci piš primárně česky.
 - Dělej malé, samostatné a ověřitelné logické změny.
+- Před každým odevzdáním vždy spusť `uv run ruff check .` a dostupné testy.
 - Po každé dokončené logické změně spusť dostupné kontroly, zkontroluj diff, vytvoř commit a ihned jej pushni na GitHub.
 - Nezačínej další logickou změnu, dokud předchozí commit není úspěšně odeslaný.
 - Pokud push nelze provést, zastav další práci a jasně popiš blokaci.

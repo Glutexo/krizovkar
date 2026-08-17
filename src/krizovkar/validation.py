@@ -15,7 +15,6 @@ from krizovkar.model import (
     load_crossword_grid,
 )
 
-
 ValidationSeverity = Literal["error", "warning"]
 AnswerDirection = Literal["right", "down"]
 

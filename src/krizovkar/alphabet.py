@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 
-
 SUPPORTED_SINGLE_LETTERS = (
     "ABCDEFGHIJKLMNOPQRSTUVWXYZÁÄČĎÉĚÍŇÓÔÖŘŠŤÚŮÜÝŽ"
 )
