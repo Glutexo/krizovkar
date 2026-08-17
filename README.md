@@ -83,9 +83,8 @@ při pokusu o otevření ze seznamu odstraní; celý seznam smaže volba **Vymaz
 nabídku**.
 
 Panel nástrojů dokumentového okna obsahuje rozbalovací akci **Exportovat**.
-Na macOS je součástí systémového záhlaví okna; na ostatních systémech
-zůstává nad pracovní
-plochou. Export nabízí stejné výstupy jako podnabídka **Soubor →
+Na všech systémech zůstává nad pracovní plochou. Export nabízí stejné výstupy
+jako podnabídka **Soubor →
 Exportovat** podle právě otevřeného dokumentu. Formát stránky se volí přímo
 v dialogu vybraného exportu; poté naváže systémový dialog pro výběr umístění
 PDF. Tisková podoba bez písmen je dostupná vždy; řešení se zpřístupní po

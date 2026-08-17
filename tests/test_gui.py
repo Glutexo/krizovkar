@@ -1683,14 +1683,14 @@ class GuiTest(unittest.TestCase):
             crossword_window.export_menu.add_command.call_args_list,
         )
 
-    def test_toolbar_offers_export_off_macos(self) -> None:
+    def test_toolbar_offers_export_with_tk_on_macos(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         window.export_menu = Mock()
         toolbar = Mock()
         export_button = Mock()
 
         with (
-            patch("krizovkar.gui.sys.platform", "linux"),
+            patch("krizovkar.gui.sys.platform", "darwin"),
             patch(
                 "krizovkar.gui.ttk.Frame",
                 return_value=toolbar,
@@ -1714,32 +1714,6 @@ class GuiTest(unittest.TestCase):
         export_button.pack.assert_called_once_with(side="left", padx=(0, 6))
         self.assertIs(toolbar, window.toolbar)
         self.assertEqual({"export": export_button}, window._toolbar_controls)
-
-    def test_macos_toolbar_is_attached_to_window_chrome(self) -> None:
-        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
-        window.root = Mock()
-        native_toolbar = Mock()
-
-        with (
-            patch("krizovkar.gui.sys.platform", "darwin"),
-            patch(
-                "krizovkar.gui._create_macos_toolbar",
-                return_value=native_toolbar,
-            ) as create_toolbar,
-            patch("krizovkar.gui.ttk.Frame") as frame_type,
-        ):
-            window._build_toolbar()
-
-        root, items = create_toolbar.call_args.args
-        self.assertIs(window.root, root)
-        self.assertEqual(["export"], [item.identifier for item in items])
-        self.assertEqual(["Exportovat"], [item.label for item in items])
-        self.assertEqual(
-            ["Křížovku bez písmen (PDF)…", "Řešení s písmeny (PDF)…"],
-            [action.label for action in items[0].menu_actions],
-        )
-        self.assertIs(native_toolbar, window.toolbar)
-        frame_type.assert_not_called()
 
     def test_file_menu_enables_complete_crossword_outputs(self) -> None:
         application = Mock()

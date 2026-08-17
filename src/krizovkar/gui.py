@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 from io import StringIO
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
-from typing import Protocol, cast
+from typing import cast
 
 from krizovkar.alphabet import split_answer_letters
 from krizovkar.generator import (
@@ -117,25 +117,8 @@ class _ToolbarItem:
 
     identifier: str
     label: str
-    tooltip: str
-    image_name: str
     command: Callable[[], None] | None = None
     menu_actions: tuple[_ExportAction, ...] = ()
-
-
-class _WindowToolbar(Protocol):
-    """Společné rozhraní nativního a Tk panelu nástrojů."""
-
-    def configure_action(self, identifier: str, *, state: str) -> None: ...
-
-
-def _create_macos_toolbar(
-    window: tk.Toplevel,
-    items: Sequence[_ToolbarItem],
-) -> _WindowToolbar:
-    from krizovkar.macos_toolbar import MacWindowToolbar
-
-    return MacWindowToolbar(window, items)
 
 
 def _keyboard_shortcut(key: str, *, shift: bool = False) -> _KeyboardShortcut:
@@ -1560,7 +1543,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._slot_edit_identifier: str | None = None
         self._slot_answer_editor: ttk.Entry | None = None
         self._slot_clue_editor: ttk.Entry | None = None
-        self._content_row = 0 if sys.platform == "darwin" else 1
+        self._content_row = 1
         self._page_format = DEFAULT_PAGE_FORMAT
 
         self._configure_window()
@@ -1680,20 +1663,12 @@ class CrosswordDocumentWindow(ttk.Frame):
             _ToolbarItem(
                 identifier="export",
                 label="Exportovat",
-                tooltip="Exportovat dokument do PDF",
-                image_name="square.and.arrow.up",
                 menu_actions=self._export_actions(),
             ),
         )
 
     def _build_toolbar(self) -> None:
         items = self._toolbar_items()
-        if sys.platform == "darwin":
-            self.toolbar = _create_macos_toolbar(
-                self.root,
-                items,
-            )
-            return
         self.toolbar = ttk.Frame(self, padding=(14, 0, 14, 10))
         self.toolbar.grid(row=0, column=0, sticky="ew")
         self._toolbar_controls: dict[str, ttk.Widget] = {}
@@ -1715,9 +1690,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             self._toolbar_controls[item.identifier] = control
 
     def _configure_toolbar_action(self, identifier: str, state: str) -> None:
-        if sys.platform == "darwin":
-            self.toolbar.configure_action(identifier, state=state)
-            return
         self._toolbar_controls[identifier].configure(state=state)
 
     def _refresh_recent_documents_menu(self) -> None:
