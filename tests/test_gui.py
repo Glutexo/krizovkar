@@ -15,22 +15,21 @@ from krizovkar.generator import (
     create_grid_from_crossword,
 )
 from krizovkar.gui import (
-    CrosswordSettings,
     CrosswordApplication,
     CrosswordDocumentWindow,
+    CrosswordSettings,
     GuiInputError,
-    _RecentDocuments,
     _configure_tk_runtime,
     _crossword_generation_layout,
     _keyboard_shortcut,
     _recent_document_label,
     _recent_documents_storage_path,
+    _RecentDocuments,
     clear_crossword_slot,
     create_blank_crossword,
     crossword_is_complete,
     crossword_slot_pattern,
     fill_crossword_slot,
-    load_editable_document,
     main,
     parse_crossword_settings,
     parse_slot_content,
@@ -129,17 +128,17 @@ class GuiTest(unittest.TestCase):
         self.assertEqual((), recent_documents.paths)
 
     def test_duplicate_recent_document_names_include_their_directories(self) -> None:
-        first = Path("prvni") / "sablona.yaml"
-        second = Path("druha") / "sablona.yaml"
-        unique = Path("treti") / "krizovka.yaml"
+        first = Path("prvni") / "krizovka.yaml"
+        second = Path("druha") / "krizovka.yaml"
+        unique = Path("treti") / "tajenka.yaml"
         paths = (first, second, unique)
 
         self.assertEqual(
-            f"sablona.yaml — {first.parent}",
+            f"krizovka.yaml — {first.parent}",
             _recent_document_label(first, paths),
         )
         self.assertEqual(
-            "krizovka.yaml",
+            "tajenka.yaml",
             _recent_document_label(unique, paths),
         )
 
@@ -258,7 +257,7 @@ class GuiTest(unittest.TestCase):
 
     def test_application_recent_menu_works_without_document(self) -> None:
         application = CrosswordApplication.__new__(CrosswordApplication)
-        recent_document = Path("sablona.yaml")
+        recent_document = Path("krizovka.yaml")
         application._recent_documents = Mock(paths=(recent_document,))
         application.recent_documents_menu = Mock()
         application.open_recent_document = Mock()
@@ -269,7 +268,7 @@ class GuiTest(unittest.TestCase):
 
         commands = application.recent_documents_menu.add_command.call_args_list
         self.assertEqual(
-            ["sablona.yaml", "Vymazat nabídku"],
+            ["krizovka.yaml", "Vymazat nabídku"],
             [item.kwargs["label"] for item in commands],
         )
         commands[0].kwargs["command"]()
@@ -281,10 +280,10 @@ class GuiTest(unittest.TestCase):
 
     def test_recent_documents_menu_opens_files_and_can_be_cleared(self) -> None:
         window = Mock()
-        first = Path("prvni") / "sablona.yaml"
-        second = Path("druha") / "sablona.yaml"
-        crossword = Path("treti") / "krizovka.yaml"
-        window.application.recent_document_paths = (first, second, crossword)
+        first = Path("prvni") / "krizovka.yaml"
+        second = Path("druha") / "krizovka.yaml"
+        other = Path("treti") / "tajenka.yaml"
+        window.application.recent_document_paths = (first, second, other)
 
         CrosswordDocumentWindow._refresh_recent_documents_menu(window)
 
@@ -292,9 +291,9 @@ class GuiTest(unittest.TestCase):
         calls = window.recent_documents_menu.add_command.call_args_list
         self.assertEqual(
             [
-                f"sablona.yaml — {first.parent}",
-                f"sablona.yaml — {second.parent}",
-                "krizovka.yaml",
+                f"krizovka.yaml — {first.parent}",
+                f"krizovka.yaml — {second.parent}",
+                "tajenka.yaml",
                 "Vymazat nabídku",
             ],
             [item.kwargs["label"] for item in calls],

@@ -1,4 +1,4 @@
-"""Testy datového modelu strukturální šablony."""
+"""Testy datového modelu editovatelné křížovky."""
 
 from __future__ import annotations
 
@@ -8,75 +8,74 @@ from io import StringIO
 from pathlib import Path
 
 from krizovkar.model import (
+    CrosswordSecretCellsPart,
+    HelpCellRole,
+    LetterCellRole,
     ModelError,
     SecretPrompt,
-    TemplateHelpCell,
-    TemplateLetterCell,
-    TemplateSecretCellsPart,
     dump_crossword_document,
     load_crossword_document,
     write_crossword_document,
 )
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "crossword-minimal.yaml"
-TEMPLATE_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "crossword-secret.yaml"
-TEMPLATE_FROM_SPECIFICATION_EXAMPLE = (
+CROSSWORD_MINIMAL_EXAMPLE = PROJECT_ROOT / "examples" / "crossword-minimal.yaml"
+CROSSWORD_SECRET_EXAMPLE = PROJECT_ROOT / "examples" / "crossword-secret.yaml"
+CROSSWORD_FROM_SPECIFICATION_EXAMPLE = (
     PROJECT_ROOT / "examples" / "crossword-from-specification.yaml"
 )
 
 
-class TemplateModelTest(unittest.TestCase):
+class CrosswordModelTest(unittest.TestCase):
     def _load(self, content: str):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
-        source = Path(directory.name) / "template.yaml"
+        source = Path(directory.name) / "crossword.yaml"
         source.write_text(content, encoding="utf-8")
         return load_crossword_document(source)
 
-    def test_loads_and_writes_minimal_template(self) -> None:
-        template = load_crossword_document(TEMPLATE_MINIMAL_EXAMPLE)
+    def test_loads_and_writes_minimal_crossword(self) -> None:
+        crossword = load_crossword_document(CROSSWORD_MINIMAL_EXAMPLE)
 
-        self.assertEqual("krizovkar", template.format_name)
-        self.assertEqual("crossword", template.kind)
-        self.assertEqual(1, template.version)
-        self.assertEqual(3, template.grid.width)
-        self.assertEqual(1, template.grid.height)
+        self.assertEqual("krizovkar", crossword.format_name)
+        self.assertEqual("crossword", crossword.kind)
+        self.assertEqual(1, crossword.version)
+        self.assertEqual(3, crossword.grid.width)
+        self.assertEqual(1, crossword.grid.height)
         self.assertTrue(
-            all(isinstance(cell, TemplateLetterCell) for cell in template.grid.cells[0])
+            all(isinstance(cell, LetterCellRole) for cell in crossword.grid.cells[0])
         )
-        self.assertEqual("h1", template.slots[0].identifier)
-        self.assertEqual(3, template.slots[0].length)
-        self.assertIsNone(template.slots[0].legend_position)
+        self.assertEqual("h1", crossword.slots[0].identifier)
+        self.assertEqual(3, crossword.slots[0].length)
+        self.assertIsNone(crossword.slots[0].legend_position)
 
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "written.yaml"
-            write_crossword_document(template, output)
-            self.assertEqual(template, load_crossword_document(output))
+            write_crossword_document(crossword, output)
+            self.assertEqual(crossword, load_crossword_document(output))
 
-    def test_loads_fixed_template_created_from_specification(self) -> None:
-        template = load_crossword_document(
-            TEMPLATE_FROM_SPECIFICATION_EXAMPLE
+    def test_loads_fixed_crossword_created_from_specification(self) -> None:
+        crossword = load_crossword_document(
+            CROSSWORD_FROM_SPECIFICATION_EXAMPLE
         )
 
-        self.assertIsInstance(template.grid.cells[0][0], TemplateHelpCell)
+        self.assertIsInstance(crossword.grid.cells[0][0], HelpCellRole)
         self.assertEqual(
             ("LABE", "LES", "EMU"),
-            tuple(slot.answer for slot in template.slots),
+            tuple(slot.answer for slot in crossword.slots),
         )
         self.assertEqual(
             (False, True, True),
-            tuple(slot.in_help for slot in template.slots),
+            tuple(slot.in_help for slot in crossword.slots),
         )
 
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "written.yaml"
-            write_crossword_document(template, output)
-            self.assertEqual(template, load_crossword_document(output))
+            write_crossword_document(crossword, output)
+            self.assertEqual(crossword, load_crossword_document(output))
 
     def test_loads_cell_based_secret_part(self) -> None:
-        template = self._load(
+        crossword = self._load(
             "format: krizovkar\n"
             "kind: crossword\n"
             "version: 1\n"
@@ -93,14 +92,14 @@ class TemplateModelTest(unittest.TestCase):
             "        arrows: true\n"
         )
 
-        part = template.secrets[0].parts[0]
-        self.assertIsInstance(part, TemplateSecretCellsPart)
-        assert isinstance(part, TemplateSecretCellsPart)
+        part = crossword.secrets[0].parts[0]
+        self.assertIsInstance(part, CrosswordSecretCellsPart)
+        assert isinstance(part, CrosswordSecretCellsPart)
         self.assertTrue(part.arrows)
         self.assertEqual(2, len(part.cells))
 
     def test_accepts_explicit_false_in_help_without_fixed_answer(self) -> None:
-        template = self._load(
+        crossword = self._load(
             "format: krizovkar\n"
             "kind: crossword\n"
             "version: 1\n"
@@ -117,15 +116,15 @@ class TemplateModelTest(unittest.TestCase):
             "    in_help: false\n"
         )
 
-        self.assertFalse(template.slots[0].in_help)
+        self.assertFalse(crossword.slots[0].in_help)
 
-    def test_loads_template_from_text_stream(self) -> None:
-        template = load_crossword_document(
-            StringIO(TEMPLATE_MINIMAL_EXAMPLE.read_text(encoding="utf-8"))
+    def test_loads_crossword_from_text_stream(self) -> None:
+        crossword = load_crossword_document(
+            StringIO(CROSSWORD_MINIMAL_EXAMPLE.read_text(encoding="utf-8"))
         )
 
-        self.assertEqual("crossword", template.kind)
-        self.assertEqual(3, template.grid.width)
+        self.assertEqual("crossword", crossword.kind)
+        self.assertEqual(3, crossword.grid.width)
 
     def test_stream_error_names_standard_input(self) -> None:
         with self.assertRaises(ModelError) as caught:
@@ -133,23 +132,23 @@ class TemplateModelTest(unittest.TestCase):
 
         self.assertIn("standardní vstup", str(caught.exception))
 
-    def test_dumps_template_to_text_stream(self) -> None:
-        template = load_crossword_document(TEMPLATE_MINIMAL_EXAMPLE)
+    def test_dumps_crossword_to_text_stream(self) -> None:
+        crossword = load_crossword_document(CROSSWORD_MINIMAL_EXAMPLE)
         output = StringIO()
 
-        dump_crossword_document(template, output)
+        dump_crossword_document(crossword, output)
 
         self.assertTrue(output.getvalue().startswith("format: krizovkar\n"))
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "stream.yaml"
             source.write_text(output.getvalue(), encoding="utf-8")
-            self.assertEqual(template, load_crossword_document(source))
+            self.assertEqual(crossword, load_crossword_document(source))
 
-    def test_loads_and_writes_template_with_known_secret(self) -> None:
-        template = load_crossword_document(TEMPLATE_SECRET_EXAMPLE)
+    def test_loads_and_writes_crossword_with_known_secret(self) -> None:
+        crossword = load_crossword_document(CROSSWORD_SECRET_EXAMPLE)
 
-        self.assertEqual(1, len(template.secrets))
-        secret = template.secrets[0]
+        self.assertEqual(1, len(crossword.secrets))
+        secret = crossword.secrets[0]
         self.assertEqual(("ZELENÍ",), secret.words)
         self.assertEqual("h1", secret.parts[0].slot_identifier)
         self.assertEqual(1, secret.parts[0].word_count)
@@ -164,11 +163,11 @@ class TemplateModelTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "secret.yaml"
-            write_crossword_document(template, output)
-            self.assertEqual(template, load_crossword_document(output))
+            write_crossword_document(crossword, output)
+            self.assertEqual(crossword, load_crossword_document(output))
 
     def test_accepts_reserved_secret_without_known_words(self) -> None:
-        template = self._load(
+        crossword = self._load(
             "format: krizovkar\n"
             "kind: crossword\n"
             "version: 1\n"
@@ -183,11 +182,11 @@ class TemplateModelTest(unittest.TestCase):
             "  - parts: [{slot: h1}]\n"
         )
 
-        self.assertFalse(template.secrets[0].words)
-        self.assertIsNone(template.secrets[0].parts[0].word_count)
+        self.assertFalse(crossword.secrets[0].words)
+        self.assertIsNone(crossword.secrets[0].parts[0].word_count)
 
     def test_accepts_ch_as_one_secret_cell(self) -> None:
-        template = self._load(
+        crossword = self._load(
             "format: krizovkar\n"
             "kind: crossword\n"
             "version: 1\n"
@@ -203,7 +202,7 @@ class TemplateModelTest(unittest.TestCase):
             "    parts: [{slot: h1, word_count: 1}]\n"
         )
 
-        self.assertEqual(("CH",), template.secrets[0].words)
+        self.assertEqual(("CH",), crossword.secrets[0].words)
 
     def test_rejects_secret_part_with_unknown_slot(self) -> None:
         with self.assertRaisesRegex(
@@ -314,7 +313,7 @@ class TemplateModelTest(unittest.TestCase):
             )
 
     def test_accepts_crossing_slots(self) -> None:
-        template = self._load(
+        crossword = self._load(
             "format: krizovkar\n"
             "kind: crossword\n"
             "version: 1\n"
@@ -336,10 +335,10 @@ class TemplateModelTest(unittest.TestCase):
             "    length: 3\n"
         )
 
-        self.assertEqual(("h1", "v1"), tuple(slot.identifier for slot in template.slots))
+        self.assertEqual(("h1", "v1"), tuple(slot.identifier for slot in crossword.slots))
 
     def test_accepts_internal_legend_before_slot(self) -> None:
-        template = self._load(
+        crossword = self._load(
             "format: krizovkar\n"
             "kind: crossword\n"
             "version: 1\n"
@@ -356,7 +355,7 @@ class TemplateModelTest(unittest.TestCase):
             "    legend: {row: 1, column: 1}\n"
         )
 
-        self.assertEqual(1, template.slots[0].legend_position.column)
+        self.assertEqual(1, crossword.slots[0].legend_position.column)
 
     def test_rejects_wrong_number_of_rows(self) -> None:
         with self.assertRaisesRegex(ModelError, "počet řádků"):

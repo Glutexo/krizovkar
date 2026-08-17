@@ -13,27 +13,27 @@ from unittest.mock import patch
 
 from krizovkar.cli import main
 from krizovkar.model import (
-    Coordinate,
-    DEFAULT_SECRET_PART_LEGEND,
     DEFAULT_SECRET_LEGEND,
+    DEFAULT_SECRET_PART_LEGEND,
+    Coordinate,
     EmptyCell,
     ExternalClue,
     GridDimensions,
     HelpCell,
     LegendCell,
     LetterCell,
+    LetterCellRole,
     ModelError,
     SecretCell,
     SecretCells,
     SecretParts,
     SecretPrompt,
     SecretWord,
-    TemplateLetterCell,
     WordPlacement,
     dump_crossword_grid,
+    load_crossword_document,
     load_crossword_grid,
     load_crossword_specification,
-    load_crossword_document,
     secret_path_arrows,
     write_crossword_grid,
 )
@@ -2055,7 +2055,7 @@ class CommandTest(unittest.TestCase):
             self.assertEqual(28, len(crossword.slots))
             self.assertTrue(
                 all(
-                    isinstance(cell, TemplateLetterCell)
+                    isinstance(cell, LetterCellRole)
                     for row in crossword.grid.cells
                     for cell in row
                 )

@@ -133,40 +133,40 @@ class Coordinate:
 
 
 @dataclass(frozen=True, slots=True)
-class TemplateLetterCell:
+class LetterCellRole:
     """Dosud nevyplněná písmenná buňka editovatelné křížovky."""
 
 
 @dataclass(frozen=True, slots=True)
-class TemplateLegendCell:
+class LegendCellRole:
     """Buňka editovatelné křížovky vyhrazená pro legendy."""
 
 
 @dataclass(frozen=True, slots=True)
-class TemplateEmptyCell:
+class EmptyCellRole:
     """Nevyplňovaná buňka editovatelné křížovky."""
 
 
 @dataclass(frozen=True, slots=True)
-class TemplateHelpCell:
+class HelpCellRole:
     """Buňka editovatelné křížovky vyhrazená pro pomůcku."""
 
 
-TemplateCell = (
-    TemplateLetterCell
-    | TemplateLegendCell
-    | TemplateEmptyCell
-    | TemplateHelpCell
+CellRole = (
+    LetterCellRole
+    | LegendCellRole
+    | EmptyCellRole
+    | HelpCellRole
 )
 
 
 @dataclass(frozen=True, slots=True)
-class TemplateGrid:
+class CrosswordLayout:
     """Obdélníková matice rolí buněk editovatelné křížovky."""
 
     width: int
     height: int
-    cells: tuple[tuple[TemplateCell, ...], ...]
+    cells: tuple[tuple[CellRole, ...], ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,7 +184,7 @@ class WordSlot:
 
 
 @dataclass(frozen=True, slots=True)
-class TemplateSecretPart:
+class CrosswordSecretSlotPart:
     """Jedna část tajenky rezervovaná v konkrétním slotu."""
 
     slot_identifier: str
@@ -192,7 +192,7 @@ class TemplateSecretPart:
 
 
 @dataclass(frozen=True, slots=True)
-class TemplateSecretCellsPart:
+class CrosswordSecretCellsPart:
     """Jedna část tajenky určená vybranými písmennými poli."""
 
     cells: tuple[Coordinate, ...]
@@ -200,44 +200,24 @@ class TemplateSecretCellsPart:
 
 
 @dataclass(frozen=True, slots=True)
-class TemplateSecret:
+class CrosswordSecret:
     """Připravené sloty nebo pole tajenky a volitelně její známá slova."""
 
-    parts: tuple[TemplateSecretPart | TemplateSecretCellsPart, ...]
+    parts: tuple[CrosswordSecretSlotPart | CrosswordSecretCellsPart, ...]
     words: tuple[str, ...] = ()
     prompt: SecretPrompt | None = None
 
 
 @dataclass(frozen=True, slots=True)
-class CrosswordTemplate:
-    """Strukturální mezivýsledek mezi zadáním a vyplněnou mřížkou."""
+class CrosswordDocument:
+    """Editovatelná křížovka s rolemi buněk a místy pro hesla."""
 
     format_name: str
     kind: str
     version: int
-    grid: TemplateGrid
+    grid: CrosswordLayout
     slots: tuple[WordSlot, ...]
-    secrets: tuple[TemplateSecret, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class CrosswordDocument(CrosswordTemplate):
-    """Editovatelná křížovka s rolemi buněk a místy pro hesla."""
-
-
-def create_crossword_document(
-    template: CrosswordTemplate,
-) -> CrosswordDocument:
-    """Převede starší strukturální dokument na křížovku."""
-
-    return CrosswordDocument(
-        format_name=template.format_name,
-        kind="crossword",
-        version=template.version,
-        grid=template.grid,
-        slots=template.slots,
-        secrets=template.secrets,
-    )
+    secrets: tuple[CrosswordSecret, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -651,27 +631,27 @@ def load_crossword_document_kind(source: YamlSource) -> str:
     return kind
 
 
-def _template_cell(cell: dict[str, Any]) -> TemplateCell:
+def _cell_role(cell: dict[str, Any]) -> CellRole:
     if cell["type"] == "letter":
-        return TemplateLetterCell()
+        return LetterCellRole()
     if cell["type"] == "legend":
-        return TemplateLegendCell()
+        return LegendCellRole()
     if cell["type"] == "empty":
-        return TemplateEmptyCell()
+        return EmptyCellRole()
     if cell["type"] == "help":
-        return TemplateHelpCell()
+        return HelpCellRole()
     raise ModelError(f"nepodporovaný typ buňky křížovky: {cell['type']!r}")
 
 
-def _template_secret_part(
+def _crossword_secret_part(
     part: dict[str, Any],
-) -> TemplateSecretPart | TemplateSecretCellsPart:
+) -> CrosswordSecretSlotPart | CrosswordSecretCellsPart:
     if "slot" in part:
-        return TemplateSecretPart(
+        return CrosswordSecretSlotPart(
             slot_identifier=part["slot"],
             word_count=part.get("word_count"),
         )
-    return TemplateSecretCellsPart(
+    return CrosswordSecretCellsPart(
         cells=tuple(
             Coordinate(row=cell["row"], column=cell["column"])
             for cell in part["cells"]
@@ -680,9 +660,9 @@ def _template_secret_part(
     )
 
 
-def _template_cells(
+def _cell_roles(
     grid: dict[str, Any],
-) -> tuple[tuple[TemplateCell, ...], ...]:
+) -> tuple[tuple[CellRole, ...], ...]:
     raw_cells = grid["cells"]
     if len(raw_cells) != grid["height"]:
         raise ModelError(
@@ -691,7 +671,7 @@ def _template_cells(
             f"grid.height ({grid['height']})"
         )
 
-    rows: list[tuple[TemplateCell, ...]] = []
+    rows: list[tuple[CellRole, ...]] = []
     for row_index, raw_row in enumerate(raw_cells):
         if len(raw_row) != grid["width"]:
             raise ModelError(
@@ -699,20 +679,20 @@ def _template_cells(
                 f"počet buněk ({len(raw_row)}) neodpovídá "
                 f"grid.width ({grid['width']})"
             )
-        rows.append(tuple(_template_cell(cell) for cell in raw_row))
+        rows.append(tuple(_cell_role(cell) for cell in raw_row))
     return tuple(rows)
 
 
-def _crossword_template_from_data(data: dict[str, Any]) -> CrosswordTemplate:
+def _crossword_document_from_data(data: dict[str, Any]) -> CrosswordDocument:
     raw_grid = data["grid"]
-    template = CrosswordTemplate(
+    crossword = CrosswordDocument(
         format_name=data["format"],
         kind=data["kind"],
         version=data["version"],
-        grid=TemplateGrid(
+        grid=CrosswordLayout(
             width=raw_grid["width"],
             height=raw_grid["height"],
-            cells=_template_cells(raw_grid),
+            cells=_cell_roles(raw_grid),
         ),
         slots=tuple(
             WordSlot(
@@ -738,9 +718,9 @@ def _crossword_template_from_data(data: dict[str, Any]) -> CrosswordTemplate:
             for slot in data["slots"]
         ),
         secrets=tuple(
-            TemplateSecret(
+            CrosswordSecret(
                 parts=tuple(
-                    _template_secret_part(part)
+                    _crossword_secret_part(part)
                     for part in secret["parts"]
                 ),
                 words=tuple(secret.get("words", ())),
@@ -749,20 +729,19 @@ def _crossword_template_from_data(data: dict[str, Any]) -> CrosswordTemplate:
             for secret in data.get("secrets", ())
         ),
     )
-    _validate_crossword_template(template)
-    return template
+    _validate_crossword_document(crossword)
+    return crossword
 
 
 def load_crossword_document(source: YamlSource) -> CrosswordDocument:
-    """Načte a ověří editovatelnou křížovku ze souboru nebo YAML."""
+    """Načte a ověří editovatelnou křížovku ze souboru nebo proudu YAML."""
 
     data = _validated_data(source, "crossword-v1.schema.json")
-    template = _crossword_template_from_data(data)
-    return create_crossword_document(template)
+    return _crossword_document_from_data(data)
 
 
-def _validate_crossword_template(template: CrosswordTemplate) -> None:
-    grid = template.grid
+def _validate_crossword_document(crossword: CrosswordDocument) -> None:
+    grid = crossword.grid
     if grid.width < 1 or grid.height < 1:
         raise ModelError("neplatný datový model: $.grid: rozměry musí být kladné")
     if len(grid.cells) != grid.height:
@@ -778,7 +757,7 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
                 f"počet buněk ({len(row)}) neodpovídá "
                 f"grid.width ({grid.width})"
             )
-    if not template.slots:
+    if not crossword.slots:
         raise ModelError("neplatný datový model: $.slots: seznam nesmí být prázdný")
 
     identifiers: dict[str, str] = {}
@@ -788,7 +767,7 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
     fixed_letters: dict[tuple[int, int], tuple[str, str]] = {}
     help_slots: list[str] = []
 
-    for slot_index, slot in enumerate(template.slots):
+    for slot_index, slot in enumerate(crossword.slots):
         path = f"$.slots[{slot_index}]"
         if slot.length < 1:
             raise ModelError(
@@ -852,7 +831,7 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
                     f"{grid.width} × {grid.height}"
                 )
             cell = grid.cells[row - 1][column - 1]
-            if not isinstance(cell, TemplateLetterCell):
+            if not isinstance(cell, LetterCellRole):
                 raise ModelError(
                     "neplatný datový model: "
                     f"{path}: slot {slot.identifier!r} vede přes nepísmennou "
@@ -909,7 +888,7 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
                 "prvnímu písmenu slotu"
             )
         legend_cell = grid.cells[legend.row - 1][legend.column - 1]
-        if not isinstance(legend_cell, TemplateLegendCell):
+        if not isinstance(legend_cell, LegendCellRole):
             raise ModelError(
                 "neplatný datový model: "
                 f"{path}.legend: souřadnice row={legend.row}, "
@@ -929,7 +908,7 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
         for column_index, cell in enumerate(row, start=1):
             coordinate = (row_index, column_index)
             if (
-                isinstance(cell, TemplateLetterCell)
+                isinstance(cell, LetterCellRole)
                 and coordinate not in used_letters
             ):
                 raise ModelError(
@@ -938,7 +917,7 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
                     "písmenná buňka nepatří do žádného slotu"
                 )
             if (
-                isinstance(cell, TemplateLegendCell)
+                isinstance(cell, LegendCellRole)
                 and coordinate not in used_legends
             ):
                 raise ModelError(
@@ -951,7 +930,7 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
         (row_index, column_index)
         for row_index, row in enumerate(grid.cells, start=1)
         for column_index, cell in enumerate(row, start=1)
-        if isinstance(cell, TemplateHelpCell)
+        if isinstance(cell, HelpCellRole)
     ]
     if len(help_cells) > 1:
         raise ModelError(
@@ -969,9 +948,9 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
             "buňka type: help vyžaduje alespoň jedno heslo s in_help"
         )
 
-    slots_by_identifier = {slot.identifier: slot for slot in template.slots}
+    slots_by_identifier = {slot.identifier: slot for slot in crossword.slots}
     used_secret_slots: dict[str, str] = {}
-    for secret_index, secret in enumerate(template.secrets):
+    for secret_index, secret in enumerate(crossword.secrets):
         secret_path = f"$.secrets[{secret_index}]"
         if not secret.parts:
             raise ModelError(
@@ -981,7 +960,7 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
         slot_parts = tuple(
             part
             for part in secret.parts
-            if isinstance(part, TemplateSecretPart)
+            if isinstance(part, CrosswordSecretSlotPart)
         )
         counts = tuple(part.word_count for part in slot_parts)
         if secret.words:
@@ -1006,7 +985,7 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
         word_offset = 0
         for part_index, part in enumerate(secret.parts):
             part_path = f"{secret_path}.parts[{part_index}]"
-            if isinstance(part, TemplateSecretCellsPart):
+            if isinstance(part, CrosswordSecretCellsPart):
                 if not part.cells:
                     raise ModelError(
                         f"neplatný datový model: {part_path}.cells: "
@@ -1033,10 +1012,10 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
                             f"column={coordinate.column} leží mimo křížovku "
                             f"{grid.width} × {grid.height}"
                         )
-                    template_cell = grid.cells[
+                    cell_role = grid.cells[
                         coordinate.row - 1
                     ][coordinate.column - 1]
-                    if not isinstance(template_cell, TemplateLetterCell):
+                    if not isinstance(cell_role, LetterCellRole):
                         raise ModelError(
                             f"neplatný datový model: {cell_path}: "
                             "tajenka musí odkazovat na písmennou buňku"
@@ -1580,24 +1559,24 @@ def _crossword_grid_data(crossword: CrosswordGrid) -> dict[str, Any]:
     return data
 
 
-def _template_cell_data(cell: TemplateCell) -> dict[str, str]:
-    if isinstance(cell, TemplateLetterCell):
+def _cell_role_data(cell: CellRole) -> dict[str, str]:
+    if isinstance(cell, LetterCellRole):
         return {"type": "letter"}
-    if isinstance(cell, TemplateLegendCell):
+    if isinstance(cell, LegendCellRole):
         return {"type": "legend"}
-    if isinstance(cell, TemplateEmptyCell):
+    if isinstance(cell, EmptyCellRole):
         return {"type": "empty"}
-    if isinstance(cell, TemplateHelpCell):
+    if isinstance(cell, HelpCellRole):
         return {"type": "help"}
     raise ModelError(
         f"nepodporovaný typ buňky křížovky pro zápis: {type(cell).__name__}"
     )
 
 
-def _crossword_template_data(template: CrosswordTemplate) -> dict[str, Any]:
-    _validate_crossword_template(template)
+def _crossword_document_data(crossword: CrosswordDocument) -> dict[str, Any]:
+    _validate_crossword_document(crossword)
     slots = []
-    for slot in template.slots:
+    for slot in crossword.slots:
         data: dict[str, Any] = {
             "id": slot.identifier,
             "start": {
@@ -1620,25 +1599,25 @@ def _crossword_template_data(template: CrosswordTemplate) -> dict[str, Any]:
         slots.append(data)
 
     result: dict[str, Any] = {
-        "format": template.format_name,
-        "kind": template.kind,
-        "version": template.version,
+        "format": crossword.format_name,
+        "kind": crossword.kind,
+        "version": crossword.version,
         "grid": {
-            "width": template.grid.width,
-            "height": template.grid.height,
+            "width": crossword.grid.width,
+            "height": crossword.grid.height,
             "cells": [
-                [_template_cell_data(cell) for cell in row]
-                for row in template.grid.cells
+                [_cell_role_data(cell) for cell in row]
+                for row in crossword.grid.cells
             ],
         },
         "slots": slots,
     }
-    if template.secrets:
+    if crossword.secrets:
         result["secrets"] = []
-        for secret in template.secrets:
+        for secret in crossword.secrets:
             parts = []
             for part in secret.parts:
-                if isinstance(part, TemplateSecretCellsPart):
+                if isinstance(part, CrosswordSecretCellsPart):
                     part_data = {
                         "cells": [
                             _coordinate_data(coordinate)
@@ -1665,11 +1644,13 @@ def _crossword_template_data(template: CrosswordTemplate) -> dict[str, Any]:
     return result
 
 
-def _structural_document_data(
-    document: CrosswordTemplate,
-    schema_name: str,
+def _validated_crossword_document_data(
+    crossword: CrosswordDocument,
 ) -> dict[str, Any]:
-    return _validate_data(_crossword_template_data(document), schema_name)
+    return _validate_data(
+        _crossword_document_data(crossword),
+        "crossword-v1.schema.json",
+    )
 
 
 def _write_yaml_document(
@@ -1814,7 +1795,7 @@ def write_crossword_document(
     """Zapíše editovatelnou křížovku atomicky jako YAML."""
 
     return _write_yaml_document(
-        _structural_document_data(crossword, "crossword-v1.schema.json"),
+        _validated_crossword_document_data(crossword),
         output,
         overwrite=overwrite,
         subject="křížovku",
@@ -1828,7 +1809,7 @@ def dump_crossword_document(
     """Zapíše editovatelnou křížovku do textového proudu YAML."""
 
     _dump_yaml_document_safely(
-        _structural_document_data(crossword, "crossword-v1.schema.json"),
+        _validated_crossword_document_data(crossword),
         output,
         subject="křížovku",
     )
