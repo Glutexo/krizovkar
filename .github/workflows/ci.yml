@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Python 3.14.1 / Tk 9
+    runs-on: macos-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Načíst repozitář
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Nastavit Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+
+      - name: Nainstalovat uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.10.7"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Nainstalovat závislosti
+        run: uv sync --locked --all-groups
+
+      - name: Ověřit Python a Tk
+        run: |
+          uv run python - <<'PY'
+          import sys
+          import tkinter as tk
+
+          assert sys.version_info[:3] == (3, 14, 1), sys.version
+          assert tk.TkVersion >= 9.0, tk.TkVersion
+          print(f"Python {sys.version.split()[0]}, Tk {tk.TkVersion:.1f}")
+          PY
+
+      - name: Ruff
+        run: uv run ruff check .
+
+      - name: Pytest
+        run: uv run pytest
+
+      - name: PyCompile
+        run: uv run python -m compileall -q src tests
