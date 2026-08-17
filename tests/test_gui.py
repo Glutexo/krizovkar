@@ -17,9 +17,11 @@ from krizovkar.generator import (
 from krizovkar.gui import (
     CrosswordApplication,
     CrosswordDocumentWindow,
+    CrosswordSourceWindow,
     CrosswordSettings,
     GuiInputError,
     _configure_tk_runtime,
+    _configure_utility_window,
     _create_help_menu,
     _create_window_menu,
     _minimum_generated_dimension,
@@ -223,6 +225,11 @@ class GuiTest(unittest.TestCase):
             "Křížovkář na GitHubu",
             help_menu.add_command.call_args.kwargs["label"],
         )
+        source_item = window_menu.add_command.call_args
+        self.assertEqual("Zdroj YAML", source_item.kwargs["label"])
+        self.assertEqual("normal", source_item.kwargs["state"])
+        source_item.kwargs["command"]()
+        window.application.show_source_window.assert_called_once_with(window)
         menu.add_cascade.assert_has_calls(
             [
                 call(label="Soubor", menu=file_menu),
@@ -273,6 +280,10 @@ class GuiTest(unittest.TestCase):
         )
         menu_type.assert_any_call(menu, name="window")
         menu_type.assert_any_call(menu, name="help")
+        window_menu.add_command.assert_called_once_with(
+            label="Zdroj YAML",
+            state="disabled",
+        )
         menu.add_cascade.assert_has_calls(
             [
                 call(label="Soubor", menu=file_menu),
@@ -306,6 +317,64 @@ class GuiTest(unittest.TestCase):
             "https://github.com/Glutexo/krizovkar"
         )
 
+    def test_macos_source_window_uses_utility_decoration(self) -> None:
+        window = Mock()
+
+        with patch("krizovkar.gui.sys.platform", "darwin"):
+            _configure_utility_window(window)
+
+        window.tk.call.assert_called_once_with(
+            "::tk::unsupported::MacWindowStyle",
+            "style",
+            str(window),
+            "utility",
+            ("closeBox", "resizable"),
+        )
+        window.attributes.assert_not_called()
+
+    def test_source_window_uses_platform_tool_decoration(self) -> None:
+        window = Mock()
+
+        with patch("krizovkar.gui.sys.platform", "win32"):
+            _configure_utility_window(window)
+
+        window.attributes.assert_called_once_with("-toolwindow", True)
+
+        window.reset_mock()
+        with patch("krizovkar.gui.sys.platform", "linux"):
+            _configure_utility_window(window)
+
+        window.attributes.assert_called_once_with("-type", "utility")
+
+    def test_source_window_shows_read_only_yaml_for_document(self) -> None:
+        source_window = CrosswordSourceWindow.__new__(CrosswordSourceWindow)
+        source_window.root = Mock()
+        source_window.source_text = Mock()
+        source_window._document_window = None
+        document_window = Mock()
+        document_window.root = Mock()
+        document_window._path = Path("krizovka.yaml")
+        document_window._dirty = True
+        document_window._document.return_value = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+
+        source_window.show_document(document_window, reveal=True)
+
+        source_window.root.transient.assert_called_once_with(document_window.root)
+        source_window.root.title.assert_called_once_with(
+            "Zdroj YAML — *krizovka.yaml"
+        )
+        source_window.source_text.configure.assert_has_calls(
+            [call(state="normal"), call(state="disabled")]
+        )
+        yaml_source = source_window.source_text.insert.call_args.args[1]
+        self.assertIn("format: krizovkar", yaml_source)
+        self.assertIn("kind: crossword", yaml_source)
+        source_window.root.deiconify.assert_called_once_with()
+        source_window.root.lift.assert_called_once_with()
+
     def test_other_platforms_refresh_window_menu_before_opening(self) -> None:
         parent = Mock()
         refresh = Mock()
@@ -336,7 +405,9 @@ class GuiTest(unittest.TestCase):
         second._path = Path("krizovka.yaml")
         second._dirty = False
         application._windows = [first, second]
+        application._active_window = first
         application.activate_window = Mock()
+        application.show_source_window = Mock()
         window_menu = Mock()
 
         application._populate_window_menu(window_menu, current=second)
@@ -362,6 +433,12 @@ class GuiTest(unittest.TestCase):
             )
         )
 
+        source_item = window_menu.add_command.call_args
+        self.assertEqual("Zdroj YAML", source_item.kwargs["label"])
+        self.assertEqual("normal", source_item.kwargs["state"])
+        source_item.kwargs["command"]()
+        application.show_source_window.assert_called_once_with(second)
+
         items[0].kwargs["command"]()
 
         application.activate_window.assert_called_once_with(first)
@@ -369,13 +446,23 @@ class GuiTest(unittest.TestCase):
     def test_empty_window_menu_has_disabled_message(self) -> None:
         application = CrosswordApplication.__new__(CrosswordApplication)
         application._windows = []
+        application._active_window = None
         window_menu = Mock()
 
         application._populate_window_menu(window_menu, current=None)
 
-        window_menu.add_command.assert_called_once_with(
-            label="Žádná otevřená okna",
-            state="disabled",
+        self.assertEqual(
+            ["Zdroj YAML", "Žádná otevřená okna"],
+            [
+                item.kwargs["label"]
+                for item in window_menu.add_command.call_args_list
+            ],
+        )
+        self.assertTrue(
+            all(
+                item.kwargs["state"] == "disabled"
+                for item in window_menu.add_command.call_args_list
+            )
         )
         window_menu.add_radiobutton.assert_not_called()
 
@@ -383,9 +470,11 @@ class GuiTest(unittest.TestCase):
         application = CrosswordApplication.__new__(CrosswordApplication)
         window = Mock()
         application._windows = [window]
+        application.document_window_activated = Mock()
 
         application.activate_window(window)
 
+        application.document_window_activated.assert_called_once_with(window)
         window.root.deiconify.assert_called_once_with()
         window.root.lift.assert_called_once_with()
         window.root.focus_force.assert_called_once_with()
@@ -785,6 +874,11 @@ class GuiTest(unittest.TestCase):
 
         window.root.geometry.assert_called_once_with("840x850")
         window.root.minsize.assert_called_once_with(840, 700)
+        window.root.bind.assert_called_once_with(
+            "<FocusIn>",
+            window._document_focus_in,
+            add="+",
+        )
 
     def test_dimension_input_rejects_values_outside_layout_range(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
@@ -1172,6 +1266,76 @@ class GuiTest(unittest.TestCase):
 
         root.withdraw.assert_called_once_with()
         self.assertEqual([], application._windows)
+        self.assertIsNone(application._active_window)
+        self.assertIsNone(application._source_window)
+
+    def test_application_creates_and_reuses_source_window(self) -> None:
+        application = CrosswordApplication.__new__(CrosswordApplication)
+        application.root = Mock()
+        document_window = Mock()
+        application._windows = [document_window]
+        application._active_window = None
+        application._source_window = None
+        source_root = Mock()
+        source_window = Mock()
+
+        with (
+            patch("krizovkar.gui.tk.Toplevel", return_value=source_root) as toplevel,
+            patch("krizovkar.gui._configure_utility_window") as configure,
+            patch(
+                "krizovkar.gui.CrosswordSourceWindow",
+                return_value=source_window,
+            ) as source_type,
+        ):
+            first_result = application.show_source_window(document_window)
+            second_result = application.show_source_window(document_window)
+
+        toplevel.assert_called_once_with(application.root)
+        configure.assert_called_once_with(source_root)
+        source_type.assert_called_once_with(source_root)
+        self.assertIs(source_window, first_result)
+        self.assertIs(source_window, second_result)
+        self.assertEqual(document_window, application._active_window)
+        self.assertEqual(
+            [
+                call(document_window, reveal=True),
+                call(document_window, reveal=True),
+            ],
+            source_window.show_document.call_args_list,
+        )
+
+    def test_source_window_tracks_active_and_changed_document(self) -> None:
+        application = CrosswordApplication.__new__(CrosswordApplication)
+        first = Mock()
+        second = Mock()
+        source_window = Mock()
+        application._windows = [first, second]
+        application._active_window = first
+        application._source_window = source_window
+
+        application.document_window_activated(second)
+        application.document_window_changed(first)
+        application.document_window_changed(second)
+
+        self.assertIs(second, application._active_window)
+        self.assertEqual(
+            [
+                call(second, reveal=False),
+                call(second, reveal=False),
+            ],
+            source_window.show_document.call_args_list,
+        )
+
+    def test_document_focus_and_changes_refresh_source_window(self) -> None:
+        window = Mock()
+
+        CrosswordDocumentWindow._document_focus_in(window)
+        CrosswordDocumentWindow._set_dirty(window, True)
+
+        window.application.document_window_activated.assert_called_once_with(window)
+        self.assertTrue(window._dirty)
+        window._update_title.assert_called_once_with()
+        window.application.document_window_changed.assert_called_once_with(window)
 
     def test_application_stays_open_after_last_document_window_closes(self) -> None:
         root = Mock()
@@ -1198,6 +1362,31 @@ class GuiTest(unittest.TestCase):
 
         second.root.destroy.assert_called_once_with()
         root.destroy.assert_not_called()
+        application.show_no_document_state.assert_called_once_with()
+
+    def test_closing_active_document_retargets_and_hides_source_window(
+        self,
+    ) -> None:
+        application = CrosswordApplication.__new__(CrosswordApplication)
+        first = Mock()
+        second = Mock()
+        source_window = Mock()
+        application._windows = [first, second]
+        application._active_window = second
+        application._source_window = source_window
+        application.show_no_document_state = Mock()
+
+        application.close_window(second)
+
+        self.assertIs(first, application._active_window)
+        source_window.show_document.assert_called_once_with(first, reveal=False)
+        second.root.destroy.assert_called_once_with()
+
+        application.close_window(first)
+
+        self.assertIsNone(application._active_window)
+        source_window.hide.assert_called_once_with()
+        first.root.destroy.assert_called_once_with()
         application.show_no_document_state.assert_called_once_with()
 
     def test_application_shows_owner_window_without_document_off_macos(self) -> None:

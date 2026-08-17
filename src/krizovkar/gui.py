@@ -252,6 +252,41 @@ def _create_window_menu(
     return tk.Menu(parent, name="window", postcommand=refresh)
 
 
+def _add_source_window_menu_item(
+    menu: tk.Menu,
+    command: Callable[[], None] | None,
+) -> None:
+    options: dict[str, object] = {
+        "label": "Zdroj YAML",
+        "state": "normal" if command is not None else "disabled",
+    }
+    if command is not None:
+        options["command"] = command
+    menu.add_command(**options)
+    menu.add_separator()
+
+
+def _configure_utility_window(window: tk.Toplevel) -> None:
+    """Požádá systém o menší dekoraci nástrojového okna."""
+
+    try:
+        if sys.platform == "darwin":
+            window.tk.call(
+                "::tk::unsupported::MacWindowStyle",
+                "style",
+                str(window),
+                "utility",
+                ("closeBox", "resizable"),
+            )
+        elif sys.platform == "win32":
+            window.attributes("-toolwindow", True)
+        else:
+            window.attributes("-type", "utility")
+    except tk.TclError:
+        # Některé správce oken zvláštní dekorace nepodporují.
+        pass
+
+
 def _create_help_menu(parent: tk.Menu) -> tk.Menu:
     menu = tk.Menu(parent, name="help")
     menu.add_command(
@@ -801,6 +836,84 @@ def _grid_from_editable_document(
     return create_grid_from_crossword(document)
 
 
+class CrosswordSourceWindow(ttk.Frame):
+    """Nástrojové okno s YAML podobou právě aktivního dokumentu."""
+
+    def __init__(self, root: tk.Toplevel) -> None:
+        super().__init__(root, padding=8)
+        self.root = root
+        self._document_window: CrosswordDocumentWindow | None = None
+        self._configure_window()
+        self._build_content()
+
+    def _configure_window(self) -> None:
+        self.root.title("Zdroj YAML")
+        self.root.geometry("560x680")
+        self.root.minsize(360, 240)
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
+        self.root.protocol("WM_DELETE_WINDOW", self.hide)
+        self.grid(row=0, column=0, sticky="nsew")
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+
+    def _build_content(self) -> None:
+        self.source_text = tk.Text(
+            self,
+            wrap="none",
+            font="TkFixedFont",
+            state="disabled",
+        )
+        vertical_scrollbar = ttk.Scrollbar(
+            self,
+            orient="vertical",
+            command=self.source_text.yview,
+        )
+        horizontal_scrollbar = ttk.Scrollbar(
+            self,
+            orient="horizontal",
+            command=self.source_text.xview,
+        )
+        self.source_text.configure(
+            yscrollcommand=vertical_scrollbar.set,
+            xscrollcommand=horizontal_scrollbar.set,
+        )
+        self.source_text.grid(row=0, column=0, sticky="nsew")
+        vertical_scrollbar.grid(row=0, column=1, sticky="ns")
+        horizontal_scrollbar.grid(row=1, column=0, sticky="ew")
+
+    def show_document(
+        self,
+        window: CrosswordDocumentWindow,
+        *,
+        reveal: bool,
+    ) -> None:
+        same_document = window is self._document_window
+        vertical_position = self.source_text.yview() if same_document else ()
+        horizontal_position = self.source_text.xview() if same_document else ()
+        output = StringIO()
+        dump_crossword_document(window._document(), output)
+
+        self._document_window = window
+        self.root.transient(window.root)
+        label = _document_window_label(window._path, window._dirty)
+        self.root.title(f"Zdroj YAML — {label}")
+        self.source_text.configure(state="normal")
+        self.source_text.delete("1.0", tk.END)
+        self.source_text.insert("1.0", output.getvalue())
+        self.source_text.configure(state="disabled")
+        if vertical_position:
+            self.source_text.yview_moveto(vertical_position[0])
+        if horizontal_position:
+            self.source_text.xview_moveto(horizontal_position[0])
+        if reveal:
+            self.root.deiconify()
+            self.root.lift()
+
+    def hide(self) -> None:
+        self.root.withdraw()
+
+
 class CrosswordApplication:
     """Spravuje životní cyklus samostatných dokumentových oken."""
 
@@ -812,6 +925,8 @@ class CrosswordApplication:
     ) -> None:
         self.root = root
         self._windows: list[CrosswordDocumentWindow] = []
+        self._active_window: CrosswordDocumentWindow | None = None
+        self._source_window: CrosswordSourceWindow | None = None
         self._recent_documents = (
             recent_documents
             if recent_documents is not None
@@ -872,6 +987,7 @@ class CrosswordApplication:
             menu,
             self._refresh_window_menu,
         )
+        _add_source_window_menu_item(self.window_menu, None)
         menu.add_cascade(label="Okno", menu=self.window_menu)
         self.help_menu = _create_help_menu(menu)
         menu.add_cascade(label="Nápověda", menu=self.help_menu)
@@ -913,7 +1029,16 @@ class CrosswordApplication:
     ) -> None:
         menu.delete(0, "end")
         windows = tuple(self._windows)
-        selected = str(id(current)) if current in windows else ""
+        active = current if current in windows else self._active_window
+        if active not in windows:
+            active = None
+        source_command = (
+            (lambda target=active: self.show_source_window(target))
+            if active is not None
+            else None
+        )
+        _add_source_window_menu_item(menu, source_command)
+        selected = str(id(active)) if active is not None else ""
         menu.setvar(_WINDOW_MENU_SELECTION_VARIABLE, selected)
         if not windows:
             menu.add_command(
@@ -928,6 +1053,37 @@ class CrosswordApplication:
                 variable=_WINDOW_MENU_SELECTION_VARIABLE,
                 command=lambda target=window: self.activate_window(target),
             )
+
+    def show_source_window(
+        self,
+        window: CrosswordDocumentWindow | None = None,
+    ) -> CrosswordSourceWindow | None:
+        target = window if window in self._windows else self._active_window
+        if target not in self._windows:
+            return None
+        self._active_window = target
+        if self._source_window is None:
+            source_root = tk.Toplevel(self.root)
+            _configure_utility_window(source_root)
+            self._source_window = CrosswordSourceWindow(source_root)
+        self._source_window.show_document(target, reveal=True)
+        return self._source_window
+
+    def document_window_activated(
+        self,
+        window: CrosswordDocumentWindow,
+    ) -> None:
+        if window not in self._windows:
+            return
+        if window is self._active_window:
+            return
+        self._active_window = window
+        if self._source_window is not None:
+            self._source_window.show_document(window, reveal=False)
+
+    def document_window_changed(self, window: CrosswordDocumentWindow) -> None:
+        if window is self._active_window and self._source_window is not None:
+            self._source_window.show_document(window, reveal=False)
 
     def _no_document_dialog_parent(self) -> tk.Misc | None:
         return None if sys.platform == "darwin" else self.root
@@ -1029,11 +1185,13 @@ class CrosswordApplication:
             dirty=dirty,
         )
         self._windows.append(window)
+        self.document_window_activated(window)
         return window
 
     def activate_window(self, window: CrosswordDocumentWindow) -> None:
         if window not in self._windows:
             return
+        self.document_window_activated(window)
         window.root.deiconify()
         window.root.lift()
         window.root.focus_force()
@@ -1041,6 +1199,16 @@ class CrosswordApplication:
     def close_window(self, window: CrosswordDocumentWindow) -> None:
         if window in self._windows:
             self._windows.remove(window)
+        if window is self._active_window or not self._windows:
+            self._active_window = self._windows[-1] if self._windows else None
+            if self._source_window is not None:
+                if self._active_window is None:
+                    self._source_window.hide()
+                else:
+                    self._source_window.show_document(
+                        self._active_window,
+                        reveal=False,
+                    )
         window.root.destroy()
         if not self._windows:
             self.show_no_document_state()
@@ -1098,6 +1266,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(self._content_row, weight=1)
         self.root.protocol("WM_DELETE_WINDOW", self.request_close)
+        self.root.bind("<FocusIn>", self._document_focus_in, add="+")
 
     def _configure_styles(self) -> None:
         style = ttk.Style(self.root)
@@ -1164,6 +1333,10 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.window_menu = _create_window_menu(
             menu,
             self._refresh_window_menu,
+        )
+        _add_source_window_menu_item(
+            self.window_menu,
+            lambda: self.application.show_source_window(self),
         )
         menu.add_cascade(label="Okno", menu=self.window_menu)
         self.help_menu = _create_help_menu(menu)
@@ -1274,6 +1447,12 @@ class CrosswordDocumentWindow(ttk.Frame):
             self.window_menu,
             current=self,
         )
+
+    def _document_focus_in(
+        self,
+        _event: tk.Event[tk.Misc] | None = None,
+    ) -> None:
+        self.application.document_window_activated(self)
 
     def _build_content(self) -> None:
         document_frame = ttk.Frame(self, padding=14)
@@ -2002,6 +2181,7 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _set_dirty(self, dirty: bool) -> None:
         self._dirty = dirty
         self._update_title()
+        self.application.document_window_changed(self)
 
     def request_close(self) -> None:
         if not self._save_inline_slot_edit():

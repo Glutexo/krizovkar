@@ -68,7 +68,10 @@ dokumentu. Každé otevřené okno je nezávislé; změna jednoho proto obsah
 druhého neovlivní.
 
 Nabídka **Okno** uvádí všechna otevřená dokumentová okna. Aktuální okno
-označí a výběrem jiné položky přenese příslušný dokument dopředu.
+označí a výběrem jiné položky přenese příslušný dokument dopředu. Volba
+**Zdroj YAML** otevře samostatné nástrojové okno s neupravitelnou YAML podobou
+aktivního dokumentu. Při přepnutí dokumentu nebo změně jeho obsahu se zdroj
+automaticky aktualizuje.
 
 Nabídka **Nápověda** otevře [repozitář Křížovkáře na GitHubu](https://github.com/Glutexo/krizovkar)
 ve výchozím webovém prohlížeči.
