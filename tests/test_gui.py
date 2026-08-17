@@ -550,10 +550,90 @@ class GuiTest(unittest.TestCase):
         self.assertEqual("template", loaded_template.kind)
         self.assertIsInstance(loaded_crossword, CrosswordDocument)
 
+    def test_template_controls_form_the_preview_heading(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window.template_tab = Mock()
+        window.layout_value = Mock()
+        window.height_value = Mock()
+        window.width_value = Mock()
+        window.template_input_error_value = Mock()
+        preview_frame = Mock()
+        controls = Mock()
+        layout_selector = Mock()
+        height_spinbox = Mock()
+        width_spinbox = Mock()
+        preview = Mock()
+
+        with (
+            patch(
+                "krizovkar.gui.ttk.LabelFrame",
+                return_value=preview_frame,
+            ) as label_frame_type,
+            patch("krizovkar.gui.ttk.Frame", return_value=controls),
+            patch("krizovkar.gui.ttk.Label") as label_type,
+            patch(
+                "krizovkar.gui.ttk.Combobox",
+                return_value=layout_selector,
+            ) as combobox_type,
+            patch(
+                "krizovkar.gui.ttk.Spinbox",
+                side_effect=(height_spinbox, width_spinbox),
+            ) as spinbox_type,
+            patch(
+                "krizovkar.gui.CrosswordPreview",
+                return_value=preview,
+            ) as preview_type,
+        ):
+            window._build_template_document()
+
+        label_frame_type.assert_called_once_with(window.template_tab, padding=12)
+        preview_frame.configure.assert_called_once_with(labelwidget=controls)
+        combobox_type.assert_called_once_with(
+            controls,
+            textvariable=window.layout_value,
+            values=("Švédská", "Číslovaná"),
+            state="readonly",
+            width=14,
+        )
+        self.assertEqual(
+            [
+                call(
+                    controls,
+                    from_=1,
+                    to=50,
+                    width=5,
+                    textvariable=window.height_value,
+                ),
+                call(
+                    controls,
+                    from_=1,
+                    to=50,
+                    width=5,
+                    textvariable=window.width_value,
+                ),
+            ],
+            spinbox_type.call_args_list,
+        )
+        self.assertEqual(
+            ["Typ křížovky", "Řádky", "Sloupce"],
+            [
+                widget_call.kwargs["text"]
+                for widget_call in label_type.call_args_list
+                if "text" in widget_call.kwargs
+            ],
+        )
+        preview_type.assert_called_once_with(
+            preview_frame,
+            width=1080,
+            height=650,
+        )
+        self.assertIs(layout_selector, window.layout_selector)
+        self.assertIs(height_spinbox, window.height_spinbox)
+        self.assertIs(width_spinbox, window.width_spinbox)
+        self.assertIs(preview, window.template_preview)
+
     def test_template_watches_all_values_for_live_updates(self) -> None:
         window = Mock()
-        window.layout_value.get.return_value = "numbered"
-        window._layout_description.return_value = "Popis rozvržení"
 
         CrosswordDocumentWindow._watch_inputs(window)
 
@@ -566,18 +646,16 @@ class GuiTest(unittest.TestCase):
                 "write",
                 window._template_input_changed,
             )
-        window.layout_help_value.set.assert_called_once_with("Popis rozvržení")
 
     def test_template_input_change_replaces_pending_live_update(self) -> None:
         window = Mock()
         window._template_update_job = "předchozí"
         window.after.return_value = "nová"
-        window.layout_value.get.return_value = "numbered"
-        window._layout_description.return_value = "Popis rozvržení"
 
         with patch("krizovkar.gui._TEMPLATE_UPDATE_DELAY_MS", 321):
             CrosswordDocumentWindow._template_input_changed(window)
 
+        window.template_input_error_value.set.assert_called_once_with("")
         window.after_cancel.assert_called_once_with("předchozí")
         window.after.assert_called_once_with(
             321,
@@ -594,7 +672,7 @@ class GuiTest(unittest.TestCase):
         new_template = create_blank_template(TemplateSettings(3, 3), "numbered")
         window.width_value.get.return_value = "3"
         window.height_value.get.return_value = "3"
-        window.layout_value.get.return_value = "numbered"
+        window.layout_value.get.return_value = "Číslovaná"
 
         with patch(
             "krizovkar.gui.create_blank_template",
@@ -617,7 +695,7 @@ class GuiTest(unittest.TestCase):
         window._base_template = template
         window.width_value.get.return_value = "3"
         window.height_value.get.return_value = "3"
-        window.layout_value.get.return_value = "numbered"
+        window.layout_value.get.return_value = "Číslovaná"
 
         with patch("krizovkar.gui.create_blank_template") as create_template:
             CrosswordDocumentWindow._update_template_from_inputs(window)
@@ -635,14 +713,14 @@ class GuiTest(unittest.TestCase):
         window._base_template = template
         window.width_value.get.return_value = ""
         window.height_value.get.return_value = "3"
-        window.layout_value.get.return_value = "numbered"
+        window.layout_value.get.return_value = "Číslovaná"
 
         with patch("krizovkar.gui.create_blank_template") as create_template:
             CrosswordDocumentWindow._update_template_from_inputs(window)
 
         create_template.assert_not_called()
         self.assertIs(template, window._base_template)
-        window.layout_help_value.set.assert_called_once_with(
+        window.template_input_error_value.set.assert_called_once_with(
             "Počet sloupců musí být celé číslo."
         )
         window._show_action_error.assert_not_called()

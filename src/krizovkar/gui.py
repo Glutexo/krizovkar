@@ -55,6 +55,13 @@ from krizovkar.renderer import (
 _MAX_TEMPLATE_DIMENSION = 50
 _MAX_RECENT_DOCUMENTS = 10
 _TEMPLATE_UPDATE_DELAY_MS = 150
+_TEMPLATE_LAYOUT_LABELS: dict[SpecificationLayout, str] = {
+    "swedish": "Švédská",
+    "numbered": "Číslovaná",
+}
+_TEMPLATE_LAYOUTS_BY_LABEL: dict[str, SpecificationLayout] = {
+    label: layout for layout, label in _TEMPLATE_LAYOUT_LABELS.items()
+}
 _DIRECTION_LABELS = {
     "horizontal": "Vodorovně",
     "vertical": "Svisle",
@@ -324,6 +331,13 @@ def parse_template_settings(width: str, height: str) -> TemplateSettings:
             f"Šablona může mít nejvýše {_MAX_TEMPLATE_DIMENSION} sloupců a řádků."
         )
     return settings
+
+
+def _template_layout_from_label(value: str) -> SpecificationLayout:
+    try:
+        return _TEMPLATE_LAYOUTS_BY_LABEL[value]
+    except KeyError as error:
+        raise GuiInputError("Vyberte podporovaný typ křížovky.") from error
 
 
 def create_blank_template(
@@ -1068,8 +1082,8 @@ class CrosswordDocumentWindow(ttk.Frame):
 
         self.width_value = tk.StringVar(value=str(document.grid.width))
         self.height_value = tk.StringVar(value=str(document.grid.height))
-        self.layout_value = tk.StringVar(value=layout)
-        self.layout_help_value = tk.StringVar()
+        self.layout_value = tk.StringVar(value=_TEMPLATE_LAYOUT_LABELS[layout])
+        self.template_input_error_value = tk.StringVar()
         self.answer_value = tk.StringVar()
         self.clue_value = tk.StringVar()
         self.slot_title_value = tk.StringVar(value="Vyberte heslo.")
@@ -1105,6 +1119,7 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _configure_styles(self) -> None:
         style = ttk.Style(self.root)
         style.configure("Muted.TLabel", foreground="#667085")
+        style.configure("Error.TLabel", foreground="#b42318")
 
     def _build_menu(self) -> None:
         new_shortcut = _keyboard_shortcut("n")
@@ -1303,69 +1318,71 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _build_template_document(self) -> None:
         tab = self.template_tab
-        tab.columnconfigure(1, weight=1)
+        tab.columnconfigure(0, weight=1)
         tab.rowconfigure(0, weight=1)
 
-        sidebar = ttk.Frame(tab, width=350)
-        sidebar.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
-        sidebar.columnconfigure(0, weight=1)
-
-        properties = ttk.LabelFrame(
-            sidebar,
-            text="Vlastnosti šablony",
-            padding=14,
-        )
-        properties.grid(row=0, column=0, sticky="ew")
-        properties.columnconfigure(0, weight=1)
-
-        dimensions = ttk.Frame(properties)
-        dimensions.grid(row=0, column=0, sticky="w")
-        ttk.Label(dimensions, text="Sloupce").grid(row=0, column=0, sticky="w")
-        ttk.Spinbox(
-            dimensions,
-            from_=1,
-            to=_MAX_TEMPLATE_DIMENSION,
-            width=7,
-            textvariable=self.width_value,
-        ).grid(row=1, column=0, sticky="w", pady=(3, 0))
-        ttk.Label(dimensions, text="×").grid(row=1, column=1, padx=10)
-        ttk.Label(dimensions, text="Řádky").grid(row=0, column=2, sticky="w")
-        ttk.Spinbox(
-            dimensions,
-            from_=1,
-            to=_MAX_TEMPLATE_DIMENSION,
-            width=7,
-            textvariable=self.height_value,
-        ).grid(row=1, column=2, sticky="w", pady=(3, 0))
-
-        ttk.Radiobutton(
-            properties,
-            text="Švédská – nápovědy přímo v mřížce",
-            variable=self.layout_value,
-            value="swedish",
-        ).grid(row=1, column=0, sticky="w", pady=(10, 0))
-        ttk.Radiobutton(
-            properties,
-            text="Číslovaná – nápovědy pod mřížkou",
-            variable=self.layout_value,
-            value="numbered",
-        ).grid(row=2, column=0, sticky="w", pady=(4, 0))
-        ttk.Label(
-            properties,
-            textvariable=self.layout_help_value,
-            style="Muted.TLabel",
-            wraplength=310,
-            justify="left",
-        ).grid(row=3, column=0, sticky="w", pady=(6, 0))
-
-        preview_frame = ttk.LabelFrame(tab, text="Náhled šablony", padding=12)
-        preview_frame.grid(row=0, column=1, sticky="nsew")
+        preview_frame = ttk.LabelFrame(tab, padding=12)
+        preview_frame.grid(row=0, column=0, sticky="nsew")
         preview_frame.columnconfigure(0, weight=1)
         preview_frame.rowconfigure(0, weight=1)
+
+        controls = ttk.Frame(preview_frame)
+        preview_frame.configure(labelwidget=controls)
+        ttk.Label(controls, text="Typ křížovky").grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
+        self.layout_selector = ttk.Combobox(
+            controls,
+            textvariable=self.layout_value,
+            values=tuple(_TEMPLATE_LAYOUTS_BY_LABEL),
+            state="readonly",
+            width=14,
+        )
+        self.layout_selector.grid(row=0, column=1, sticky="w", padx=(6, 0))
+
+        ttk.Label(controls, text="Řádky").grid(
+            row=0,
+            column=2,
+            sticky="w",
+            padx=(18, 0),
+        )
+        self.height_spinbox = ttk.Spinbox(
+            controls,
+            from_=1,
+            to=_MAX_TEMPLATE_DIMENSION,
+            width=5,
+            textvariable=self.height_value,
+        )
+        self.height_spinbox.grid(row=0, column=3, sticky="w", padx=(6, 0))
+
+        ttk.Label(controls, text="Sloupce").grid(
+            row=0,
+            column=4,
+            sticky="w",
+            padx=(14, 0),
+        )
+        self.width_spinbox = ttk.Spinbox(
+            controls,
+            from_=1,
+            to=_MAX_TEMPLATE_DIMENSION,
+            width=5,
+            textvariable=self.width_value,
+        )
+        self.width_spinbox.grid(row=0, column=5, sticky="w", padx=(6, 0))
+
+        ttk.Label(
+            controls,
+            textvariable=self.template_input_error_value,
+            style="Error.TLabel",
+            wraplength=380,
+        ).grid(row=0, column=6, sticky="w", padx=(14, 4))
+
         self.template_preview = CrosswordPreview(
             preview_frame,
-            width=680,
-            height=570,
+            width=1080,
+            height=650,
         )
         self.template_preview.grid(row=0, column=0, sticky="nsew")
 
@@ -1543,26 +1560,9 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _watch_inputs(self) -> None:
         for value in (self.width_value, self.height_value, self.layout_value):
             value.trace_add("write", self._template_input_changed)
-        self.layout_help_value.set(
-            self._layout_description(self.layout_value.get())
-        )
-
-    @staticmethod
-    def _layout_description(layout: str) -> str:
-        if layout == "numbered":
-            return (
-                "Všechna pole zůstávají pro písmena; nápovědy budou "
-                "očíslované a vysázené pod mřížkou."
-            )
-        return (
-            "Místa pro nápovědy jsou součástí mřížky a určují začátky "
-            "vodorovných i svislých hesel."
-        )
 
     def _template_input_changed(self, *_args: str) -> None:
-        self.layout_help_value.set(
-            self._layout_description(self.layout_value.get())
-        )
+        self.template_input_error_value.set("")
         if self._template_update_job is not None:
             self.after_cancel(self._template_update_job)
         self._template_update_job = self.after(
@@ -1577,7 +1577,7 @@ class CrosswordDocumentWindow(ttk.Frame):
                 self.width_value.get(),
                 self.height_value.get(),
             )
-            layout = cast(SpecificationLayout, self.layout_value.get())
+            layout = _template_layout_from_label(self.layout_value.get())
             current = self._base_template
             if (
                 current is not None
@@ -1588,7 +1588,7 @@ class CrosswordDocumentWindow(ttk.Frame):
                 return
             template = create_blank_template(settings, layout)
         except GuiInputError as error:
-            self.layout_help_value.set(str(error))
+            self.template_input_error_value.set(str(error))
             return
 
         self._base_template = template
