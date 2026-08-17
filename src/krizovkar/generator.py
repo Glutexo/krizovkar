@@ -24,6 +24,7 @@ from krizovkar.layout import (
 )
 from krizovkar.model import (
     Coordinate,
+    CrosswordDocument,
     CrosswordGrid,
     CrosswordSpecification,
     CrosswordTemplate,
@@ -52,6 +53,7 @@ from krizovkar.model import (
     TemplateSecretPart,
     WordDirection,
     WordSlot,
+    create_crossword_document,
     secret_path_arrows,
 )
 
@@ -436,6 +438,18 @@ def create_template_from_specification(
     )
 
 
+def create_crossword_from_specification(
+    specification: CrosswordSpecification,
+    *,
+    layout: SpecificationLayout = "swedish",
+) -> CrosswordDocument:
+    """Rozvrhne umístěné zadání do editovatelné křížovky."""
+
+    return create_crossword_document(
+        create_template_from_specification(specification, layout=layout)
+    )
+
+
 def generate_swedish_template(
     *,
     width: int = DEFAULT_GRID_WIDTH,
@@ -523,6 +537,44 @@ def generate_numbered_template(
     detail = f": {last_error}" if last_error is not None else ""
     raise GenerationError(
         f"pro rozměr {width} × {height} nelze rozvrhnout tajenku{detail}"
+    )
+
+
+def generate_swedish_crossword(
+    *,
+    width: int = DEFAULT_GRID_WIDTH,
+    height: int = DEFAULT_GRID_HEIGHT,
+    seed: int = DEFAULT_SEED,
+    secret: SecretRequirement | None = None,
+) -> CrosswordDocument:
+    """Vytvoří nevyplněnou editovatelnou křížovku s vepsanými legendami."""
+
+    return create_crossword_document(
+        generate_swedish_template(
+            width=width,
+            height=height,
+            seed=seed,
+            secret=secret,
+        )
+    )
+
+
+def generate_numbered_crossword(
+    *,
+    width: int = DEFAULT_GRID_WIDTH,
+    height: int = DEFAULT_GRID_HEIGHT,
+    seed: int = DEFAULT_SEED,
+    secret: SecretRequirement | None = None,
+) -> CrosswordDocument:
+    """Vytvoří nevyplněnou editovatelnou křížovku s vnějšími legendami."""
+
+    return create_crossword_document(
+        generate_numbered_template(
+            width=width,
+            height=height,
+            seed=seed,
+            secret=secret,
+        )
     )
 
 
@@ -1367,6 +1419,12 @@ def create_grid_from_template(template: CrosswordTemplate) -> CrosswordGrid:
     )
 
 
+def create_grid_from_crossword(crossword: CrosswordDocument) -> CrosswordGrid:
+    """Převede editovatelnou křížovku na cílovou mřížku."""
+
+    return create_grid_from_template(crossword)
+
+
 def _filled_template_grid(
     template: CrosswordTemplate,
     assignments: dict[str, _Entry],
@@ -1424,6 +1482,23 @@ def fill_crossword_template(
 
     raise GenerationError(
         "nepodařilo se vyplnit všechny sloty platnými křížícími se hesly"
+    )
+
+
+def fill_crossword(
+    crossword: CrosswordDocument,
+    dictionary: CrosswordDictionary,
+    *,
+    seed: int = DEFAULT_SEED,
+    secret: SecretRequirement | None = None,
+) -> CrosswordGrid:
+    """Doplní prázdná místa křížovky hesly ze slovníku."""
+
+    return fill_crossword_template(
+        crossword,
+        dictionary,
+        seed=seed,
+        secret=secret,
     )
 
 
