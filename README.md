@@ -50,11 +50,11 @@ náhledu nebo v seznamu; formulář ukazuje jeho délku a písmena známá z
 křížení. Dokument může zůstat prázdný, být rozpracovaný nebo hotový a v
 každém z těchto stavů jej lze uložit a znovu použít jako základ další práce.
 
-V rámečku **Dokument křížovky** se nastavuje počet řádků a sloupců. Číselná
-pole přijmou pouze rozměry, pro které lze rozvržení vytvořit. Změna rozměru
-znovu vytvoří rozvržení; obsahuje-li dokument doplněná hesla nebo tajenku,
-editor si nejprve vyžádá potvrzení. Prázdnou tiskovou křížovku lze exportovat
-do PDF kdykoli, samostatné řešení až po vyplnění všech hesel.
+Nad náhledem křížovky se nastavuje počet řádků a sloupců. Číselná pole
+přijmou pouze rozměry, pro které lze rozvržení vytvořit. Změna rozměru znovu
+vytvoří rozvržení; obsahuje-li dokument doplněná hesla nebo tajenku, editor si
+nejprve vyžádá potvrzení. Prázdnou tiskovou křížovku lze exportovat do PDF
+kdykoli, samostatné řešení až po vyplnění všech hesel.
 
 Nabídka **Soubor** otevírá existující `kind: crossword` v dalším okně.
 Na macOS používá zkratky `⌘N`, `⌘O`,

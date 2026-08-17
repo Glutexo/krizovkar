@@ -653,7 +653,7 @@ class GuiTest(unittest.TestCase):
         self.assertIsInstance(filled, CrosswordDocument)
         self.assertEqual("crossword", filled.kind)
 
-    def test_dimension_controls_are_built_in_crossword_document(self) -> None:
+    def test_dimension_controls_form_crossword_preview_heading(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         parent = Mock()
         window.height_value = Mock()
@@ -678,11 +678,7 @@ class GuiTest(unittest.TestCase):
             window._build_crossword_dimensions(parent)
 
         frame_type.assert_called_once_with(parent)
-        controls.grid.assert_called_once_with(
-            row=0,
-            column=0,
-            sticky="w",
-        )
+        parent.configure.assert_called_once_with(labelwidget=controls)
         self.assertEqual(
             [
                 call(
@@ -728,10 +724,11 @@ class GuiTest(unittest.TestCase):
         self.assertEqual(3, _minimum_generated_dimension("numbered"))
         self.assertTrue(window._validate_dimension_input("3"))
 
-    def test_crossword_preview_has_its_own_heading(self) -> None:
+    def test_crossword_preview_places_dimensions_above_grid(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         parent = Mock()
         window._preview_cell_clicked = Mock()
+        window._build_crossword_dimensions = Mock()
         preview_frame = Mock()
         preview = Mock()
 
@@ -748,10 +745,9 @@ class GuiTest(unittest.TestCase):
         ):
             window._build_crossword_preview(parent)
 
-        label_frame_type.assert_called_once_with(
-            parent,
-            text="Náhled křížovky",
-            padding=12,
+        label_frame_type.assert_called_once_with(parent, padding=12)
+        window._build_crossword_dimensions.assert_called_once_with(
+            preview_frame
         )
         preview_type.assert_called_once_with(
             preview_frame,

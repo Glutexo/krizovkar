@@ -1322,21 +1322,12 @@ class CrosswordDocumentWindow(ttk.Frame):
         controls_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
         controls = controls_panel.content
 
-        document = ttk.LabelFrame(
-            controls,
-            text="Dokument křížovky",
-            padding=14,
-        )
-        document.pack(fill="x")
-        document.columnconfigure(0, weight=1)
-        self._build_crossword_dimensions(document)
-
         editor = ttk.LabelFrame(
             controls,
             text="Vybrané heslo",
             padding=14,
         )
-        editor.pack(fill="x", pady=(12, 0))
+        editor.pack(fill="x")
         editor.columnconfigure(0, weight=1)
         self._build_crossword_editor(editor)
 
@@ -1349,7 +1340,7 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _build_crossword_dimensions(self, parent: ttk.Frame) -> None:
         controls = ttk.Frame(parent)
-        controls.grid(row=0, column=0, sticky="w")
+        parent.configure(labelwidget=controls)
         minimum = _minimum_generated_dimension(self._template_layout)
         validate_dimension = (
             self.register(self._validate_dimension_input),
@@ -1464,14 +1455,11 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
 
     def _build_crossword_preview(self, parent: ttk.Frame) -> None:
-        preview_frame = ttk.LabelFrame(
-            parent,
-            text="Náhled křížovky",
-            padding=12,
-        )
+        preview_frame = ttk.LabelFrame(parent, padding=12)
         preview_frame.grid(row=0, column=0, sticky="nsew")
         preview_frame.columnconfigure(0, weight=1)
         preview_frame.rowconfigure(0, weight=1)
+        self._build_crossword_dimensions(preview_frame)
 
         self.crossword_preview = CrosswordPreview(
             preview_frame,
