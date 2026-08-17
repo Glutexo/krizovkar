@@ -337,19 +337,13 @@ class GuiTest(unittest.TestCase):
             "https://github.com/Glutexo/krizovkar"
         )
 
-    def test_macos_source_window_uses_activating_floating_decoration(self) -> None:
+    def test_macos_source_window_keeps_interactive_standard_decoration(self) -> None:
         window = Mock()
 
         with patch("krizovkar.gui.sys.platform", "darwin"):
             _configure_utility_window(window)
 
-        window.tk.call.assert_called_once_with(
-            "::tk::unsupported::MacWindowStyle",
-            "style",
-            str(window),
-            "floating",
-            ("closeBox", "resizable"),
-        )
+        window.tk.call.assert_not_called()
         window.attributes.assert_not_called()
 
     def test_source_window_uses_platform_tool_decoration(self) -> None:

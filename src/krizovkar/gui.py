@@ -282,22 +282,12 @@ def _add_source_window_menu_item(
 
 
 def _configure_utility_window(window: tk.Toplevel) -> None:
-    """Požádá systém o menší dekoraci nástrojového okna."""
+    """Požádá systém o dekoraci interaktivního nástrojového okna."""
 
     try:
-        if sys.platform == "darwin":
-            # Tk utility je na Aqua neaktivující panel. Varianta floating má
-            # stejnou kompaktní dekoraci, ale dovolí textu získat vstup.
-            window.tk.call(
-                "::tk::unsupported::MacWindowStyle",
-                "style",
-                str(window),
-                "floating",
-                ("closeBox", "resizable"),
-            )
-        elif sys.platform == "win32":
+        if sys.platform == "win32":
             window.attributes("-toolwindow", True)
-        else:
+        elif sys.platform != "darwin":
             window.attributes("-type", "utility")
     except tk.TclError:
         # Některé správce oken zvláštní dekorace nepodporují.
