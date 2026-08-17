@@ -340,17 +340,18 @@ class GuiTest(unittest.TestCase):
         source_window = CrosswordSourceWindow.__new__(CrosswordSourceWindow)
         source_window.root = Mock()
         source_window.source_text = Mock()
-        source_window._document_window = None
         document_window = Mock()
-        document_window.root = Mock()
         document_window._path = Path("krizovka.yaml")
         document_window._dirty = True
         document_window._document.return_value = create_blank_template(
             CrosswordSettings(3, 3),
             "numbered",
         )
+        source_window._document_window = document_window
+        source_window.source_text.yview.return_value = ()
+        source_window.source_text.xview.return_value = ()
 
-        source_window.show_document(document_window, reveal=True)
+        source_window.show(reveal=True)
 
         source_window.root.transient.assert_not_called()
         source_window.root.title.assert_called_once_with(
@@ -1285,65 +1286,100 @@ class GuiTest(unittest.TestCase):
         root.withdraw.assert_called_once_with()
         self.assertEqual([], application._windows)
         self.assertIsNone(application._active_window)
-        self.assertIsNone(application._source_window)
+        self.assertEqual({}, application._source_windows)
 
-    def test_application_creates_and_reuses_source_window(self) -> None:
+    def test_application_creates_source_window_for_each_document(self) -> None:
         application = CrosswordApplication.__new__(CrosswordApplication)
         application.root = Mock()
-        document_window = Mock()
-        application._windows = [document_window]
-        application._active_window = None
-        application._source_window = None
-        source_root = Mock()
-        source_window = Mock()
+        first = Mock()
+        second = Mock()
+        application._windows = [first, second]
+        application._active_window = first
+        application._source_windows = {}
+        first_source_root = Mock()
+        second_source_root = Mock()
+        first_source_window = Mock()
+        second_source_window = Mock()
+        first_source_window.root = first_source_root
+        second_source_window.root = second_source_root
 
         with (
             patch(
                 "krizovkar.gui.tk.Toplevel",
-                return_value=source_root,
+                side_effect=(first_source_root, second_source_root),
             ) as toplevel,
             patch(
                 "krizovkar.gui.CrosswordSourceWindow",
-                return_value=source_window,
+                side_effect=(first_source_window, second_source_window),
             ) as source_type,
         ):
-            first_result = application.show_source_window(document_window)
-            second_result = application.show_source_window(document_window)
+            first_result = application.show_source_window(first)
+            repeated_result = application.show_source_window(first)
+            second_result = application.show_source_window(second)
 
-        toplevel.assert_called_once_with(application.root)
-        source_type.assert_called_once_with(source_root)
-        self.assertIs(source_window, first_result)
-        self.assertIs(source_window, second_result)
-        self.assertEqual(document_window, application._active_window)
+        self.assertEqual(
+            [call(application.root), call(application.root)],
+            toplevel.call_args_list,
+        )
         self.assertEqual(
             [
-                call(document_window, reveal=True),
-                call(document_window, reveal=True),
+                call(first_source_root, first),
+                call(second_source_root, second),
             ],
-            source_window.show_document.call_args_list,
+            source_type.call_args_list,
+        )
+        self.assertIs(first_source_window, first_result)
+        self.assertIs(first_source_window, repeated_result)
+        self.assertIs(second_source_window, second_result)
+        self.assertIs(first, application._active_window)
+        self.assertEqual(
+            [call(reveal=True), call(reveal=True)],
+            first_source_window.show.call_args_list,
+        )
+        second_source_window.show.assert_called_once_with(reveal=True)
+        self.assertEqual(
+            "WM_DELETE_WINDOW",
+            first_source_root.protocol.call_args.args[0],
+        )
+        self.assertEqual(
+            "WM_DELETE_WINDOW",
+            second_source_root.protocol.call_args.args[0],
         )
 
-    def test_source_window_tracks_active_and_changed_document(self) -> None:
+        first_source_root.protocol.call_args.args[1]()
+
+        first_source_root.destroy.assert_called_once_with()
+        second_source_root.destroy.assert_not_called()
+        first.root.destroy.assert_not_called()
+        self.assertEqual(
+            {second: second_source_window},
+            application._source_windows,
+        )
+
+    def test_source_windows_stay_bound_to_their_documents(self) -> None:
         application = CrosswordApplication.__new__(CrosswordApplication)
         first = Mock()
         second = Mock()
-        source_window = Mock()
+        first_source_window = Mock()
+        second_source_window = Mock()
         application._windows = [first, second]
         application._active_window = first
-        application._source_window = source_window
+        application._source_windows = {
+            first: first_source_window,
+            second: second_source_window,
+        }
 
         application.document_window_activated(second)
+
+        first_source_window.show.assert_not_called()
+        second_source_window.show.assert_not_called()
+
         application.document_window_changed(first)
         application.document_window_changed(second)
 
         self.assertIs(second, application._active_window)
-        self.assertEqual(
-            [
-                call(second, reveal=False),
-                call(second, reveal=False),
-            ],
-            source_window.show_document.call_args_list,
-        )
+        first_source_window.show.assert_called_once_with(reveal=False)
+        second_source_window.show.assert_called_once_with(reveal=False)
 
     def test_document_focus_and_changes_refresh_source_window(self) -> None:
         window = Mock()
@@ -1383,28 +1419,38 @@ class GuiTest(unittest.TestCase):
         root.destroy.assert_not_called()
         application.show_no_document_state.assert_called_once_with()
 
-    def test_closing_active_document_retargets_and_hides_source_window(
+    def test_closing_document_closes_only_its_source_window(
         self,
     ) -> None:
         application = CrosswordApplication.__new__(CrosswordApplication)
         first = Mock()
         second = Mock()
-        source_window = Mock()
+        first_source_window = Mock()
+        second_source_window = Mock()
         application._windows = [first, second]
         application._active_window = second
-        application._source_window = source_window
+        application._source_windows = {
+            first: first_source_window,
+            second: second_source_window,
+        }
         application.show_no_document_state = Mock()
 
         application.close_window(second)
 
         self.assertIs(first, application._active_window)
-        source_window.show_document.assert_called_once_with(first, reveal=False)
+        second_source_window.root.destroy.assert_called_once_with()
+        first_source_window.root.destroy.assert_not_called()
+        self.assertEqual(
+            {first: first_source_window},
+            application._source_windows,
+        )
         second.root.destroy.assert_called_once_with()
 
         application.close_window(first)
 
         self.assertIsNone(application._active_window)
-        source_window.hide.assert_called_once_with()
+        first_source_window.root.destroy.assert_called_once_with()
+        self.assertEqual({}, application._source_windows)
         first.root.destroy.assert_called_once_with()
         application.show_no_document_state.assert_called_once_with()
 
