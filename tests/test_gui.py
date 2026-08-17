@@ -25,7 +25,6 @@ from krizovkar.gui import (
     _configure_utility_window,
     _create_help_menu,
     _create_window_menu,
-    _minimum_generated_dimension,
     _template_generation_layout,
     _keyboard_shortcut,
     _recent_document_label,
@@ -37,7 +36,6 @@ from krizovkar.gui import (
     crossword_slot_pattern,
     fill_crossword_slot,
     main,
-    parse_crossword_settings,
     parse_slot_content,
     slot_coordinates,
 )
@@ -591,27 +589,6 @@ class GuiTest(unittest.TestCase):
                 self.assertEqual(str(tcl_library), os.environ["TCL_LIBRARY"])
                 self.assertEqual(str(tk_library), os.environ["TK_LIBRARY"])
 
-    def test_parses_crossword_settings(self) -> None:
-        self.assertEqual(
-            CrosswordSettings(width=15, height=10),
-            parse_crossword_settings(" 15 ", "10"),
-        )
-
-    def test_rejects_non_integer_dimension(self) -> None:
-        with self.assertRaisesRegex(GuiInputError, "Počet sloupců musí být celé"):
-            parse_crossword_settings("patnáct", "10")
-
-    def test_rejects_non_positive_dimension(self) -> None:
-        with self.assertRaisesRegex(
-            GuiInputError,
-            "Počet řádků musí být kladný",
-        ):
-            parse_crossword_settings("15", "0")
-
-    def test_limits_automatically_generated_template_size(self) -> None:
-        with self.assertRaisesRegex(GuiInputError, "nejvýše 50"):
-            parse_crossword_settings("51", "10")
-
     def test_parses_and_normalizes_slot_content(self) -> None:
         self.assertEqual(
             ("CHATA", "Stavení"),
@@ -793,94 +770,6 @@ class GuiTest(unittest.TestCase):
         self.assertIsInstance(filled, CrosswordDocument)
         self.assertEqual("crossword", filled.kind)
 
-    def test_dimension_controls_form_crossword_preview_heading(self) -> None:
-        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
-        parent = Mock()
-        window.height_value = Mock()
-        window.width_value = Mock()
-        window._template_layout = "swedish"
-        window.register = Mock(return_value="ověření-rozměru")
-        controls = Mock()
-        height_spinbox = Mock()
-        width_spinbox = Mock()
-
-        with (
-            patch(
-                "krizovkar.gui.ttk.Frame",
-                return_value=controls,
-            ) as frame_type,
-            patch("krizovkar.gui.ttk.Label") as label_type,
-            patch(
-                "krizovkar.gui.ttk.Spinbox",
-                side_effect=(height_spinbox, width_spinbox),
-            ) as spinbox_type,
-        ):
-            window._build_crossword_dimensions(parent)
-
-        frame_type.assert_called_once_with(
-            parent,
-            style="Dimensions.TFrame",
-            padding=(12, 7),
-        )
-        parent.configure.assert_called_once_with(labelwidget=controls)
-        self.assertEqual(
-            [
-                call(
-                    controls,
-                    from_=4,
-                    to=50,
-                    width=5,
-                    textvariable=window.height_value,
-                    validate="key",
-                    validatecommand=("ověření-rozměru", "%P"),
-                ),
-                call(
-                    controls,
-                    from_=4,
-                    to=50,
-                    width=5,
-                    textvariable=window.width_value,
-                    validate="key",
-                    validatecommand=("ověření-rozměru", "%P"),
-                ),
-            ],
-            spinbox_type.call_args_list,
-        )
-        self.assertEqual("Řádky", label_type.call_args_list[0].kwargs["text"])
-        self.assertEqual("Sloupce", label_type.call_args_list[1].kwargs["text"])
-        self.assertTrue(
-            all(
-                item.kwargs["style"] == "Dimensions.TLabel"
-                for item in label_type.call_args_list
-            )
-        )
-        self.assertEqual(2, label_type.call_count)
-        window.register.assert_called_once_with(window._validate_dimension_input)
-        self.assertIs(height_spinbox, window.height_spinbox)
-        self.assertIs(width_spinbox, window.width_spinbox)
-
-    def test_dimension_panel_uses_darker_common_style(self) -> None:
-        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
-        window.root = Mock()
-        style = Mock()
-
-        with patch("krizovkar.gui.ttk.Style", return_value=style):
-            window._configure_styles()
-
-        style.configure.assert_has_calls(
-            [
-                call(
-                    "Dimensions.TFrame",
-                    background="#d0d5dd",
-                ),
-                call(
-                    "Dimensions.TLabel",
-                    background="#d0d5dd",
-                    foreground="#1d2939",
-                ),
-            ]
-        )
-
     def test_document_window_opens_at_minimum_width(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         window.root = Mock()
@@ -900,26 +789,10 @@ class GuiTest(unittest.TestCase):
             add="+",
         )
 
-    def test_dimension_input_rejects_values_outside_layout_range(self) -> None:
-        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
-        window._template_layout = "swedish"
-
-        self.assertFalse(window._validate_dimension_input(""))
-        self.assertFalse(window._validate_dimension_input("slovo"))
-        self.assertFalse(window._validate_dimension_input("3"))
-        self.assertTrue(window._validate_dimension_input("4"))
-        self.assertTrue(window._validate_dimension_input("50"))
-        self.assertFalse(window._validate_dimension_input("51"))
-
-        window._template_layout = "numbered"
-        self.assertEqual(3, _minimum_generated_dimension("numbered"))
-        self.assertTrue(window._validate_dimension_input("3"))
-
-    def test_crossword_preview_places_dimensions_above_grid(self) -> None:
+    def test_crossword_preview_has_no_manual_dimension_controls(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         parent = Mock()
         window._preview_cell_clicked = Mock()
-        window._build_crossword_dimensions = Mock()
         window._template_layout = "swedish"
         preview_frame = Mock()
         preview = Mock()
@@ -929,7 +802,7 @@ class GuiTest(unittest.TestCase):
                 "krizovkar.gui.ttk.LabelFrame",
                 return_value=preview_frame,
             ) as label_frame_type,
-            patch("krizovkar.gui.ttk.Label") as label_type,
+            patch("krizovkar.gui.ttk.Spinbox") as spinbox_type,
             patch(
                 "krizovkar.gui.CrosswordPreview",
                 return_value=preview,
@@ -937,9 +810,10 @@ class GuiTest(unittest.TestCase):
         ):
             window._build_crossword_preview(parent)
 
-        label_frame_type.assert_called_once_with(parent, padding=12)
-        window._build_crossword_dimensions.assert_called_once_with(
-            preview_frame
+        label_frame_type.assert_called_once_with(
+            parent,
+            text="Náhled křížovky",
+            padding=12,
         )
         preview_type.assert_called_once_with(
             preview_frame,
@@ -955,7 +829,7 @@ class GuiTest(unittest.TestCase):
             minimum_dimension=4,
             maximum_dimension=50,
         )
-        label_type.assert_not_called()
+        spinbox_type.assert_not_called()
 
     def test_crossword_preview_detects_every_edge_and_corner(self) -> None:
         preview, _resize_handler = _resizable_preview()
@@ -1210,54 +1084,19 @@ class GuiTest(unittest.TestCase):
         self.assertIsNone(slot.clue)
         window._set_dirty.assert_called_once_with(True)
 
-    def test_crossword_watches_dimensions_for_live_resizing(self) -> None:
+    def test_preview_resize_stops_when_inline_edit_is_invalid(self) -> None:
         window = Mock()
-
-        CrosswordDocumentWindow._watch_inputs(window)
-
-        for value in (
-            window.width_value,
-            window.height_value,
-        ):
-            value.trace_add.assert_called_once_with(
-                "write",
-                window._dimension_input_changed,
-            )
-
-    def test_dimension_change_replaces_pending_resize(self) -> None:
-        window = Mock()
-        window._changing_dimension_values = False
-        window._resize_job = "předchozí"
-        window.after.return_value = "nová"
-
-        with patch("krizovkar.gui._CROSSWORD_RESIZE_DELAY_MS", 321):
-            CrosswordDocumentWindow._dimension_input_changed(window)
-
-        window.after_cancel.assert_called_once_with("předchozí")
-        window.after.assert_called_once_with(
-            321,
-            window._regenerate_template_from_inputs,
-        )
-        self.assertEqual("nová", window._resize_job)
-
-    def test_preview_resize_updates_controls_and_regenerates_once(self) -> None:
-        window = Mock()
-        window._save_inline_slot_edit.return_value = True
-        window._resize_job = "čekající"
-        window._changing_dimension_values = False
+        window._save_inline_slot_edit.return_value = False
 
         CrosswordDocumentWindow._preview_grid_resized(window, 9, 8)
 
         window._save_inline_slot_edit.assert_called_once_with()
-        window.after_cancel.assert_called_once_with("čekající")
-        window.width_value.set.assert_called_once_with("9")
-        window.height_value.set.assert_called_once_with("8")
-        self.assertFalse(window._changing_dimension_values)
-        self.assertIsNone(window._resize_job)
-        window._regenerate_template_from_inputs.assert_called_once_with()
+        window._set_dirty.assert_not_called()
+        window._refresh_crossword_view.assert_not_called()
 
-    def test_live_resize_changes_only_its_document_window(self) -> None:
+    def test_preview_resize_changes_only_its_document_window(self) -> None:
         window = Mock()
+        window._save_inline_slot_edit.return_value = True
         window._crossword = create_blank_template(
             CrosswordSettings(4, 4),
             "numbered",
@@ -1267,84 +1106,62 @@ class GuiTest(unittest.TestCase):
             CrosswordSettings(3, 3),
             "numbered",
         )
-        window.width_value.get.return_value = "3"
-        window.height_value.get.return_value = "3"
 
         with patch(
             "krizovkar.gui.create_blank_template",
             return_value=new_template,
         ) as create_template:
-            CrosswordDocumentWindow._regenerate_template_from_inputs(window)
+            CrosswordDocumentWindow._preview_grid_resized(window, 3, 3)
 
+        window._save_inline_slot_edit.assert_called_once_with()
         create_template.assert_called_once_with(
             CrosswordSettings(3, 3),
             "numbered",
         )
         self.assertIs(new_template, window._crossword)
         self.assertEqual("numbered", window._template_layout)
-        self.assertIsNone(window._resize_job)
         window._set_dirty.assert_called_once_with(True)
         window._rebuild_slot_tree.assert_called_once_with()
         window._refresh_crossword_view.assert_called_once_with()
 
-    def test_live_resize_preserves_matching_document(self) -> None:
+    def test_preview_resize_preserves_matching_document(self) -> None:
         window = Mock()
+        window._save_inline_slot_edit.return_value = True
         template = create_blank_template(CrosswordSettings(3, 3), "numbered")
         window._crossword = template
         window._template_layout = "numbered"
-        window.width_value.get.return_value = "3"
-        window.height_value.get.return_value = "3"
 
         with patch("krizovkar.gui.create_blank_template") as create_template:
-            CrosswordDocumentWindow._regenerate_template_from_inputs(window)
+            CrosswordDocumentWindow._preview_grid_resized(window, 3, 3)
 
         create_template.assert_not_called()
         self.assertIs(template, window._crossword)
         window._set_dirty.assert_not_called()
         window._refresh_crossword_view.assert_not_called()
 
-    def test_live_resize_restores_last_dimensions_for_invalid_value(
-        self,
-    ) -> None:
+    def test_preview_resize_silently_rejects_unsupported_layout(self) -> None:
         window = Mock()
+        window._save_inline_slot_edit.return_value = True
         template = create_blank_template(CrosswordSettings(3, 3), "numbered")
         window._crossword = template
         window._template_layout = "numbered"
-        window.width_value.get.return_value = ""
-        window.height_value.get.return_value = "3"
-
-        with patch("krizovkar.gui.create_blank_template") as create_template:
-            CrosswordDocumentWindow._regenerate_template_from_inputs(window)
-
-        create_template.assert_not_called()
-        self.assertIs(template, window._crossword)
-        window._restore_dimension_values.assert_called_once_with(template)
-        window._show_action_error.assert_not_called()
-        window._set_dirty.assert_not_called()
-        window._refresh_crossword_view.assert_not_called()
-
-    def test_live_resize_silently_rejects_unsupported_layout(self) -> None:
-        window = Mock()
-        template = create_blank_template(CrosswordSettings(3, 3), "numbered")
-        window._crossword = template
-        window._template_layout = "numbered"
-        window.width_value.get.return_value = "4"
-        window.height_value.get.return_value = "4"
 
         with patch(
             "krizovkar.gui.create_blank_template",
             side_effect=GuiInputError("rozměr nelze rozdělit"),
         ):
-            CrosswordDocumentWindow._regenerate_template_from_inputs(window)
+            CrosswordDocumentWindow._preview_grid_resized(window, 4, 4)
 
         self.assertIs(template, window._crossword)
-        window._restore_dimension_values.assert_called_once_with(template)
         window._show_action_error.assert_not_called()
         window._set_dirty.assert_not_called()
         window._refresh_crossword_view.assert_not_called()
 
-    def test_live_resize_requires_confirmation_for_filled_crossword(self) -> None:
+    def test_preview_resize_requires_confirmation_for_filled_crossword(
+        self,
+    ) -> None:
         window = Mock()
+        window._save_inline_slot_edit.return_value = True
         crossword = create_blank_template(CrosswordSettings(3, 3), "numbered")
         crossword = fill_crossword_slot(
             crossword,
@@ -1354,8 +1171,6 @@ class GuiTest(unittest.TestCase):
         )
         window._crossword = crossword
         window._template_layout = "numbered"
-        window.width_value.get.return_value = "4"
-        window.height_value.get.return_value = "4"
 
         with (
             patch(
@@ -1364,10 +1179,9 @@ class GuiTest(unittest.TestCase):
             ) as ask,
             patch("krizovkar.gui.create_blank_template") as create_template,
         ):
-            CrosswordDocumentWindow._regenerate_template_from_inputs(window)
+            CrosswordDocumentWindow._preview_grid_resized(window, 4, 4)
 
         ask.assert_called_once()
-        window._restore_dimension_values.assert_called_once_with(crossword)
         create_template.assert_not_called()
         self.assertIs(crossword, window._crossword)
         window._set_dirty.assert_not_called()
