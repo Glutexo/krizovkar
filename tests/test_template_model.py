@@ -213,7 +213,10 @@ class TemplateModelTest(unittest.TestCase):
         self.assertEqual(("CH",), template.secrets[0].words)
 
     def test_rejects_secret_part_with_unknown_slot(self) -> None:
-        with self.assertRaisesRegex(ModelError, "slot 'h2' v šabloně neexistuje"):
+        with self.assertRaisesRegex(
+            ModelError,
+            "slot 'h2' v křížovce neexistuje",
+        ):
             self._load(
                 "format: krizovkar\n"
                 "kind: template\n"

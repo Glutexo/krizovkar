@@ -374,12 +374,12 @@ def _parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         metavar="VÝSTUP.tex",
-        help="cílová LaTeXová šablona; bez volby standardní výstup",
+        help="cílový LaTeXový soubor; bez volby standardní výstup",
     )
     latex.add_argument(
         "--force",
         action="store_true",
-        help="povolí přepsání existující LaTeXové šablony",
+        help="povolí přepsání existujícího LaTeXového souboru",
     )
     latex.add_argument(
         "--page-format",

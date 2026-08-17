@@ -509,7 +509,7 @@ def create_latex_source(
     page_format: str = DEFAULT_PAGE_FORMAT,
     filled: bool = True,
 ) -> str:
-    """Vytvoří samostatně přeložitelnou LaTeXovou šablonu křížovky."""
+    """Vytvoří samostatně přeložitelný LaTeXový zdroj křížovky."""
 
     normalized_format = page_format.upper()
     resolve_page_size(normalized_format)
@@ -614,7 +614,7 @@ def render_latex(
     page_format: str = DEFAULT_PAGE_FORMAT,
     filled: bool = True,
 ) -> Path:
-    """Zapíše LaTeXovou šablonu atomicky do souboru."""
+    """Zapíše LaTeXový zdroj atomicky do souboru."""
 
     output_path = Path(output)
     if output_path.exists() and not overwrite:
@@ -661,7 +661,7 @@ def render_latex_stream(
     page_format: str = DEFAULT_PAGE_FORMAT,
     filled: bool = True,
 ) -> None:
-    """Zapíše LaTeXovou šablonu do textového proudu."""
+    """Zapíše LaTeXový zdroj do textového proudu."""
 
     source = create_latex_source(
         crossword,
@@ -741,7 +741,7 @@ def render_pdf(
     page_format: str = DEFAULT_PAGE_FORMAT,
     filled: bool = True,
 ) -> Path:
-    """Vytvoří LaTeXovou šablonu a atomicky ji přeloží do PDF."""
+    """Vytvoří LaTeXový zdroj a atomicky jej přeloží do PDF."""
 
     output_path = Path(output)
     if output_path.exists() and not overwrite:
@@ -777,7 +777,7 @@ def render_pdf_stream(
     page_format: str = DEFAULT_PAGE_FORMAT,
     filled: bool = True,
 ) -> None:
-    """Vytvoří LaTeXovou šablonu a přeloží ji do PDF proudu."""
+    """Vytvoří LaTeXový zdroj a přeloží jej do PDF proudu."""
 
     source = create_latex_source(
         crossword,

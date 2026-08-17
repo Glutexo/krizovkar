@@ -134,22 +134,22 @@ class Coordinate:
 
 @dataclass(frozen=True, slots=True)
 class TemplateLetterCell:
-    """Dosud nevyplněná písmenná buňka šablony."""
+    """Dosud nevyplněná písmenná buňka editovatelné křížovky."""
 
 
 @dataclass(frozen=True, slots=True)
 class TemplateLegendCell:
-    """Buňka šablony vyhrazená pro jednu nebo dvě legendy."""
+    """Buňka editovatelné křížovky vyhrazená pro legendy."""
 
 
 @dataclass(frozen=True, slots=True)
 class TemplateEmptyCell:
-    """Nevyplňovaná buňka šablony."""
+    """Nevyplňovaná buňka editovatelné křížovky."""
 
 
 @dataclass(frozen=True, slots=True)
 class TemplateHelpCell:
-    """Buňka šablony vyhrazená pro pomůcku."""
+    """Buňka editovatelné křížovky vyhrazená pro pomůcku."""
 
 
 TemplateCell = (
@@ -162,7 +162,7 @@ TemplateCell = (
 
 @dataclass(frozen=True, slots=True)
 class TemplateGrid:
-    """Obdélníková matice rolí buněk šablony."""
+    """Obdélníková matice rolí buněk editovatelné křížovky."""
 
     width: int
     height: int
@@ -171,7 +171,7 @@ class TemplateGrid:
 
 @dataclass(frozen=True, slots=True)
 class WordSlot:
-    """Místo pro jedno heslo s volitelně pevným obsahem."""
+    """Místo pro jedno heslo s volitelně doplněným obsahem."""
 
     identifier: str
     start: Coordinate
@@ -660,7 +660,7 @@ def _template_cell(cell: dict[str, Any]) -> TemplateCell:
         return TemplateEmptyCell()
     if cell["type"] == "help":
         return TemplateHelpCell()
-    raise ModelError(f"nepodporovaný typ buňky šablony: {cell['type']!r}")
+    raise ModelError(f"nepodporovaný typ buňky křížovky: {cell['type']!r}")
 
 
 def _template_secret_part(
@@ -861,7 +861,7 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
             if row > grid.height or column > grid.width:
                 raise ModelError(
                     "neplatný datový model: "
-                    f"{path}: slot {slot.identifier!r} přesahuje šablonu "
+                    f"{path}: slot {slot.identifier!r} přesahuje křížovku "
                     f"{grid.width} × {grid.height}"
                 )
             cell = grid.cells[row - 1][column - 1]
@@ -907,7 +907,7 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
         ):
             raise ModelError(
                 "neplatný datový model: "
-                f"{path}.legend: souřadnice leží mimo šablonu "
+                f"{path}.legend: souřadnice leží mimo křížovku "
                 f"{grid.width} × {grid.height}"
             )
         expected_legend = (
@@ -969,7 +969,7 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
     if len(help_cells) > 1:
         raise ModelError(
             "neplatný datový model: $.grid.cells: "
-            "šablona smí obsahovat nejvýše jednu buňku pomůcky"
+            "křížovka smí obsahovat nejvýše jednu buňku pomůcky"
         )
     if help_slots and not help_cells:
         raise ModelError(
@@ -1043,7 +1043,7 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
                         raise ModelError(
                             f"neplatný datový model: {cell_path}: "
                             f"souřadnice row={coordinate.row}, "
-                            f"column={coordinate.column} leží mimo šablonu "
+                            f"column={coordinate.column} leží mimo křížovku "
                             f"{grid.width} × {grid.height}"
                         )
                     template_cell = grid.cells[
@@ -1077,7 +1077,7 @@ def _validate_crossword_template(template: CrosswordTemplate) -> None:
             if slot is None:
                 raise ModelError(
                     f"neplatný datový model: {part_path}.slot: "
-                    f"slot {part.slot_identifier!r} v šabloně neexistuje"
+                    f"slot {part.slot_identifier!r} v křížovce neexistuje"
                 )
             previous_path = used_secret_slots.get(part.slot_identifier)
             if previous_path is not None:
@@ -1603,7 +1603,7 @@ def _template_cell_data(cell: TemplateCell) -> dict[str, str]:
     if isinstance(cell, TemplateHelpCell):
         return {"type": "help"}
     raise ModelError(
-        f"nepodporovaný typ buňky šablony pro zápis: {type(cell).__name__}"
+        f"nepodporovaný typ buňky křížovky pro zápis: {type(cell).__name__}"
     )
 
 

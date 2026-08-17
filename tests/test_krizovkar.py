@@ -1401,6 +1401,26 @@ class CommandTest(unittest.TestCase):
                 ):
                     self.assertNotIn(english_text, help_text)
 
+    def test_help_uses_crossword_terminology(self) -> None:
+        for command in (
+            None,
+            "crossword",
+            "grid",
+            "fill",
+            "generate",
+            "validate",
+            "latex",
+            "render",
+        ):
+            arguments = ["--help"] if command is None else [command, "--help"]
+            with self.subTest(command=command):
+                stdout = io.StringIO()
+
+                with redirect_stdout(stdout), self.assertRaises(SystemExit):
+                    main(arguments)
+
+                self.assertNotIn("šablon", stdout.getvalue().lower())
+
     def test_argument_errors_are_in_czech(self) -> None:
         cases = (
             (["render"], "je nutné zadat: VSTUP.yaml"),

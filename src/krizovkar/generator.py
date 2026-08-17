@@ -71,7 +71,7 @@ SpecificationLayout = Literal["swedish", "numbered"]
 
 
 class GenerationError(RuntimeError):
-    """Požadovanou šablonu nebo mřížku se nepodařilo vytvořit."""
+    """Požadovanou křížovku nebo mřížku se nepodařilo vytvořit."""
 
 
 class _SearchFailed(RuntimeError):
@@ -904,7 +904,7 @@ def place_secret_in_template(
     """Rezervuje vhodné nepřekrývající se sloty pro jednu tajenku."""
 
     if template.secrets:
-        raise GenerationError("šablona už obsahuje připravenou tajenku")
+        raise GenerationError("křížovka už obsahuje připravenou tajenku")
     _validate_secret_requirement(requirement)
     slots = list(template.slots)
     random.Random(seed).shuffle(slots)
@@ -938,7 +938,7 @@ def place_secret_in_template(
 
     if selected is None:
         raise GenerationError(
-            "v šabloně nelze pro požadovanou tajenku najít "
+            "v křížovce nelze pro požadovanou tajenku najít "
             "vhodné nepřekrývající se sloty"
         )
     parts = tuple(
@@ -990,7 +990,7 @@ def _resolve_template_secrets(
     if requirement is None:
         if unknown_indices:
             raise GenerationError(
-                "šablona rezervuje tajenku bez známého znění; "
+                "křížovka rezervuje tajenku bez známého znění; "
                 "při plnění je nutné zadat konkrétní tajenku"
             )
         return template
@@ -1003,10 +1003,10 @@ def _resolve_template_secrets(
     if not template.secrets:
         return place_secret_in_template(template, requirement, seed=seed)
     if not unknown_indices:
-        raise GenerationError("šablona už obsahuje konkrétní tajenku")
+        raise GenerationError("křížovka už obsahuje konkrétní tajenku")
     if len(unknown_indices) > 1:
         raise GenerationError(
-            "šablona obsahuje více neznámých tajenek; "
+            "křížovka obsahuje více neznámých tajenek; "
             "jedním zadáním je nelze jednoznačně doplnit"
         )
 
