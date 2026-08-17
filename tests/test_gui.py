@@ -21,6 +21,7 @@ from krizovkar.gui import (
     GuiInputError,
     _configure_tk_runtime,
     _create_window_menu,
+    _minimum_generated_dimension,
     _template_generation_layout,
     _keyboard_shortcut,
     _recent_document_label,
@@ -657,7 +658,8 @@ class GuiTest(unittest.TestCase):
         parent = Mock()
         window.height_value = Mock()
         window.width_value = Mock()
-        window.dimension_error_value = Mock()
+        window._template_layout = "swedish"
+        window.register = Mock(return_value="ověření-rozměru")
         controls = Mock()
         height_spinbox = Mock()
         width_spinbox = Mock()
@@ -685,29 +687,46 @@ class GuiTest(unittest.TestCase):
             [
                 call(
                     controls,
-                    from_=1,
+                    from_=4,
                     to=50,
                     width=5,
                     textvariable=window.height_value,
+                    validate="key",
+                    validatecommand=("ověření-rozměru", "%P"),
                 ),
                 call(
                     controls,
-                    from_=1,
+                    from_=4,
                     to=50,
                     width=5,
                     textvariable=window.width_value,
+                    validate="key",
+                    validatecommand=("ověření-rozměru", "%P"),
                 ),
             ],
             spinbox_type.call_args_list,
         )
         self.assertEqual("Řádky", label_type.call_args_list[0].kwargs["text"])
         self.assertEqual("Sloupce", label_type.call_args_list[1].kwargs["text"])
-        self.assertIs(
-            window.dimension_error_value,
-            label_type.call_args_list[2].kwargs["textvariable"],
-        )
+        self.assertEqual(2, label_type.call_count)
+        window.register.assert_called_once_with(window._validate_dimension_input)
         self.assertIs(height_spinbox, window.height_spinbox)
         self.assertIs(width_spinbox, window.width_spinbox)
+
+    def test_dimension_input_rejects_values_outside_layout_range(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window._template_layout = "swedish"
+
+        self.assertFalse(window._validate_dimension_input(""))
+        self.assertFalse(window._validate_dimension_input("slovo"))
+        self.assertFalse(window._validate_dimension_input("3"))
+        self.assertTrue(window._validate_dimension_input("4"))
+        self.assertTrue(window._validate_dimension_input("50"))
+        self.assertFalse(window._validate_dimension_input("51"))
+
+        window._template_layout = "numbered"
+        self.assertEqual(3, _minimum_generated_dimension("numbered"))
+        self.assertTrue(window._validate_dimension_input("3"))
 
     def test_crossword_preview_has_its_own_heading(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
@@ -767,7 +786,6 @@ class GuiTest(unittest.TestCase):
         with patch("krizovkar.gui._CROSSWORD_RESIZE_DELAY_MS", 321):
             CrosswordDocumentWindow._dimension_input_changed(window)
 
-        window.dimension_error_value.set.assert_called_once_with("")
         window.after_cancel.assert_called_once_with("předchozí")
         window.after.assert_called_once_with(
             321,
@@ -822,7 +840,7 @@ class GuiTest(unittest.TestCase):
         window._set_dirty.assert_not_called()
         window._refresh_crossword_view.assert_not_called()
 
-    def test_live_resize_keeps_last_preview_for_invalid_value(
+    def test_live_resize_restores_last_dimensions_for_invalid_value(
         self,
     ) -> None:
         window = Mock()
@@ -837,9 +855,27 @@ class GuiTest(unittest.TestCase):
 
         create_template.assert_not_called()
         self.assertIs(template, window._crossword)
-        window.dimension_error_value.set.assert_called_once_with(
-            "Počet sloupců musí být celé číslo."
-        )
+        window._restore_dimension_values.assert_called_once_with(template)
+        window._show_action_error.assert_not_called()
+        window._set_dirty.assert_not_called()
+        window._refresh_crossword_view.assert_not_called()
+
+    def test_live_resize_silently_rejects_unsupported_layout(self) -> None:
+        window = Mock()
+        template = create_blank_template(CrosswordSettings(3, 3), "numbered")
+        window._crossword = template
+        window._template_layout = "numbered"
+        window.width_value.get.return_value = "4"
+        window.height_value.get.return_value = "4"
+
+        with patch(
+            "krizovkar.gui.create_blank_template",
+            side_effect=GuiInputError("rozměr nelze rozdělit"),
+        ):
+            CrosswordDocumentWindow._regenerate_template_from_inputs(window)
+
+        self.assertIs(template, window._crossword)
+        window._restore_dimension_values.assert_called_once_with(template)
         window._show_action_error.assert_not_called()
         window._set_dirty.assert_not_called()
         window._refresh_crossword_view.assert_not_called()

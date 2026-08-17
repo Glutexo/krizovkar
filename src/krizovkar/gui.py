@@ -23,6 +23,7 @@ from krizovkar.generator import (
     generate_numbered_template,
     generate_swedish_template,
 )
+from krizovkar.layout import MIN_SEGMENT_LENGTH
 from krizovkar.localization import ngettext
 from krizovkar.model import (
     Coordinate,
@@ -334,6 +335,12 @@ def parse_crossword_settings(width: str, height: str) -> CrosswordSettings:
             f"Křížovka může mít nejvýše {_MAX_CROSSWORD_DIMENSION} sloupců a řádků."
         )
     return settings
+
+
+def _minimum_generated_dimension(layout: SpecificationLayout | None) -> int:
+    if layout == "numbered":
+        return MIN_SEGMENT_LENGTH
+    return MIN_SEGMENT_LENGTH + 1
 
 
 def create_blank_template(
@@ -1102,7 +1109,6 @@ class CrosswordDocumentWindow(ttk.Frame):
 
         self.width_value = tk.StringVar(value=str(document.grid.width))
         self.height_value = tk.StringVar(value=str(document.grid.height))
-        self.dimension_error_value = tk.StringVar()
         self.answer_value = tk.StringVar()
         self.clue_value = tk.StringVar()
         self.slot_title_value = tk.StringVar(value="Vyberte heslo.")
@@ -1134,7 +1140,6 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _configure_styles(self) -> None:
         style = ttk.Style(self.root)
         style.configure("Muted.TLabel", foreground="#667085")
-        style.configure("Error.TLabel", foreground="#b42318")
 
     def _build_menu(self) -> None:
         new_shortcut = _keyboard_shortcut("n")
@@ -1345,6 +1350,11 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _build_crossword_dimensions(self, parent: ttk.Frame) -> None:
         controls = ttk.Frame(parent)
         controls.grid(row=0, column=0, sticky="w")
+        minimum = _minimum_generated_dimension(self._template_layout)
+        validate_dimension = (
+            self.register(self._validate_dimension_input),
+            "%P",
+        )
         ttk.Label(controls, text="Řádky").grid(
             row=0,
             column=0,
@@ -1352,10 +1362,12 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         self.height_spinbox = ttk.Spinbox(
             controls,
-            from_=1,
+            from_=minimum,
             to=_MAX_CROSSWORD_DIMENSION,
             width=5,
             textvariable=self.height_value,
+            validate="key",
+            validatecommand=validate_dimension,
         )
         self.height_spinbox.grid(row=0, column=1, sticky="w", padx=(6, 0))
         ttk.Label(controls, text="Sloupce").grid(
@@ -1366,18 +1378,20 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         self.width_spinbox = ttk.Spinbox(
             controls,
-            from_=1,
+            from_=minimum,
             to=_MAX_CROSSWORD_DIMENSION,
             width=5,
             textvariable=self.width_value,
+            validate="key",
+            validatecommand=validate_dimension,
         )
         self.width_spinbox.grid(row=0, column=3, sticky="w", padx=(6, 0))
-        ttk.Label(
-            parent,
-            textvariable=self.dimension_error_value,
-            style="Error.TLabel",
-            wraplength=310,
-        ).grid(row=1, column=0, sticky="w", pady=(6, 0))
+
+    def _validate_dimension_input(self, proposed: str) -> bool:
+        if not proposed.isdecimal():
+            return False
+        minimum = _minimum_generated_dimension(self._template_layout)
+        return minimum <= int(proposed) <= _MAX_CROSSWORD_DIMENSION
 
     def _build_crossword_editor(self, parent: ttk.Frame) -> None:
         ttk.Label(
@@ -1519,7 +1533,6 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _dimension_input_changed(self, *_args: str) -> None:
         if self._changing_dimension_values:
             return
-        self.dimension_error_value.set("")
         if self._resize_job is not None:
             self.after_cancel(self._resize_job)
         self._resize_job = self.after(
@@ -1529,14 +1542,14 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _regenerate_template_from_inputs(self) -> None:
         self._resize_job = None
+        current = self._crossword
+        if current is None:
+            return
         try:
             settings = parse_crossword_settings(
                 self.width_value.get(),
                 self.height_value.get(),
             )
-            current = self._crossword
-            if current is None:
-                return
             if (
                 current.grid.width == settings.width
                 and current.grid.height == settings.height
@@ -1556,8 +1569,8 @@ class CrosswordDocumentWindow(ttk.Frame):
                 return
             layout = self._template_layout or "swedish"
             template = create_blank_template(settings, layout)
-        except GuiInputError as error:
-            self.dimension_error_value.set(str(error))
+        except GuiInputError:
+            self._restore_dimension_values(current)
             return
 
         self._crossword = template
