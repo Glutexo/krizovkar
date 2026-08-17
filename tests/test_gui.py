@@ -337,7 +337,7 @@ class GuiTest(unittest.TestCase):
             "https://github.com/Glutexo/krizovkar"
         )
 
-    def test_macos_source_window_uses_utility_decoration(self) -> None:
+    def test_macos_source_window_uses_activating_floating_decoration(self) -> None:
         window = Mock()
 
         with patch("krizovkar.gui.sys.platform", "darwin"):
@@ -347,7 +347,7 @@ class GuiTest(unittest.TestCase):
             "::tk::unsupported::MacWindowStyle",
             "style",
             str(window),
-            "utility",
+            "floating",
             ("closeBox", "resizable"),
         )
         window.attributes.assert_not_called()
@@ -391,6 +391,7 @@ class GuiTest(unittest.TestCase):
         self.assertIn("kind: crossword", yaml_source)
         source_window.root.deiconify.assert_called_once_with()
         source_window.root.lift.assert_called_once_with()
+        source_window.source_text.focus_set.assert_called_once_with()
 
     def test_read_only_text_forwards_selection_and_scrolling_commands(
         self,

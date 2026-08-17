@@ -286,11 +286,13 @@ def _configure_utility_window(window: tk.Toplevel) -> None:
 
     try:
         if sys.platform == "darwin":
+            # Tk utility je na Aqua neaktivující panel. Varianta floating má
+            # stejnou kompaktní dekoraci, ale dovolí textu získat vstup.
             window.tk.call(
                 "::tk::unsupported::MacWindowStyle",
                 "style",
                 str(window),
-                "utility",
+                "floating",
                 ("closeBox", "resizable"),
             )
         elif sys.platform == "win32":
@@ -1206,6 +1208,7 @@ class CrosswordSourceWindow(ttk.Frame):
         if reveal:
             self.root.deiconify()
             self.root.lift()
+            self.source_text.focus_set()
 
     def hide(self) -> None:
         self.root.withdraw()
