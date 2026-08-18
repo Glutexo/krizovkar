@@ -16,14 +16,14 @@ slots:
     start: {row: 2, column: 2}
     direction: horizontal
     length: 4
-    legend: {row: 2, column: 1}
+    clue_placement: inline
     answer: LABE
     clue: Česká řeka
   - id: v1
     start: {row: 2, column: 2}
     direction: vertical
     length: 3
-    legend: {row: 1, column: 2}
+    clue_placement: inline
     answer: LES
     clue: Porost stromů
     in_help: true
@@ -31,7 +31,7 @@ slots:
     start: {row: 2, column: 5}
     direction: vertical
     length: 3
-    legend: {row: 1, column: 5}
+    clue_placement: inline
     answer: EMU
     clue: Australský nelétavý pták
     in_help: true

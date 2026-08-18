@@ -754,9 +754,9 @@ def _crossword_with_cell_role(
     rows = [list(row) for row in crossword.grid.cells]
     rows[coordinate.row - 1][coordinate.column - 1] = role
     used_legends = {
-        slot.legend_position
+        slot.inline_clue_position
         for slot in slots
-        if slot.legend_position is not None
+        if slot.clue_placement == "inline"
     }
     for row_index, row in enumerate(rows, start=1):
         for column_index, cell in enumerate(row, start=1):
@@ -789,8 +789,8 @@ def _letter_cell_to_nonletter(
     identifiers = {slot.identifier for slot in crossword.slots}
     affected_slots: set[str] = set()
     slots: list[WordSlot] = []
-    legend_position = (
-        coordinate if isinstance(role, LegendCellRole) else None
+    clue_placement = (
+        "inline" if isinstance(role, LegendCellRole) else "external"
     )
 
     for slot in crossword.slots:
@@ -805,7 +805,7 @@ def _letter_cell_to_nonletter(
             )
 
         affected_slots.add(slot.identifier)
-        had_inline_legend = slot.legend_position is not None
+        had_inline_legend = slot.clue_placement == "inline"
         offset = coordinates.index(coordinate)
         before_length = offset
         after_length = slot.length - offset - 1
@@ -829,7 +829,7 @@ def _letter_cell_to_nonletter(
                     start=after_start,
                     direction=slot.direction,
                     length=after_length,
-                    legend_position=legend_position,
+                    clue_placement=clue_placement,
                 )
             )
         else:
@@ -838,17 +838,20 @@ def _letter_cell_to_nonletter(
                     slot,
                     start=after_start,
                     length=after_length,
-                    legend_position=legend_position,
+                    clue_placement=clue_placement,
                 )
             )
 
     if isinstance(role, LegendCellRole):
         for index, slot in enumerate(slots):
             expected_start = _shift_coordinate(coordinate, slot.direction, 1)
-            if slot.start == expected_start and slot.legend_position is None:
-                slots[index] = replace(slot, legend_position=coordinate)
+            if (
+                slot.start == expected_start
+                and slot.clue_placement == "external"
+            ):
+                slots[index] = replace(slot, clue_placement="inline")
 
-        if not any(slot.legend_position == coordinate for slot in slots):
+        if not any(slot.inline_clue_position == coordinate for slot in slots):
             raise GuiInputError(
                 "Legenda musí mít bezprostředně napravo nebo pod sebou "
                 "místo pro heslo."
@@ -916,7 +919,7 @@ def _nonletter_cell_to_letter(
                 after,
                 start=coordinate,
                 length=after.length + 1,
-                legend_position=None,
+                clue_placement="external",
             )
 
     slots = tuple(
@@ -938,8 +941,8 @@ def _legend_cell_to_empty(
     coordinate: Coordinate,
 ) -> CrosswordDocument:
     slots = tuple(
-        replace(slot, legend_position=None)
-        if slot.legend_position == coordinate
+        replace(slot, clue_placement="external")
+        if slot.inline_clue_position == coordinate
         else slot
         for slot in crossword.slots
     )
@@ -959,11 +962,14 @@ def _empty_cell_to_legend(
     slots: list[WordSlot] = []
     for slot in crossword.slots:
         expected_start = _shift_coordinate(coordinate, slot.direction, 1)
-        if slot.start == expected_start and slot.legend_position is None:
-            slot = replace(slot, legend_position=coordinate)
+        if (
+            slot.start == expected_start
+            and slot.clue_placement == "external"
+        ):
+            slot = replace(slot, clue_placement="inline")
         slots.append(slot)
 
-    if not any(slot.legend_position == coordinate for slot in slots):
+    if not any(slot.inline_clue_position == coordinate for slot in slots):
         raise GuiInputError(
             "Legenda musí mít bezprostředně napravo nebo pod sebou "
             "místo pro heslo."
@@ -1198,7 +1204,7 @@ def _add_crossword_slot_start(
         None,
     )
     if starting is not None:
-        if starting.legend_position is None:
+        if starting.clue_placement == "external":
             return crossword
         raise GuiInputError(
             "Pole už začíná heslo s vepsanou legendou."
@@ -1275,7 +1281,7 @@ def _remove_crossword_slot_start(
             for slot in crossword.slots
             if slot.direction == direction
             and slot.start == coordinate
-            and slot.legend_position is None
+            and slot.clue_placement == "external"
         ),
         None,
     )
@@ -1527,7 +1533,7 @@ def _template_generation_layout(
 ) -> SpecificationLayout:
     """Určí rozvržení pro nové vygenerování šablony."""
 
-    if any(slot.legend_position is not None for slot in document.slots):
+    if any(slot.clue_placement == "inline" for slot in document.slots):
         return "swedish"
     return "numbered"
 
@@ -3375,7 +3381,7 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _slot_label(self, selected: WordSlot) -> str:
         assert self._crossword is not None
-        if selected.legend_position is None:
+        if selected.clue_placement == "external":
             numbers = crossword_external_slot_numbers(self._crossword)
             number = numbers.get(selected.identifier)
             if number is not None:
@@ -3823,7 +3829,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             external_slot_starts=tuple(
                 (item.start, item.direction)
                 for item in crossword.slots
-                if item.legend_position is None
+                if item.clue_placement == "external"
             ),
             show_letters=True,
         )

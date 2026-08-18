@@ -26,6 +26,7 @@ class ModelError(ValueError):
 
 
 WordDirection = Literal["horizontal", "vertical"]
+CluePlacement = Literal["inline", "external"]
 LegendArrow = Literal["right", "down"]
 SecretArrow = Literal["up", "right", "down", "left"]
 CellBar = Literal["right", "bottom"]
@@ -189,10 +190,26 @@ class WordSlot:
     start: Coordinate
     direction: WordDirection
     length: int
-    legend_position: Coordinate | None = None
+    clue_placement: CluePlacement = "external"
     answer: str | None = None
     clue: str | None = None
     in_help: bool = False
+
+    @property
+    def inline_clue_position(self) -> Coordinate | None:
+        """Odvodí buňku vepsané legendy bezprostředně před heslem."""
+
+        if self.clue_placement == "external":
+            return None
+        if self.direction == "horizontal":
+            return Coordinate(
+                row=self.start.row,
+                column=self.start.column - 1,
+            )
+        return Coordinate(
+            row=self.start.row - 1,
+            column=self.start.column,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -717,14 +734,7 @@ def _crossword_document_from_data(data: dict[str, Any]) -> CrosswordDocument:
                 ),
                 direction=slot["direction"],
                 length=slot["length"],
-                legend_position=(
-                    Coordinate(
-                        row=slot["legend"]["row"],
-                        column=slot["legend"]["column"],
-                    )
-                    if "legend" in slot
-                    else None
-                ),
+                clue_placement=slot.get("clue_placement", "external"),
                 answer=slot.get("answer"),
                 clue=slot.get("clue"),
                 in_help=slot.get("in_help", False),
@@ -876,9 +886,10 @@ def _validate_crossword_document(document: CrosswordDocument) -> None:
                     )
                 fixed_letters.setdefault(coordinate, (letter, f"{path}.answer"))
 
-        if slot.legend_position is None:
+        if slot.clue_placement == "external":
             continue
-        legend = slot.legend_position
+        legend = slot.inline_clue_position
+        assert legend is not None
         if (
             legend.row < 1
             or legend.column < 1
@@ -887,25 +898,14 @@ def _validate_crossword_document(document: CrosswordDocument) -> None:
         ):
             raise ModelError(
                 "neplatný datový model: "
-                f"{path}.legend: souřadnice leží mimo křížovku "
+                f"{path}.clue_placement: vepsaná legenda leží mimo křížovku "
                 f"{grid.width} × {grid.height}"
-            )
-        expected_legend = (
-            Coordinate(row=slot.start.row, column=slot.start.column - 1)
-            if slot.direction == "horizontal"
-            else Coordinate(row=slot.start.row - 1, column=slot.start.column)
-        )
-        if legend != expected_legend:
-            raise ModelError(
-                "neplatný datový model: "
-                f"{path}.legend: legenda musí bezprostředně předcházet "
-                "prvnímu písmenu slotu"
             )
         legend_cell = grid.cells[legend.row - 1][legend.column - 1]
         if not isinstance(legend_cell, LegendCellRole):
             raise ModelError(
                 "neplatný datový model: "
-                f"{path}.legend: souřadnice row={legend.row}, "
+                f"{path}.clue_placement: souřadnice row={legend.row}, "
                 f"column={legend.column} není legendová buňka"
             )
         directions = used_legends.setdefault((legend.row, legend.column), {})
@@ -913,7 +913,7 @@ def _validate_crossword_document(document: CrosswordDocument) -> None:
         if previous_slot is not None:
             raise ModelError(
                 "neplatný datový model: "
-                f"{path}.legend: legendu ve směru {slot.direction!r} "
+                f"{path}.clue_placement: legendu ve směru {slot.direction!r} "
                 f"už používá slot {previous_slot!r}"
             )
         directions[slot.direction] = slot.identifier
@@ -1623,11 +1623,8 @@ def _crossword_document_data(
             "direction": slot.direction,
             "length": slot.length,
         }
-        if slot.legend_position is not None:
-            data["legend"] = {
-                "row": slot.legend_position.row,
-                "column": slot.legend_position.column,
-            }
+        if slot.clue_placement != "external":
+            data["clue_placement"] = slot.clue_placement
         if slot.answer is not None:
             data["answer"] = slot.answer
             data["clue"] = slot.clue

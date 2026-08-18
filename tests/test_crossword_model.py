@@ -47,7 +47,8 @@ class CrosswordModelTest(unittest.TestCase):
         )
         self.assertEqual("h1", crossword.slots[0].identifier)
         self.assertEqual(3, crossword.slots[0].length)
-        self.assertIsNone(crossword.slots[0].legend_position)
+        self.assertEqual("external", crossword.slots[0].clue_placement)
+        self.assertIsNone(crossword.slots[0].inline_clue_position)
 
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "written.yaml"
@@ -352,10 +353,18 @@ class CrosswordModelTest(unittest.TestCase):
             "    start: {row: 1, column: 2}\n"
             "    direction: horizontal\n"
             "    length: 1\n"
-            "    legend: {row: 1, column: 1}\n"
+            "    clue_placement: inline\n"
         )
 
-        self.assertEqual(1, crossword.slots[0].legend_position.column)
+        slot = crossword.slots[0]
+        self.assertEqual("inline", slot.clue_placement)
+        position = slot.inline_clue_position
+        assert position is not None
+        self.assertEqual(1, position.column)
+        output = StringIO()
+        dump_crossword_document(crossword, output)
+        self.assertIn("clue_placement: inline", output.getvalue())
+        self.assertNotIn("    legend:", output.getvalue())
 
     def test_rejects_wrong_number_of_rows(self) -> None:
         with self.assertRaisesRegex(ModelError, "počet řádků"):
@@ -453,8 +462,8 @@ class CrosswordModelTest(unittest.TestCase):
                 "  - {id: h1, start: {row: 1, column: 2}, direction: horizontal, length: 1}\n"
             )
 
-    def test_rejects_nonadjacent_legend(self) -> None:
-        with self.assertRaisesRegex(ModelError, "musí bezprostředně předcházet"):
+    def test_rejects_inline_clue_without_preceding_legend(self) -> None:
+        with self.assertRaisesRegex(ModelError, "není legendová buňka"):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
@@ -469,7 +478,45 @@ class CrosswordModelTest(unittest.TestCase):
                 "    start: {row: 1, column: 3}\n"
                 "    direction: horizontal\n"
                 "    length: 1\n"
-                "    legend: {row: 1, column: 1}\n"
+                "    clue_placement: inline\n"
+            )
+
+    def test_rejects_inline_clue_outside_grid(self) -> None:
+        with self.assertRaisesRegex(ModelError, "vepsaná legenda leží mimo"):
+            self._load(
+                "format: krizovkar\n"
+                "kind: crossword\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 1\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: letter}]\n"
+                "slots:\n"
+                "  - id: h1\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    length: 1\n"
+                "    clue_placement: inline\n"
+            )
+
+    def test_rejects_unknown_clue_placement(self) -> None:
+        with self.assertRaisesRegex(ModelError, "povolené hodnoty"):
+            self._load(
+                "format: krizovkar\n"
+                "kind: crossword\n"
+                "version: 1\n"
+                "grid:\n"
+                "  width: 1\n"
+                "  height: 1\n"
+                "  cells:\n"
+                "    - [{type: letter}]\n"
+                "slots:\n"
+                "  - id: h1\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+                "    length: 1\n"
+                "    clue_placement: elsewhere\n"
             )
 
 

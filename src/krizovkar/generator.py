@@ -304,7 +304,6 @@ def create_template_from_specification(
         identifiers[slot.token] = f"{prefix}{direction_counts[slot.direction]}"
 
     legend_coordinates: set[GridCoordinate] = set()
-    legend_by_token: dict[tuple[str, int, int], Coordinate | None] = {}
     if layout == "swedish":
         for slot in specified_slots:
             legend = (
@@ -330,9 +329,6 @@ def create_template_from_specification(
                     "písmennou buňku"
                 )
             legend_coordinates.add(legend_coordinate)
-            legend_by_token[slot.token] = legend
-    else:
-        legend_by_token = {slot.token: None for slot in specified_slots}
 
     help_coordinate: GridCoordinate | None = None
     if any(slot.in_help for slot in specified_slots):
@@ -386,7 +382,7 @@ def create_template_from_specification(
             start=slot.start,
             direction=slot.direction,
             length=len(split_answer_letters(slot.answer)),
-            legend_position=legend_by_token[slot.token],
+            clue_placement="inline" if layout == "swedish" else "external",
             answer=slot.answer,
             clue=slot.clue,
             in_help=slot.in_help,
@@ -558,10 +554,7 @@ def _swedish_template_from_layout(layout: SwedishLayout) -> CrosswordDocument:
                         ),
                         direction="horizontal",
                         length=column_segment.length,
-                        legend_position=Coordinate(
-                            row=row + 1,
-                            column=column_segment.legend + 1,
-                        ),
+                        clue_placement="inline",
                     )
                 )
                 horizontal_number += 1
@@ -579,10 +572,7 @@ def _swedish_template_from_layout(layout: SwedishLayout) -> CrosswordDocument:
                         ),
                         direction="vertical",
                         length=row_segment.length,
-                        legend_position=Coordinate(
-                            row=row_segment.legend + 1,
-                            column=column + 1,
-                        ),
+                        clue_placement="inline",
                     )
                 )
                 vertical_number += 1
@@ -1180,7 +1170,7 @@ def crossword_external_slot_numbers(
         (
             slot
             for slot in crossword.slots
-            if slot.legend_position is None
+            if slot.clue_placement == "external"
         ),
         key=lambda slot: (
             slot.start.row,
@@ -1213,7 +1203,7 @@ def _crossword_grid_annotations(
     external_horizontal_cells: set[GridCoordinate] = set()
     external_vertical_cells: set[GridCoordinate] = set()
     has_inline_legends = any(
-        slot.legend_position is not None for slot in crossword.slots
+        slot.clue_placement == "inline" for slot in crossword.slots
     )
     for slot in crossword.slots:
         coordinates = _slot_coordinates(slot)
@@ -1223,7 +1213,7 @@ def _crossword_grid_annotations(
             else vertical_connections
         )
         connections.update(pairwise(coordinates))
-        if slot.legend_position is None:
+        if slot.clue_placement == "external":
             external_cells = (
                 external_horizontal_cells
                 if slot.direction == "horizontal"
@@ -1335,12 +1325,14 @@ def _crossword_grid_from_assignments(
                 entry.letters,
             ):
                 letters[coordinate] = letter
-        if slot.legend_position is None:
+        if slot.clue_placement == "external":
             external_slots.append(slot)
         else:
+            inline_clue_position = slot.inline_clue_position
+            assert inline_clue_position is not None
             legend_coordinate = (
-                slot.legend_position.row - 1,
-                slot.legend_position.column - 1,
+                inline_clue_position.row - 1,
+                inline_clue_position.column - 1,
             )
             slots_by_legend[legend_coordinate].append(slot)
     direction_order = {"horizontal": 0, "vertical": 1}

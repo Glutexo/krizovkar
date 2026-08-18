@@ -134,12 +134,15 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
             tuple(slot.answer for slot in template.slots),
         )
         self.assertEqual(
-            ("2,1", "1,2", "1,5"),
-            tuple(
-                f"{slot.legend_position.row},{slot.legend_position.column}"
-                for slot in template.slots
-                if slot.legend_position is not None
+            (
+                Coordinate(2, 1),
+                Coordinate(1, 2),
+                Coordinate(1, 5),
             ),
+            tuple(slot.inline_clue_position for slot in template.slots),
+        )
+        self.assertTrue(
+            all(slot.clue_placement == "inline" for slot in template.slots)
         )
         self.assertEqual("crossword", template.kind)
         self.assertIsInstance(template, CrosswordDocument)
@@ -208,7 +211,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         grid = create_grid_from_crossword(template)
 
         self.assertTrue(
-            all(slot.legend_position is None for slot in template.slots)
+            all(slot.clue_placement == "external" for slot in template.slots)
         )
         self.assertIsInstance(
             template.secrets[0].parts[0],
@@ -764,14 +767,14 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
                     start=Coordinate(row=1, column=2),
                     direction="horizontal",
                     length=1,
-                    legend_position=Coordinate(row=1, column=1),
+                    clue_placement="inline",
                 ),
                 WordSlot(
                     identifier="v1",
                     start=Coordinate(row=2, column=1),
                     direction="vertical",
                     length=1,
-                    legend_position=Coordinate(row=1, column=1),
+                    clue_placement="inline",
                 ),
             ),
         )
@@ -791,6 +794,50 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         self.assertIsInstance(legend, LegendCell)
         self.assertEqual(2, len(legend.texts))
         self.assertFalse(legend.arrows)
+
+    def test_clue_placement_distinguishes_slots_at_one_legend_cell(self) -> None:
+        crossword = CrosswordDocument(
+            format_name="krizovkar",
+            kind="crossword",
+            version=1,
+            grid=CrosswordLayout(
+                width=2,
+                height=2,
+                cells=(
+                    (LegendCellRole(), LetterCellRole()),
+                    (LetterCellRole(), EmptyCellRole()),
+                ),
+            ),
+            slots=(
+                WordSlot(
+                    identifier="h1",
+                    start=Coordinate(row=1, column=2),
+                    direction="horizontal",
+                    length=1,
+                    clue_placement="inline",
+                    answer="A",
+                    clue="Uvnitř",
+                ),
+                WordSlot(
+                    identifier="v1",
+                    start=Coordinate(row=2, column=1),
+                    direction="vertical",
+                    length=1,
+                    answer="B",
+                    clue="Vně",
+                ),
+            ),
+        )
+
+        grid = create_grid_from_crossword(crossword)
+
+        assert grid.grid.cells is not None
+        legend = grid.grid.cells[0][0]
+        self.assertIsInstance(legend, LegendCell)
+        assert isinstance(legend, LegendCell)
+        self.assertEqual(("Uvnitř",), legend.texts)
+        self.assertEqual(1, len(grid.clues))
+        self.assertEqual("Vně", grid.clues[0].text)
 
     def test_crossword_fill_rejects_missing_length(self) -> None:
         template = generate_swedish_template(width=5, height=5)
@@ -878,11 +925,8 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         first_slot = first.slots[0]
         self.assertEqual((2, 2), (first_slot.start.row, first_slot.start.column))
         self.assertEqual(4, first_slot.length)
-        assert first_slot.legend_position is not None
-        self.assertEqual(
-            (2, 1),
-            (first_slot.legend_position.row, first_slot.legend_position.column),
-        )
+        self.assertEqual("inline", first_slot.clue_placement)
+        self.assertEqual(Coordinate(2, 1), first_slot.inline_clue_position)
 
     def test_generates_numbered_template_without_dictionary(self) -> None:
         first = generate_numbered_template(width=7, height=7)
@@ -901,7 +945,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         )
         self.assertEqual(28, len(first.slots))
         self.assertTrue(
-            all(slot.legend_position is None for slot in first.slots)
+            all(slot.clue_placement == "external" for slot in first.slots)
         )
         self.assertEqual(
             (
@@ -1016,14 +1060,14 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
                     start=Coordinate(row=1, column=2),
                     direction="horizontal",
                     length=1,
-                    legend_position=Coordinate(row=1, column=1),
+                    clue_placement="inline",
                 ),
                 WordSlot(
                     identifier="v1",
                     start=Coordinate(row=2, column=1),
                     direction="vertical",
                     length=1,
-                    legend_position=Coordinate(row=1, column=1),
+                    clue_placement="inline",
                 ),
             ),
         )

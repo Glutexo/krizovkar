@@ -60,7 +60,12 @@ Povinná matice `grid.cells` rozlišuje čtyři role:
 
 Každý `slot` popisuje jedno budoucí heslo. Povinné `id` je v dokumentu jedinečné, `start` používá souřadnice od 1, `direction` určuje směr doprava nebo dolů a `length` je počet buněk. Stejně jako v ostatních dokumentech zabírá české `CH` jednu buňku.
 
-Volitelná souřadnice `legend` označuje vepsanou legendovou buňku. Musí ležet bezprostředně vlevo od vodorovného slotu nebo nad svislým slotem. Její vynechání znamená budoucí vnější legendu, takže stejný model podporuje švédské, klasické i smíšené rozložení.
+Volitelné `clue_placement` určuje umístění legendy. Hodnota `inline` používá
+legendovou buňku bezprostředně vlevo od vodorovného slotu nebo nad svislým
+slotem; její souřadnice se vždy odvodí ze `start` a `direction`. Hodnota
+`external` znamená budoucí vnější číslovanou legendu a je výchozí, takže ji
+lze vynechat. Stejný model tím podporuje švédské, klasické i smíšené
+rozložení bez opakování odvoditelné souřadnice.
 
 Křížovka převedená ze zadání může slotu přidat společně položky
 `answer` a `clue`. Jde o doplněnou odpověď a její legendu; musí být uvedené obě
@@ -150,8 +155,8 @@ začátků a silné mezislovní předěly a připravené tajenky převede na bu�
 `secret`. Přenese také jejich zobáčky a `prompt`. Nevyplněné sloty zůstanou
 prázdné; doplněné sloty naopak vloží svá písmena a legendy a `in_help` naplní
 pomůcku. Tajenkové sloty označí jako `type: secret`. Vepsané legendy
-převezmou texty přiřazených hesel; sloty bez souřadnice `legend` se převedou
-na číslovaná hesla s vnějšími legendami. Společný začátek vodorovného
+převezmou texty přiřazených hesel; sloty s `clue_placement: external` se
+převedou na číslovaná hesla s vnějšími legendami. Společný začátek vodorovného
 a svislého slotu sdílí jedno číslo. Samotná `secrets.words` u slotu bez
 pevného `answer` se při tomto
 převodu dál nezveřejňují. Příkazy `latex` a `render` umějí stejný převod

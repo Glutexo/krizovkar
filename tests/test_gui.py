@@ -1052,7 +1052,7 @@ class GuiTest(unittest.TestCase):
         self.assertTrue(crossword.slots)
         self.assertTrue(all(slot.answer is None for slot in crossword.slots))
         self.assertTrue(
-            any(slot.legend_position is not None for slot in crossword.slots)
+            any(slot.clue_placement == "inline" for slot in crossword.slots)
         )
 
     def test_creates_numbered_template_before_words(self) -> None:
@@ -1063,7 +1063,7 @@ class GuiTest(unittest.TestCase):
 
         self.assertTrue(crossword.slots)
         self.assertTrue(
-            all(slot.legend_position is None for slot in crossword.slots)
+            all(slot.clue_placement == "external" for slot in crossword.slots)
         )
 
     def test_changes_letter_to_legend_and_splits_crossing_slots(self) -> None:
@@ -1079,7 +1079,7 @@ class GuiTest(unittest.TestCase):
         following = tuple(
             slot
             for slot in changed.slots
-            if slot.legend_position == coordinate
+            if slot.inline_clue_position == coordinate
         )
         self.assertEqual(
             {"horizontal", "vertical"},
@@ -1235,7 +1235,7 @@ class GuiTest(unittest.TestCase):
         self.assertFalse(
             any(
                 slot.start in {Coordinate(2, 4), Coordinate(3, 3)}
-                and slot.legend_position is None
+                and slot.clue_placement == "external"
                 for slot in changed.slots
             )
         )
@@ -1267,7 +1267,7 @@ class GuiTest(unittest.TestCase):
         shortened = next(
             slot for slot in split.slots if slot.identifier == original.identifier
         )
-        self.assertIsNone(created.legend_position)
+        self.assertEqual("external", created.clue_placement)
         self.assertEqual(2, shortened.length)
         self.assertEqual(original.length - 2, created.length)
         grid = create_grid_from_crossword(split)
@@ -1341,7 +1341,8 @@ class GuiTest(unittest.TestCase):
             {
                 slot.direction
                 for slot in changed.slots
-                if slot.start == coordinate and slot.legend_position is None
+                if slot.start == coordinate
+                and slot.clue_placement == "external"
             },
         )
         grid = create_grid_from_crossword(changed)
@@ -1362,7 +1363,9 @@ class GuiTest(unittest.TestCase):
             "swedish",
         )
         slot = next(
-            slot for slot in crossword.slots if slot.legend_position is not None
+            slot
+            for slot in crossword.slots
+            if slot.clue_placement == "inline"
         )
         crossword = fill_crossword_slot(
             crossword,
@@ -1370,7 +1373,7 @@ class GuiTest(unittest.TestCase):
             "A" * slot.length,
             "Nápověda",
         )
-        coordinate = slot.legend_position
+        coordinate = slot.inline_clue_position
         assert coordinate is not None
 
         without_legend = set_crossword_cell_role(
@@ -1388,7 +1391,8 @@ class GuiTest(unittest.TestCase):
             without_legend.grid.cells[coordinate.row - 1][coordinate.column - 1],
             EmptyCellRole,
         )
-        self.assertIsNone(preserved.legend_position)
+        self.assertEqual("external", preserved.clue_placement)
+        self.assertIsNone(preserved.inline_clue_position)
         self.assertEqual("A" * slot.length, preserved.answer)
         self.assertEqual("Nápověda", preserved.clue)
 
@@ -1421,7 +1425,7 @@ class GuiTest(unittest.TestCase):
                 )
                 self.assertTrue(
                     any(
-                        slot.legend_position == coordinate
+                        slot.inline_clue_position == coordinate
                         for slot in changed.slots
                     )
                 )
@@ -3051,7 +3055,7 @@ class GuiTest(unittest.TestCase):
             for slot in window._crossword.slots
             if slot.start == coordinate and slot.direction == "horizontal"
         )
-        self.assertIsNone(created.legend_position)
+        self.assertEqual("external", created.clue_placement)
         self.assertEqual("numbered", window._template_layout)
         window._set_dirty.assert_called_once_with(True)
         window._rebuild_slot_tree.assert_called_once_with()

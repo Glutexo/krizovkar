@@ -220,6 +220,9 @@ délku; matice buněk rozlišuje budoucí písmena, vepsané legendy, pomůcku a
 nevyplňovaná pole. Hustá nevyplněná křížovka nechá odpovědi a texty legend
 neznámé, křížovka převedená ze zadání je naopak uchová jako předem doplněný
 obsah míst. Ukazuje to [šablona ze zadání](examples/template-from-specification.yaml).
+Volitelné `clue_placement: inline` u hesla použije bezprostředně předcházející
+legendovou buňku; její souřadnice se odvodí ze začátku a směru. Vynechané
+`clue_placement` znamená vnější číslovanou legendu.
 
 Šablona může navíc rezervovat jedno nebo více míst pro části tajenky.
 Známá tajenka se ukládá jako seznam slov bez mezer a interpunkce, aby se
@@ -531,8 +534,8 @@ uv run krizovkar grid build/filled-crossword.yaml \
   --output build/filled-grid.yaml
 ```
 
-Při převodu dostane slot s vepsanou legendovou buňkou švédskou legendu;
-slot bez ní dostane číslo a vnější legendu. Stejná křížovka, slovník a
+Při převodu dostane slot s `clue_placement: inline` švédskou legendu;
+ostatní sloty dostanou číslo a vnější legendu. Stejná křížovka, slovník a
 seed vytvoří stejnou vyplněnou křížovku.
 
 Známou tajenku uloženou v křížovce `fill` doplní automaticky a její

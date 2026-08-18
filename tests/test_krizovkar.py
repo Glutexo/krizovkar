@@ -1546,7 +1546,7 @@ class CommandTest(unittest.TestCase):
             slot.answer for slot in template.slots
         ))
         self.assertTrue(
-            all(slot.legend_position is not None for slot in template.slots)
+            all(slot.clue_placement == "inline" for slot in template.slots)
         )
         self.assertIn("(7 × 6, 3 hesla)", stderr.getvalue())
 
@@ -1567,7 +1567,7 @@ class CommandTest(unittest.TestCase):
         self.assertEqual(0, result)
         template = load_crossword_document(io.StringIO(stdout.getvalue()))
         self.assertEqual("ZELENÍ", template.slots[0].answer)
-        self.assertIsNone(template.slots[0].legend_position)
+        self.assertEqual("external", template.slots[0].clue_placement)
         self.assertIn("standardní výstup", stderr.getvalue())
 
     def test_template_rejects_dense_options_with_specification(self) -> None:
@@ -1969,7 +1969,10 @@ class CommandTest(unittest.TestCase):
                 )
             )
             self.assertTrue(
-                all(slot.legend_position is None for slot in template.slots)
+                all(
+                    slot.clue_placement == "external"
+                    for slot in template.slots
+                )
             )
 
 

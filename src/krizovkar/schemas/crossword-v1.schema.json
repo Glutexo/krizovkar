@@ -140,9 +140,13 @@
           "type": "integer",
           "minimum": 1
         },
-        "legend": {
-          "description": "Volitelná vepsaná legenda bezprostředně před začátkem slotu.",
-          "$ref": "#/$defs/coordinate"
+        "clue_placement": {
+          "description": "Umístění legendy uvnitř mřížky nebo vně jako číslované položky.",
+          "enum": [
+            "inline",
+            "external"
+          ],
+          "default": "external"
         },
         "answer": {
           "description": "Volitelná doplněná odpověď.",
