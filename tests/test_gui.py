@@ -33,7 +33,6 @@ from krizovkar.gui import (
     _open_pdf_in_default_application,
     _PdfOpenError,
     _PrintError,
-    _ReadOnlyText,
     _recent_document_label,
     _recent_documents_storage_path,
     _RecentDocuments,
@@ -61,6 +60,7 @@ from krizovkar.model import (
     LetterCell,
     LetterCellRole,
     SecretCell,
+    dump_crossword_document,
     load_crossword_document,
     write_crossword_document,
 )
@@ -489,20 +489,24 @@ class GuiTest(unittest.TestCase):
             editor.event_generate.call_args_list,
         )
 
-    def test_source_window_shows_read_only_yaml_for_document(self) -> None:
+    def test_source_window_shows_editable_yaml_for_document(self) -> None:
         source_window = CrosswordSourceWindow.__new__(CrosswordSourceWindow)
         source_window.root = Mock()
         source_window.source_text = Mock()
         document_window = Mock()
         document_window._path = Path("krizovka.yaml")
         document_window._dirty = True
-        document_window._document.return_value = create_blank_template(
+        document = create_blank_template(
             CrosswordSettings(3, 3),
             "numbered",
         )
+        output = StringIO()
+        dump_crossword_document(document, output)
+        document_window._yaml_source.return_value = output.getvalue()
         source_window._document_window = document_window
         source_window.source_text.yview.return_value = ()
         source_window.source_text.xview.return_value = ()
+        source_window.source_text.get.return_value = ""
 
         source_window.show(reveal=True)
 
@@ -510,87 +514,121 @@ class GuiTest(unittest.TestCase):
         source_window.root.title.assert_called_once_with(
             "Zdroj YAML — *krizovka.yaml"
         )
-        yaml_source = source_window.source_text.replace_content.call_args.args[0]
+        yaml_source = source_window.source_text.insert.call_args.args[1]
         self.assertIn("format: krizovkar", yaml_source)
         self.assertIn("kind: crossword", yaml_source)
+        source_window.source_text.delete.assert_called_once_with("1.0", tk.END)
+        source_window.source_text.edit_reset.assert_called_once_with()
+        source_window.source_text.edit_modified.assert_called_once_with(False)
         source_window.root.deiconify.assert_called_once_with()
         source_window.root.lift.assert_called_once_with()
         source_window.source_text.focus_set.assert_called_once_with()
 
-    def test_read_only_text_forwards_selection_and_scrolling_commands(
-        self,
-    ) -> None:
-        text = _ReadOnlyText.__new__(_ReadOnlyText)
-        text.tk = Mock()
-        text._original_widget_command = "původní-widget"
-        text.tk.call.return_value = "výsledek"
+    def test_source_window_applies_user_changes_immediately(self) -> None:
+        source_window = CrosswordSourceWindow.__new__(CrosswordSourceWindow)
+        source_window.source_text = Mock()
+        source_window.source_text.edit_modified.return_value = True
+        source_window.source_text.get.return_value = "format: krizovkar\n"
+        source_window._document_window = Mock()
 
-        scroll_result = text._dispatch_widget_command(
-            "yview",
-            "scroll",
-            1,
-            "units",
+        source_window._source_changed()
+
+        source_window.source_text.edit_modified.assert_has_calls(
+            [call(), call(False)]
         )
-        selection_result = text._dispatch_widget_command(
-            "tag",
-            "add",
-            "sel",
-            "1.0",
-            "1.4",
+        source_window._document_window._apply_yaml_source.assert_called_once_with(
+            "format: krizovkar\n"
         )
 
-        self.assertEqual("výsledek", scroll_result)
-        self.assertEqual("výsledek", selection_result)
-        self.assertEqual(
-            [
-                call("původní-widget", "yview", "scroll", 1, "units"),
-                call(
-                    "původní-widget",
-                    "tag",
-                    "add",
-                    "sel",
-                    "1.0",
-                    "1.4",
-                ),
-            ],
-            text.tk.call.call_args_list,
+    def test_source_window_ignores_programmatic_modified_event(self) -> None:
+        source_window = CrosswordSourceWindow.__new__(CrosswordSourceWindow)
+        source_window.source_text = Mock()
+        source_window.source_text.edit_modified.return_value = False
+        source_window._document_window = Mock()
+
+        source_window._source_changed()
+
+        source_window._document_window._apply_yaml_source.assert_not_called()
+
+    def test_source_window_keeps_unchanged_editor_content(self) -> None:
+        source_window = CrosswordSourceWindow.__new__(CrosswordSourceWindow)
+        source_window.source_text = Mock()
+        source_window.source_text.get.return_value = "format: krizovkar\n"
+
+        source_window._replace_content("format: krizovkar\n")
+
+        source_window.source_text.delete.assert_not_called()
+        source_window.source_text.insert.assert_not_called()
+
+    def test_valid_yaml_source_updates_document_immediately(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window._crossword = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        window._grid = Mock()
+        window._yaml_source_buffer = None
+        window._yaml_source_error = None
+        window._template_layout = "numbered"
+        window._selected_slot_identifier = "h1"
+        window._set_dirty = Mock()
+        window._rebuild_slot_tree = Mock()
+        window._refresh_crossword_view = Mock()
+        changed = create_blank_template(
+            CrosswordSettings(4, 4),
+            "numbered",
+        )
+        output = StringIO()
+        dump_crossword_document(changed, output)
+
+        window._apply_yaml_source(output.getvalue())
+
+        self.assertEqual(changed, window._crossword)
+        self.assertEqual(output.getvalue(), window._yaml_source_buffer)
+        self.assertIsNone(window._yaml_source_error)
+        self.assertEqual("numbered", window._template_layout)
+        window._set_dirty.assert_called_once_with(True, source_changed=True)
+        window._rebuild_slot_tree.assert_called_once_with()
+        window._refresh_crossword_view.assert_called_once_with()
+
+    def test_invalid_yaml_source_shows_error_only_in_preview(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window._crossword = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        window._grid = Mock()
+        window._yaml_source_buffer = None
+        window._yaml_source_error = None
+        window._template_layout = "numbered"
+        window._selected_slot_identifier = "h1"
+        window._set_dirty = Mock()
+        window._rebuild_slot_tree = Mock()
+        window._refresh_crossword_view = Mock()
+
+        with patch("krizovkar.gui.messagebox.showerror") as show_error:
+            window._apply_yaml_source("format: [\n")
+
+        self.assertIsNone(window._crossword)
+        self.assertEqual("format: [\n", window._yaml_source_buffer)
+        self.assertIn("neplatný YAML", window._yaml_source_error)
+        self.assertIsNone(window._selected_slot_identifier)
+        show_error.assert_not_called()
+        window._set_dirty.assert_called_once_with(True, source_changed=True)
+
+        window.crossword_preview = Mock()
+        window._refresh_crossword_preview()
+
+        self.assertIsNone(window._grid)
+        window.crossword_preview.clear_preview.assert_called_once_with(
+            window._yaml_source_error
         )
 
-    def test_read_only_text_blocks_user_content_changes(self) -> None:
-        text = _ReadOnlyText.__new__(_ReadOnlyText)
-        text.tk = Mock()
-        text._original_widget_command = "původní-widget"
+    def test_invalid_yaml_source_is_kept_after_source_window_closes(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window._yaml_source_buffer = "format: [\n"
 
-        for command in ("insert", "delete", "replace"):
-            with self.subTest(command=command):
-                self.assertEqual(
-                    "",
-                    text._dispatch_widget_command(command, "1.0", "text"),
-                )
-
-        text.tk.call.assert_not_called()
-
-    def test_read_only_text_replaces_content_through_internal_command(
-        self,
-    ) -> None:
-        text = _ReadOnlyText.__new__(_ReadOnlyText)
-        text.tk = Mock()
-        text._original_widget_command = "původní-widget"
-
-        text.replace_content("format: krizovkar\n")
-
-        self.assertEqual(
-            [
-                call("původní-widget", "delete", "1.0", tk.END),
-                call(
-                    "původní-widget",
-                    "insert",
-                    "1.0",
-                    "format: krizovkar\n",
-                ),
-            ],
-            text.tk.call.call_args_list,
-        )
+        self.assertEqual("format: [\n", window._yaml_source())
 
     def test_other_platforms_refresh_window_menu_before_opening(self) -> None:
         parent = Mock()
@@ -3426,8 +3464,8 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                call(4, label="Uložit křížovku"),
-                call(5, label="Uložit křížovku jako…"),
+                call(4, label="Uložit křížovku", state="normal"),
+                call(5, label="Uložit křížovku jako…", state="normal"),
             ],
             application.file_menu.entryconfigure.call_args_list,
         )
@@ -3467,8 +3505,8 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                call(4, label="Uložit křížovku"),
-                call(5, label="Uložit křížovku jako…"),
+                call(4, label="Uložit křížovku", state="normal"),
+                call(5, label="Uložit křížovku jako…", state="normal"),
             ],
             application.file_menu.entryconfigure.call_args_list,
         )
@@ -3484,6 +3522,32 @@ class GuiTest(unittest.TestCase):
             [call(0, state="normal"), call(1, state="disabled")],
             application.open_pdf_menu.entryconfigure.call_args_list,
         )
+
+    def test_file_menu_disables_actions_for_invalid_yaml_source(self) -> None:
+        application = Mock()
+        application._save_menu_index = 4
+        application._save_as_menu_index = 5
+        application.open_pdf_menu = Mock()
+        application._crossword = None
+
+        CrosswordDocumentWindow._refresh_file_menu(application)
+
+        self.assertEqual(
+            [
+                call(4, label="Uložit křížovku", state="disabled"),
+                call(5, label="Uložit křížovku jako…", state="disabled"),
+            ],
+            application.file_menu.entryconfigure.call_args_list,
+        )
+        for menu in (
+            application.export_menu,
+            application.print_menu,
+            application.open_pdf_menu,
+        ):
+            self.assertEqual(
+                [call(0, state="disabled"), call(1, state="disabled")],
+                menu.entryconfigure.call_args_list,
+            )
 
     def test_page_format_is_chosen_in_export_dialog_and_remembered(self) -> None:
         window = Mock()

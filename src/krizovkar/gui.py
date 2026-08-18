@@ -2395,46 +2395,8 @@ def _grid_from_editable_document(
     return create_grid_from_crossword(document)
 
 
-class _ReadOnlyText(tk.Text):
-    """Text, který dovolí výběr a posun, ale odmítne změny obsahu."""
-
-    _MUTATING_COMMANDS = frozenset({"delete", "insert", "replace"})
-
-    def __init__(self, master: tk.Misc, **kwargs: object) -> None:
-        super().__init__(master, **kwargs)
-        self._original_widget_command = f"{self._w}_readonly_original"
-        self.tk.call("rename", self._w, self._original_widget_command)
-        self.tk.createcommand(self._w, self._dispatch_widget_command)
-
-    def _dispatch_widget_command(self, *arguments: object) -> object:
-        if arguments and arguments[0] in self._MUTATING_COMMANDS:
-            return ""
-        return self.tk.call(self._original_widget_command, *arguments)
-
-    def replace_content(self, content: str) -> None:
-        """Nahradí obsah interně, aniž by zpřístupnil jeho úpravu."""
-
-        self.tk.call(
-            self._original_widget_command,
-            "delete",
-            "1.0",
-            tk.END,
-        )
-        self.tk.call(
-            self._original_widget_command,
-            "insert",
-            "1.0",
-            content,
-        )
-
-    def destroy(self) -> None:
-        self.tk.deletecommand(self._w)
-        self.tk.call("rename", self._original_widget_command, self._w)
-        super().destroy()
-
-
 class CrosswordSourceWindow(ttk.Frame):
-    """Samostatné okno s YAML podobou jednoho konkrétního dokumentu."""
+    """Samostatné okno s upravitelným YAML jednoho dokumentu."""
 
     def __init__(
         self,
@@ -2458,10 +2420,11 @@ class CrosswordSourceWindow(ttk.Frame):
         self.rowconfigure(0, weight=1)
 
     def _build_content(self) -> None:
-        self.source_text = _ReadOnlyText(
+        self.source_text = tk.Text(
             self,
             wrap="none",
             font="TkFixedFont",
+            undo=True,
         )
         vertical_scrollbar = ttk.Scrollbar(
             self,
@@ -2480,19 +2443,38 @@ class CrosswordSourceWindow(ttk.Frame):
         self.source_text.grid(row=0, column=0, sticky="nsew")
         vertical_scrollbar.grid(row=0, column=1, sticky="ns")
         horizontal_scrollbar.grid(row=1, column=0, sticky="ew")
+        self.source_text.bind("<<Modified>>", self._source_changed, add="+")
+        self.source_text.edit_modified(False)
+
+    def _source_changed(
+        self,
+        _event: tk.Event[tk.Misc] | None = None,
+    ) -> None:
+        if not self.source_text.edit_modified():
+            return
+        self.source_text.edit_modified(False)
+        self._document_window._apply_yaml_source(
+            self.source_text.get("1.0", "end-1c")
+        )
+
+    def _replace_content(self, content: str) -> None:
+        if self.source_text.get("1.0", "end-1c") == content:
+            return
+        self.source_text.delete("1.0", tk.END)
+        self.source_text.insert("1.0", content)
+        self.source_text.edit_reset()
+        self.source_text.edit_modified(False)
 
     def show(self, *, reveal: bool) -> None:
         """Aktualizuje pevně přiřazený dokument a případně okno odkryje."""
 
         vertical_position = self.source_text.yview()
         horizontal_position = self.source_text.xview()
-        output = StringIO()
         window = self._document_window
-        dump_crossword_document(window._document(), output)
 
         label = _document_window_label(window._path, window._dirty)
         self.root.title(f"Zdroj YAML — {label}")
-        self.source_text.replace_content(output.getvalue())
+        self._replace_content(window._yaml_source())
         if vertical_position:
             self.source_text.yview_moveto(vertical_position[0])
         if horizontal_position:
@@ -2821,6 +2803,8 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._dirty = dirty
         self._crossword = document
         self._grid: CrosswordGrid | None = None
+        self._yaml_source_buffer: str | None = None
+        self._yaml_source_error: str | None = None
         self._template_layout = _template_generation_layout(document)
         self._selected_slot_identifier: str | None = None
         self._slot_edit_identifier: str | None = None
@@ -3328,18 +3312,21 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _refresh_file_menu(self) -> None:
         crossword = self._crossword
+        document_state = "normal" if crossword is not None else "disabled"
         complete = crossword is not None and crossword_is_complete(crossword)
         self.file_menu.entryconfigure(
             self._save_menu_index,
             label="Uložit křížovku",
+            state=document_state,
         )
         self.file_menu.entryconfigure(
             self._save_as_menu_index,
             label="Uložit křížovku jako…",
+            state=document_state,
         )
         self.export_menu.entryconfigure(
             0,
-            state="normal",
+            state=document_state,
         )
         self.export_menu.entryconfigure(
             1,
@@ -3347,7 +3334,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         self.print_menu.entryconfigure(
             0,
-            state="normal",
+            state=document_state,
         )
         self.print_menu.entryconfigure(
             1,
@@ -3355,7 +3342,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         self.open_pdf_menu.entryconfigure(
             0,
-            state="normal",
+            state=document_state,
         )
         self.open_pdf_menu.entryconfigure(
             1,
@@ -3821,7 +3808,8 @@ class CrosswordDocumentWindow(ttk.Frame):
         crossword = self._crossword
         if crossword is None:
             self._grid = None
-            self.crossword_preview.clear_preview("Křížovka zatím není vytvořená.")
+            message = self._yaml_source_error or "Křížovka zatím není vytvořená."
+            self.crossword_preview.clear_preview(message)
             return
         self._grid = _grid_from_editable_document(crossword)
         slot = self._selected_slot()
@@ -4162,10 +4150,38 @@ class CrosswordDocumentWindow(ttk.Frame):
         return directory, output
 
     def _document(self) -> CrosswordDocument:
+        if self._crossword is None:
+            raise GuiInputError("Zdroj YAML není platný.")
         return self._crossword
+
+    def _yaml_source(self) -> str:
+        if self._yaml_source_buffer is not None:
+            return self._yaml_source_buffer
+        output = StringIO()
+        dump_crossword_document(self._document(), output)
+        return output.getvalue()
+
+    def _apply_yaml_source(self, source: str) -> None:
+        self._yaml_source_buffer = source
+        try:
+            document = load_crossword_document(StringIO(source))
+        except ModelError as error:
+            self._crossword = None
+            self._grid = None
+            self._yaml_source_error = str(error)
+            self._selected_slot_identifier = None
+        else:
+            self._crossword = document
+            self._yaml_source_error = None
+            self._template_layout = _template_generation_layout(document)
+        self._set_dirty(True, source_changed=True)
+        self._rebuild_slot_tree()
+        self._refresh_crossword_view()
 
     def save_document(self) -> bool:
         if not self._save_inline_slot_edit():
+            return False
+        if self._crossword is None:
             return False
         if self._path is None:
             return self.save_document_as()
@@ -4173,6 +4189,8 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def save_document_as(self) -> bool:
         if not self._save_inline_slot_edit():
+            return False
+        if self._crossword is None:
             return False
         if self._path is not None:
             initialfile = self._path.name
@@ -4233,7 +4251,10 @@ class CrosswordDocumentWindow(ttk.Frame):
             )
             self.root.attributes("-titlepath", title_path)
 
-    def _set_dirty(self, dirty: bool) -> None:
+    def _set_dirty(self, dirty: bool, *, source_changed: bool = False) -> None:
+        if not source_changed:
+            self._yaml_source_buffer = None
+            self._yaml_source_error = None
         self._dirty = dirty
         self._update_title()
         self.application.document_window_changed(self)

@@ -105,11 +105,13 @@ dokumentu. Každé otevřené okno je nezávislé; změna jednoho proto obsah
 druhého neovlivní.
 
 Nabídka **Zobrazení** obsahuje volbu **Zdroj YAML**, která pro zvolený dokument
-otevře vlastní běžné okno s jeho neupravitelnou YAML podobou. Zdroj lze
-posouvat a jeho text označovat a kopírovat. Okno zůstává svázané s původním
-dokumentem a při aktivaci jiného dokumentu se nepřepne; automaticky se
-aktualizuje pouze při změně svého dokumentu. Zavření příslušného dokumentu
-zavře také jeho okno zdroje.
+otevře vlastní běžné okno s jeho upravitelnou YAML podobou. Každá změna
+zdroje se hned promítne do dokumentu a jeho náhledu. Není-li rozepsaný zdroj
+platný, náhled dočasně nahradí konkrétní chyba a po opravě se automaticky
+obnoví. Okno zůstává svázané s původním dokumentem a při aktivaci jiného
+dokumentu se nepřepne. Změny provedené v hlavním okně jeho zdroj také
+automaticky aktualizují. Zavření příslušného dokumentu zavře i jeho okno
+zdroje.
 
 Podnabídka **Zobrazení → Místa pro hesla** přepíná tabulku mezi volbami
 **V hlavním okně** a **V samostatném okně**. Zavření samostatného okna vrátí
