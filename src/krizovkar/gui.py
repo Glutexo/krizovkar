@@ -83,7 +83,7 @@ _DIRECTION_STEPS: dict[WordDirection, tuple[int, int]] = {
     "vertical": (1, 0),
 }
 
-EditableCellRole = Literal["letter", "legend"]
+EditableCellRole = Literal["letter", "legend", "empty"]
 
 
 class GuiInputError(ValueError):
@@ -549,7 +549,7 @@ def _secrets_after_cell_role_change(
 def _crossword_with_cell_role(
     crossword: CrosswordDocument,
     coordinate: Coordinate,
-    role: LetterCellRole | LegendCellRole,
+    role: LetterCellRole | LegendCellRole | EmptyCellRole,
     slots: tuple[WordSlot, ...],
     affected_slots: set[str],
 ) -> CrosswordDocument:
@@ -583,13 +583,17 @@ def _crossword_with_cell_role(
     )
 
 
-def _letter_cell_to_legend(
+def _letter_cell_to_nonletter(
     crossword: CrosswordDocument,
     coordinate: Coordinate,
+    role: LegendCellRole | EmptyCellRole,
 ) -> CrosswordDocument:
     identifiers = {slot.identifier for slot in crossword.slots}
     affected_slots: set[str] = set()
     slots: list[WordSlot] = []
+    legend_position = (
+        coordinate if isinstance(role, LegendCellRole) else None
+    )
 
     for slot in crossword.slots:
         coordinates = slot_coordinates(slot)
@@ -624,7 +628,7 @@ def _letter_cell_to_legend(
                     start=after_start,
                     direction=slot.direction,
                     length=after_length,
-                    legend_position=coordinate,
+                    legend_position=legend_position,
                 )
             )
         else:
@@ -633,31 +637,32 @@ def _letter_cell_to_legend(
                     slot,
                     start=after_start,
                     length=after_length,
-                    legend_position=coordinate,
+                    legend_position=legend_position,
                 )
             )
 
-    for index, slot in enumerate(slots):
-        expected_start = _shift_coordinate(coordinate, slot.direction, 1)
-        if slot.start == expected_start and slot.legend_position is None:
-            slots[index] = replace(slot, legend_position=coordinate)
+    if isinstance(role, LegendCellRole):
+        for index, slot in enumerate(slots):
+            expected_start = _shift_coordinate(coordinate, slot.direction, 1)
+            if slot.start == expected_start and slot.legend_position is None:
+                slots[index] = replace(slot, legend_position=coordinate)
 
-    if not any(slot.legend_position == coordinate for slot in slots):
-        raise GuiInputError(
-            "Legenda musí mít bezprostředně napravo nebo pod sebou "
-            "místo pro heslo."
-        )
+        if not any(slot.legend_position == coordinate for slot in slots):
+            raise GuiInputError(
+                "Legenda musí mít bezprostředně napravo nebo pod sebou "
+                "místo pro heslo."
+            )
 
     return _crossword_with_cell_role(
         crossword,
         coordinate,
-        LegendCellRole(),
+        role,
         tuple(slots),
         affected_slots,
     )
 
 
-def _legend_cell_to_letter(
+def _nonletter_cell_to_letter(
     crossword: CrosswordDocument,
     coordinate: Coordinate,
 ) -> CrosswordDocument:
@@ -727,14 +732,58 @@ def _legend_cell_to_letter(
     )
 
 
+def _legend_cell_to_empty(
+    crossword: CrosswordDocument,
+    coordinate: Coordinate,
+) -> CrosswordDocument:
+    slots = tuple(
+        replace(slot, legend_position=None)
+        if slot.legend_position == coordinate
+        else slot
+        for slot in crossword.slots
+    )
+    return _crossword_with_cell_role(
+        crossword,
+        coordinate,
+        EmptyCellRole(),
+        slots,
+        set(),
+    )
+
+
+def _empty_cell_to_legend(
+    crossword: CrosswordDocument,
+    coordinate: Coordinate,
+) -> CrosswordDocument:
+    slots: list[WordSlot] = []
+    for slot in crossword.slots:
+        expected_start = _shift_coordinate(coordinate, slot.direction, 1)
+        if slot.start == expected_start and slot.legend_position is None:
+            slot = replace(slot, legend_position=coordinate)
+        slots.append(slot)
+
+    if not any(slot.legend_position == coordinate for slot in slots):
+        raise GuiInputError(
+            "Legenda musí mít bezprostředně napravo nebo pod sebou "
+            "místo pro heslo."
+        )
+    return _crossword_with_cell_role(
+        crossword,
+        coordinate,
+        LegendCellRole(),
+        tuple(slots),
+        set(),
+    )
+
+
 def set_crossword_cell_role(
     crossword: CrosswordDocument,
     coordinate: Coordinate,
     role: EditableCellRole,
 ) -> CrosswordDocument:
-    """Přepne písmennou a legendovou buňku a upraví navazující sloty."""
+    """Přepne roli buňky a upraví navazující sloty."""
 
-    if role not in {"letter", "legend"}:
+    if role not in {"letter", "legend", "empty"}:
         raise GuiInputError(f"Nepodporovaná role pole {role!r}.")
     if not (
         1 <= coordinate.row <= crossword.grid.height
@@ -747,16 +796,29 @@ def set_crossword_cell_role(
         return crossword
     if role == "legend" and isinstance(current, LegendCellRole):
         return crossword
-    if not isinstance(current, (LetterCellRole, LegendCellRole)):
+    if role == "empty" and isinstance(current, EmptyCellRole):
+        return crossword
+    if not isinstance(
+        current,
+        (LetterCellRole, LegendCellRole, EmptyCellRole),
+    ):
         raise GuiInputError(
-            "Roli lze měnit pouze mezi písmenným a legendovým polem."
+            "Roli lze měnit pouze mezi písmenným, legendovým a prázdným "
+            "polem."
         )
 
-    changed = (
-        _letter_cell_to_legend(crossword, coordinate)
-        if role == "legend"
-        else _legend_cell_to_letter(crossword, coordinate)
-    )
+    if isinstance(current, LetterCellRole):
+        changed = _letter_cell_to_nonletter(
+            crossword,
+            coordinate,
+            LegendCellRole() if role == "legend" else EmptyCellRole(),
+        )
+    elif role == "letter":
+        changed = _nonletter_cell_to_letter(crossword, coordinate)
+    elif isinstance(current, LegendCellRole):
+        changed = _legend_cell_to_empty(crossword, coordinate)
+    else:
+        changed = _empty_cell_to_legend(crossword, coordinate)
     try:
         dump_crossword_document(changed, StringIO())
     except ModelError as error:
@@ -1046,6 +1108,12 @@ class CrosswordPreview(tk.Canvas):
             value="legend",
             variable=self._cell_role_variable,
             command=lambda: self._choose_cell_role("legend"),
+        )
+        menu.add_radiobutton(
+            label="Prázdné",
+            value="empty",
+            variable=self._cell_role_variable,
+            command=lambda: self._choose_cell_role("empty"),
         )
         return menu
 
@@ -1577,6 +1645,8 @@ class CrosswordPreview(tk.Canvas):
             return "letter"
         if isinstance(cell, LegendCell):
             return "legend"
+        if isinstance(cell, EmptyCell):
+            return "empty"
         return None
 
     def _show_cell_role_menu(self, event: tk.Event[tk.Misc]) -> str | None:

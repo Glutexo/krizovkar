@@ -852,6 +852,79 @@ class GuiTest(unittest.TestCase):
         self.assertEqual(crossword, restored)
         self.assertIsInstance(restored.grid.cells[1][1], LetterCellRole)
 
+    def test_changes_letter_to_empty_and_back(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+        coordinate = Coordinate(row=2, column=2)
+
+        without_cell = set_crossword_cell_role(
+            crossword,
+            coordinate,
+            "empty",
+        )
+
+        self.assertIsInstance(without_cell.grid.cells[1][1], EmptyCellRole)
+        self.assertTrue(
+            all(
+                coordinate not in slot_coordinates(slot)
+                for slot in without_cell.slots
+            )
+        )
+
+        restored = set_crossword_cell_role(
+            without_cell,
+            coordinate,
+            "letter",
+        )
+
+        self.assertEqual(crossword, restored)
+
+    def test_changes_filled_legend_to_empty_and_back(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=7, height=6),
+            "swedish",
+        )
+        slot = next(
+            slot for slot in crossword.slots if slot.legend_position is not None
+        )
+        crossword = fill_crossword_slot(
+            crossword,
+            slot.identifier,
+            "A" * slot.length,
+            "Nápověda",
+        )
+        coordinate = slot.legend_position
+        assert coordinate is not None
+
+        without_legend = set_crossword_cell_role(
+            crossword,
+            coordinate,
+            "empty",
+        )
+
+        preserved = next(
+            item
+            for item in without_legend.slots
+            if item.identifier == slot.identifier
+        )
+        self.assertIsInstance(
+            without_legend.grid.cells[coordinate.row - 1][coordinate.column - 1],
+            EmptyCellRole,
+        )
+        self.assertIsNone(preserved.legend_position)
+        self.assertEqual("A" * slot.length, preserved.answer)
+        self.assertEqual("Nápověda", preserved.clue)
+
+        restored = set_crossword_cell_role(
+            without_legend,
+            coordinate,
+            "legend",
+        )
+
+        self.assertEqual(crossword, restored)
+
     def test_changes_multiple_selected_cells_to_legends_at_once(self) -> None:
         crossword = create_blank_template(
             CrosswordSettings(width=4, height=4),
@@ -874,6 +947,32 @@ class GuiTest(unittest.TestCase):
                 self.assertTrue(
                     any(
                         slot.legend_position == coordinate
+                        for slot in changed.slots
+                    )
+                )
+
+    def test_changes_multiple_selected_cells_to_empty_at_once(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=4, height=4),
+            "numbered",
+        )
+        coordinates = (Coordinate(2, 2), Coordinate(3, 3))
+
+        changed = set_crossword_cells_role(
+            crossword,
+            coordinates,
+            "empty",
+        )
+
+        for coordinate in coordinates:
+            with self.subTest(coordinate=coordinate):
+                self.assertIsInstance(
+                    changed.grid.cells[coordinate.row - 1][coordinate.column - 1],
+                    EmptyCellRole,
+                )
+                self.assertTrue(
+                    all(
+                        coordinate not in slot_coordinates(slot)
                         for slot in changed.slots
                     )
                 )
@@ -1242,7 +1341,7 @@ class GuiTest(unittest.TestCase):
         )
         spinbox_type.assert_not_called()
 
-    def test_crossword_preview_cell_role_menu_offers_both_roles(self) -> None:
+    def test_crossword_preview_cell_role_menu_offers_all_roles(self) -> None:
         preview = CrosswordPreview.__new__(CrosswordPreview)
         preview._cell_role_variable = "cell_role"
         preview._choose_cell_role = Mock()
@@ -1255,18 +1354,45 @@ class GuiTest(unittest.TestCase):
         menu_type.assert_called_once_with(preview, tearoff=False)
         items = menu.add_radiobutton.call_args_list
         self.assertEqual(
-            ["Písmeno", "Legenda"],
+            ["Písmeno", "Legenda", "Prázdné"],
             [item.kwargs["label"] for item in items],
         )
         self.assertEqual(
-            ["letter", "legend"],
+            ["letter", "legend", "empty"],
             [item.kwargs["value"] for item in items],
         )
         self.assertTrue(
             all(item.kwargs["variable"] == "cell_role" for item in items)
         )
-        items[1].kwargs["command"]()
-        preview._choose_cell_role.assert_called_once_with("legend")
+        items[2].kwargs["command"]()
+        preview._choose_cell_role.assert_called_once_with("empty")
+
+    def test_crossword_preview_context_menu_targets_empty_cell(self) -> None:
+        preview = CrosswordPreview.__new__(CrosswordPreview)
+        preview._crossword = create_grid_from_crossword(
+            create_blank_template(CrosswordSettings(7, 6), "swedish")
+        )
+        preview._grid_geometry = (100.0, 50.0, 20.0)
+        preview._cell_role_variable = "cell_role"
+        preview._cell_role_menu = Mock()
+        preview._role_selected_coordinates = frozenset()
+        preview._context_menu_coordinates = ()
+        preview._redraw = Mock()
+        event = Mock(x=110, y=60, x_root=210, y_root=160)
+
+        result = preview._show_cell_role_menu(event)
+
+        self.assertEqual("break", result)
+        self.assertEqual(
+            (Coordinate(1, 1),),
+            preview._context_menu_coordinates,
+        )
+        preview._cell_role_menu.setvar.assert_called_once_with(
+            "cell_role",
+            "empty",
+        )
+        preview._cell_role_menu.tk_popup.assert_called_once_with(210, 160)
+        preview._cell_role_menu.grab_release.assert_called_once_with()
 
     def test_crossword_preview_context_menu_targets_clicked_cell(self) -> None:
         preview = CrosswordPreview.__new__(CrosswordPreview)
