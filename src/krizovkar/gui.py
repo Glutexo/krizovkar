@@ -607,6 +607,7 @@ def _letter_cell_to_nonletter(
             )
 
         affected_slots.add(slot.identifier)
+        had_inline_legend = slot.legend_position is not None
         offset = coordinates.index(coordinate)
         before_length = offset
         after_length = slot.length - offset - 1
@@ -615,6 +616,8 @@ def _letter_cell_to_nonletter(
                 _blank_changed_slot(slot, length=before_length)
             )
         if not after_length:
+            continue
+        if isinstance(role, EmptyCellRole) and had_inline_legend:
             continue
 
         after_start = coordinates[offset + 1]

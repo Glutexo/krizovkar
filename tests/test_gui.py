@@ -881,6 +881,33 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual(crossword, restored)
 
+    def test_empty_cell_does_not_create_numbered_inline_slot_tails(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=12, height=10),
+            "swedish",
+        )
+
+        changed = set_crossword_cell_role(
+            crossword,
+            Coordinate(2, 3),
+            "empty",
+        )
+        grid = create_grid_from_crossword(changed)
+
+        right = grid.grid.cells[1][3]
+        below = grid.grid.cells[2][2]
+        self.assertIsInstance(right, LetterCell)
+        self.assertIsInstance(below, LetterCell)
+        self.assertIsNone(right.number)
+        self.assertIsNone(below.number)
+        self.assertFalse(
+            any(
+                slot.start in {Coordinate(2, 4), Coordinate(3, 3)}
+                and slot.legend_position is None
+                for slot in changed.slots
+            )
+        )
+
     def test_changes_filled_legend_to_empty_and_back(self) -> None:
         crossword = create_blank_template(
             CrosswordSettings(width=7, height=6),
