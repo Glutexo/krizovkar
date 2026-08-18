@@ -297,6 +297,50 @@ def _create_help_menu(parent: tk.Menu) -> tk.Menu:
     return menu
 
 
+def _bind_text_entry_context_menu(editor: ttk.Entry) -> None:
+    menu = tk.Menu(editor, tearoff=False)
+    for label, event_name in (
+        ("Vyjmout", "<<Cut>>"),
+        ("Kopírovat", "<<Copy>>"),
+        ("Vložit", "<<Paste>>"),
+    ):
+        menu.add_command(
+            label=label,
+            command=lambda name=event_name: editor.event_generate(name),
+        )
+    menu.add_separator()
+    menu.add_command(
+        label="Vybrat vše",
+        command=lambda: editor.event_generate("<<SelectAll>>"),
+    )
+
+    def show_context_menu(event: tk.Event[tk.Misc]) -> str:
+        selection_state = (
+            tk.NORMAL if editor.selection_present() else tk.DISABLED
+        )
+        menu.entryconfigure("Vyjmout", state=selection_state)
+        menu.entryconfigure("Kopírovat", state=selection_state)
+        try:
+            editor.clipboard_get()
+        except tk.TclError:
+            paste_state = tk.DISABLED
+        else:
+            paste_state = tk.NORMAL
+        menu.entryconfigure("Vložit", state=paste_state)
+        menu.entryconfigure(
+            "Vybrat vše",
+            state=tk.NORMAL if editor.get() else tk.DISABLED,
+        )
+        editor.focus_set()
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+        return "break"
+
+    editor.bind("<<ContextMenu>>", show_context_menu, add="+")
+
+
 class PdfExportDialog(simpledialog.Dialog):
     """Vybere formát PDF před systémovým dialogem pro uložení."""
 
@@ -2123,6 +2167,7 @@ class CrosswordDocumentWindow(ttk.Frame):
                 validate="key",
                 validatecommand=(validation_command, "%P"),
             )
+        _bind_text_entry_context_menu(editor)
         return editor
 
     def _update_slot_answer_error(

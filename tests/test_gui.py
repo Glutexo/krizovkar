@@ -22,6 +22,7 @@ from krizovkar.gui import (
     CrosswordSourceWindow,
     GuiInputError,
     _answer_conflicts_with_crossing,
+    _bind_text_entry_context_menu,
     _configure_tk_runtime,
     _create_help_menu,
     _create_view_menu,
@@ -372,6 +373,71 @@ class GuiTest(unittest.TestCase):
         self.assertIs(help_menu, created)
         open_new_tab.assert_called_once_with(
             "https://github.com/Glutexo/krizovkar"
+        )
+
+    def test_text_entry_context_menu_uses_standard_edit_events(self) -> None:
+        editor = Mock()
+        editor.selection_present.side_effect = (True, False)
+        editor.clipboard_get.side_effect = ("text ve schránce", tk.TclError())
+        editor.get.side_effect = ("HESLO", "")
+        menu = Mock()
+
+        with patch("krizovkar.gui.tk.Menu", return_value=menu) as menu_type:
+            _bind_text_entry_context_menu(editor)
+
+        menu_type.assert_called_once_with(editor, tearoff=False)
+        commands = {
+            item.kwargs["label"]: item.kwargs["command"]
+            for item in menu.add_command.call_args_list
+        }
+        self.assertEqual(
+            {"Vyjmout", "Kopírovat", "Vložit", "Vybrat vše"},
+            commands.keys(),
+        )
+        menu.add_separator.assert_called_once_with()
+        editor.bind.assert_called_once()
+        event_name, show_context_menu = editor.bind.call_args.args
+        self.assertEqual("<<ContextMenu>>", event_name)
+        self.assertEqual("+", editor.bind.call_args.kwargs["add"])
+        event = Mock(x_root=120, y_root=240)
+
+        self.assertEqual("break", show_context_menu(event))
+        self.assertEqual("break", show_context_menu(event))
+
+        menu.entryconfigure.assert_has_calls(
+            [
+                call("Vyjmout", state=tk.NORMAL),
+                call("Kopírovat", state=tk.NORMAL),
+                call("Vložit", state=tk.NORMAL),
+                call("Vybrat vše", state=tk.NORMAL),
+                call("Vyjmout", state=tk.DISABLED),
+                call("Kopírovat", state=tk.DISABLED),
+                call("Vložit", state=tk.DISABLED),
+                call("Vybrat vše", state=tk.DISABLED),
+            ]
+        )
+        self.assertEqual(2, editor.focus_set.call_count)
+        self.assertEqual(
+            [call(120, 240), call(120, 240)],
+            menu.tk_popup.call_args_list,
+        )
+        self.assertEqual(2, menu.grab_release.call_count)
+
+        for label in (
+            "Vyjmout",
+            "Kopírovat",
+            "Vložit",
+            "Vybrat vše",
+        ):
+            commands[label]()
+        self.assertEqual(
+            [
+                call("<<Cut>>"),
+                call("<<Copy>>"),
+                call("<<Paste>>"),
+                call("<<SelectAll>>"),
+            ],
+            editor.event_generate.call_args_list,
         )
 
     def test_source_window_shows_read_only_yaml_for_document(self) -> None:
@@ -1378,10 +1444,15 @@ class GuiTest(unittest.TestCase):
         editor = Mock()
         editor.register.return_value = "crossing-validation"
 
-        with patch(
-            "krizovkar.gui.ttk.Entry",
-            return_value=editor,
-        ) as entry_type:
+        with (
+            patch(
+                "krizovkar.gui.ttk.Entry",
+                return_value=editor,
+            ) as entry_type,
+            patch(
+                "krizovkar.gui._bind_text_entry_context_menu"
+            ) as bind_context_menu,
+        ):
             created = window._create_slot_cell_editor(
                 (10, 20, 180, 30),
                 "KOZY",
@@ -1406,6 +1477,7 @@ class GuiTest(unittest.TestCase):
             editor,
             "NOVÁ HODNOTA",
         )
+        bind_context_menu.assert_called_once_with(editor)
 
     def test_inline_slot_edit_saves_both_values(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)

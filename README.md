@@ -52,8 +52,9 @@ například `V•••`; dokud není známé žádné písmeno, zůstává poml
 na sloupec **Heslo** nebo **Nápověda** upraví oba údaje přímo v příslušném
 řádku; Enter nebo opuštění řádku změnu uloží, Escape ji zahodí.
 Písmena hesla odporujícího známému písmenu na křížení se už při psaní zobrazí
-červeně a po opravě se hned vrátí k běžné barvě. Vyprázdnění obou buněk nebo
-klávesa Delete heslo odstraní. Dokument může
+červeně a po opravě se hned vrátí k běžné barvě. Pravé tlačítko myši
+v obou polích otevře nabídku pro vyjmutí, kopírování, vložení a výběr celého
+textu. Vyprázdnění obou buněk nebo klávesa Delete heslo odstraní. Dokument může
 zůstat prázdný, být rozpracovaný nebo hotový a v každém z těchto stavů jej lze
 uložit a znovu použít jako základ další práce.
 
