@@ -488,6 +488,17 @@ def _create_help_menu(parent: tk.Menu) -> tk.Menu:
     return menu
 
 
+def _inherit_macos_menu_bar(window: tk.Toplevel) -> None:
+    """Zachová aplikační nabídku po aktivaci modálního dialogu."""
+
+    if sys.platform != "darwin":
+        return
+    owner = window.master.winfo_toplevel()
+    menu = owner.cget("menu")
+    if menu:
+        window.configure(menu=menu)
+
+
 def _bind_text_entry_context_menu(editor: ttk.Entry) -> None:
     menu = tk.Menu(editor, tearoff=False)
     for label, event_name in (
@@ -549,6 +560,7 @@ class PdfExportDialog(simpledialog.Dialog):
         super().__init__(parent, title)
 
     def body(self, master: tk.Frame) -> tk.Widget:
+        _inherit_macos_menu_bar(self)
         master.configure(padx=16, pady=12)
         master.columnconfigure(0, weight=1)
         ttk.Label(
@@ -696,6 +708,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         super().__init__(parent, "Nová šablona")
 
     def body(self, master: tk.Frame) -> tk.Widget:
+        _inherit_macos_menu_bar(self)
         master.configure(padx=16, pady=12)
         master.columnconfigure(0, weight=1)
         dimensions = ttk.Frame(master)

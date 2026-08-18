@@ -30,6 +30,7 @@ from krizovkar.gui import (
     _create_help_menu,
     _create_view_menu,
     _create_window_menu,
+    _inherit_macos_menu_bar,
     _keyboard_shortcut,
     _multiple_cell_selection_sequence,
     _open_pdf_in_default_application,
@@ -515,6 +516,25 @@ class GuiTest(unittest.TestCase):
         open_new_tab.assert_called_once_with(
             "https://github.com/Glutexo/krizovkar"
         )
+
+    def test_modal_dialog_inherits_application_menu_on_macos(self) -> None:
+        dialog = Mock()
+        owner = dialog.master.winfo_toplevel.return_value
+        owner.cget.return_value = ".application_menu"
+
+        with patch("krizovkar.gui.sys.platform", "darwin"):
+            _inherit_macos_menu_bar(dialog)
+
+        dialog.configure.assert_called_once_with(menu=".application_menu")
+
+    def test_modal_dialog_keeps_native_menu_handling_off_macos(self) -> None:
+        dialog = Mock()
+
+        with patch("krizovkar.gui.sys.platform", "linux"):
+            _inherit_macos_menu_bar(dialog)
+
+        dialog.master.winfo_toplevel.assert_not_called()
+        dialog.configure.assert_not_called()
 
     def test_text_entry_context_menu_uses_standard_edit_events(self) -> None:
         editor = Mock()
