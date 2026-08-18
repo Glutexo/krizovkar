@@ -39,16 +39,6 @@ class SpecificationModelTest(unittest.TestCase):
                         load_crossword_specification(output),
                     )
 
-    def test_rejects_version_key(self) -> None:
-        source = StringIO(
-            "format: krizovkar\n"
-            "kind: specification\n"
-            "version: 1\n"
-        )
-
-        with self.assertRaisesRegex(ModelError, "nepovolený klíč 'version'"):
-            load_crossword_specification(source)
-
     def test_dumps_specification_to_text_stream(self) -> None:
         specification = load_crossword_specification(
             PROJECT_ROOT / "examples" / "specification-placed-words.yaml"
@@ -57,7 +47,6 @@ class SpecificationModelTest(unittest.TestCase):
 
         dump_crossword_specification(specification, output)
 
-        self.assertNotIn("\nversion:", output.getvalue())
         output.seek(0)
         self.assertEqual(specification, load_crossword_specification(output))
 
@@ -65,6 +54,7 @@ class SpecificationModelTest(unittest.TestCase):
         specification = CrosswordSpecification(
             format_name="krizovkar",
             kind="specification",
+            version=1,
             grid=GridDimensions(width=3, height=2),
             words=(
                 WordPlacement(
@@ -88,6 +78,7 @@ class SpecificationModelTest(unittest.TestCase):
         specification = CrosswordSpecification(
             format_name="krizovkar",
             kind="specification",
+            version=1,
             grid=GridDimensions(width=15, height=10),
         )
 

@@ -123,6 +123,7 @@ class CrosswordGrid:
 
     format_name: str
     kind: str
+    version: int
     grid: Grid
     clues: tuple[ExternalClue, ...] = ()
     secret_prompts: tuple[SecretPrompt, ...] = ()
@@ -242,6 +243,7 @@ class CrosswordDocument:
 
     format_name: str
     kind: str
+    version: int
     grid: CrosswordLayout
     slots: tuple[WordSlot, ...]
     secrets: tuple[CrosswordSecret, ...] = ()
@@ -348,6 +350,7 @@ class CrosswordSpecification:
 
     format_name: str
     kind: str
+    version: int
     grid: GridDimensions | None = None
     words: tuple[WordPlacement, ...] = ()
     secrets: tuple[SecretDefinition, ...] = ()
@@ -614,7 +617,7 @@ def _optional_secret_prompt(data: dict[str, Any]) -> SecretPrompt | None:
 def load_crossword_grid(source: YamlSource) -> CrosswordGrid:
     """Načte a ověří cílovou mřížku ze souboru nebo proudu YAML."""
 
-    data = _validated_data(source, "grid.schema.json")
+    data = _validated_data(source, "grid-v1.schema.json")
     raw_grid = data["grid"]
     grid = Grid(
         width=raw_grid["width"],
@@ -636,6 +639,7 @@ def load_crossword_grid(source: YamlSource) -> CrosswordGrid:
     return CrosswordGrid(
         format_name=data["format"],
         kind=data["kind"],
+        version=data["version"],
         grid=grid,
         clues=clues,
         secret_prompts=secret_prompts,
@@ -715,6 +719,7 @@ def _crossword_document_from_data(data: dict[str, Any]) -> CrosswordDocument:
     crossword = CrosswordDocument(
         format_name=data["format"],
         kind=data["kind"],
+        version=data["version"],
         grid=CrosswordLayout(
             width=raw_grid["width"],
             height=raw_grid["height"],
@@ -755,7 +760,7 @@ def _crossword_document_from_data(data: dict[str, Any]) -> CrosswordDocument:
 def load_crossword_document(source: YamlSource) -> CrosswordDocument:
     """Načte a ověří editovatelnou křížovku ze souboru nebo proudu YAML."""
 
-    data = _validated_data(source, "crossword.schema.json")
+    data = _validated_data(source, "crossword-v1.schema.json")
     return _crossword_document_from_data(data)
 
 
@@ -1188,12 +1193,13 @@ def load_crossword_specification(
 ) -> CrosswordSpecification:
     """Načte a ověří zadání křížovky ze souboru nebo proudu YAML."""
 
-    data = _validated_data(source, "specification.schema.json")
+    data = _validated_data(source, "specification-v1.schema.json")
     raw_grid = data.get("grid")
     if raw_grid is None:
         return CrosswordSpecification(
             format_name=data["format"],
             kind=data["kind"],
+            version=data["version"],
         )
 
     grid = GridDimensions(width=raw_grid["width"], height=raw_grid["height"])
@@ -1226,6 +1232,7 @@ def load_crossword_specification(
     return CrosswordSpecification(
         format_name=data["format"],
         kind=data["kind"],
+        version=data["version"],
         grid=grid,
         words=words,
         secrets=secrets,
@@ -1471,6 +1478,7 @@ def _crossword_specification_data(
     data: dict[str, Any] = {
         "format": specification.format_name,
         "kind": specification.kind,
+        "version": specification.version,
     }
     if specification.grid is not None:
         data["grid"] = {
@@ -1498,7 +1506,7 @@ def _crossword_specification_data(
             "position": _coordinate_data(specification.help_position)
         }
 
-    _validate_data(data, "specification.schema.json")
+    _validate_data(data, "specification-v1.schema.json")
     if specification.grid is not None:
         _validate_specification_placements(
             specification.grid,
@@ -1562,6 +1570,7 @@ def _crossword_grid_data(crossword: CrosswordGrid) -> dict[str, Any]:
     data: dict[str, Any] = {
         "format": crossword.format_name,
         "kind": crossword.kind,
+        "version": crossword.version,
         "grid": grid,
     }
     if crossword.secret_prompts:
@@ -1626,6 +1635,7 @@ def _crossword_document_data(
     result: dict[str, Any] = {
         "format": document.format_name,
         "kind": document.kind,
+        "version": document.version,
         "grid": {
             "width": document.grid.width,
             "height": document.grid.height,
@@ -1665,7 +1675,7 @@ def _crossword_document_data(
                     "alignment": secret.prompt.alignment,
                 }
             result["secrets"].append(secret_data)
-    return _validate_data(result, "crossword.schema.json")
+    return _validate_data(result, "crossword-v1.schema.json")
 
 
 def _write_yaml_document(

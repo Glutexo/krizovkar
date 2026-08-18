@@ -28,7 +28,7 @@ zadání i stejný model cílové mřížky. Způsob uvedení legendy je vlastno
 konkrétního rozložení a jednotlivá hesla v jedné mřížce mohou používat různé
 způsoby.
 
-## Editovatelná křížovka
+## Editovatelná křížovka, verze 1
 
 Dokument `kind: crossword` může být prázdný, rozpracovaný nebo hotový. Míra
 vyplnění není součástí jeho typu: nevyplněná i částečně vyplněná křížovka
@@ -38,6 +38,7 @@ k doplnění. Hustá nevyplněná křížovka obsah odpovědí nezná:
 ```yaml
 format: krizovkar
 kind: crossword
+version: 1
 grid:
   width: 3
   height: 1
@@ -162,13 +163,14 @@ převodu dál nezveřejňují. Příkazy `latex` a `render` umějí stejný pře
 provést automaticky, dostanou-li přímo `kind: crossword`. První z
 nich vypíše upravitelný LaTeX, druhý stejný zdroj přeloží LuaLaTeXem do PDF.
 
-## Cílová mřížka
+## Cílová mřížka, verze 1
 
 Cílová mřížka popisuje obdélníkový rozměr a případný obsah buněk:
 
 ```yaml
 format: krizovkar
 kind: grid
+version: 1
 grid:
   width: 15
   height: 10
@@ -178,6 +180,7 @@ grid:
 
 - `format` musí mít hodnotu `krizovkar` a jednoznačně označuje formát souboru.
 - `kind` musí mít hodnotu `grid`.
+- `version` musí mít hodnotu `1` a označuje hlavní verzi modelu cílové mřížky.
 - `grid.width` je šířka mřížky v buňkách, tedy počet sloupců zleva doprava.
 - `grid.height` je výška mřížky v buňkách, tedy počet řádků shora dolů.
 
@@ -315,7 +318,7 @@ Pomůcka používá typ `help` a seznam `words` s alespoň jedním neprázdným 
 
 Nemá položku `value` ani `texts`. Renderer před seznam vloží tučný nadpis „Pomůcka:“, jednotlivé položky oddělí čárkou a mezerou a celý obsah automaticky zalomí a zmenší. Položky se v datovém modelu uchovávají odděleně, aby je nebylo nutné zpětně parsovat z jednoho textu.
 
-## Zadání
+## Zadání, verze 1
 
 Zadání je zdrojový dokument, který popisuje rozměr mřížky a umístěná
 slova. Příkaz `template` z něj vytvoří křížovku použitelnou jako šablona,
@@ -324,6 +327,7 @@ kterou lze převést na cílový dokument `grid`:
 ```yaml
 format: krizovkar
 kind: specification
+version: 1
 grid:
   width: 7
   height: 6
@@ -472,9 +476,9 @@ sestavit jako PDF pomocí `template ZADÁNÍ.yaml | render -`.
 ## Validace
 
 Strojová pravidla jsou v samostatných schématech pro
-[cílovou mřížku](../src/krizovkar/schemas/grid.schema.json),
-[editovatelnou křížovku](../src/krizovkar/schemas/crossword.schema.json) a
-[zadání](../src/krizovkar/schemas/specification.schema.json). Schémata
+[cílovou mřížku](../src/krizovkar/schemas/grid-v1.schema.json),
+[editovatelnou křížovku](../src/krizovkar/schemas/crossword-v1.schema.json) a
+[zadání](../src/krizovkar/schemas/specification-v1.schema.json). Schémata
 odmítají neznámé a chybně napsané položky i nulové, záporné nebo neceločíselné
 rozměry. Pythonové loadery navíc kontrolují vztahy, které závisejí na více
 částech dokumentu.

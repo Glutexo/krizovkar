@@ -424,6 +424,7 @@ def create_template_from_specification(
     return CrosswordDocument(
         format_name="krizovkar",
         kind="crossword",
+        version=1,
         grid=CrosswordLayout(
             width=width,
             height=height,
@@ -579,6 +580,7 @@ def _swedish_template_from_layout(layout: SwedishLayout) -> CrosswordDocument:
     return CrosswordDocument(
         format_name="krizovkar",
         kind="crossword",
+        version=1,
         grid=CrosswordLayout(
             width=layout.width,
             height=layout.height,
@@ -632,6 +634,7 @@ def _numbered_template_from_layout(
     return CrosswordDocument(
         format_name="krizovkar",
         kind="crossword",
+        version=1,
         grid=CrosswordLayout(
             width=layout.width,
             height=layout.height,
@@ -1418,6 +1421,7 @@ def _crossword_grid_from_assignments(
     return CrosswordGrid(
         format_name="krizovkar",
         kind="grid",
+        version=1,
         grid=Grid(
             width=crossword.grid.width,
             height=crossword.grid.height,

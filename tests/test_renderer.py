@@ -106,6 +106,7 @@ class LatexSourceTest(unittest.TestCase):
         crossword = CrosswordGrid(
             format_name="krizovkar",
             kind="grid",
+            version=1,
             grid=Grid(
                 width=1,
                 height=1,
@@ -140,6 +141,7 @@ class LatexSourceTest(unittest.TestCase):
         crossword = CrosswordGrid(
             format_name="krizovkar",
             kind="grid",
+            version=1,
             grid=Grid(width=1, height=1, cells=((LetterCell(value="A"),),)),
             secret_prompts=(
                 SecretPrompt("První nahoře", alignment="left"),
@@ -164,6 +166,7 @@ class LatexSourceTest(unittest.TestCase):
         crossword = CrosswordGrid(
             format_name="krizovkar",
             kind="grid",
+            version=1,
             grid=Grid(
                 width=2,
                 height=1,
@@ -247,6 +250,7 @@ class LatexOutputTest(unittest.TestCase):
     crossword = CrosswordGrid(
         format_name="krizovkar",
         kind="grid",
+        version=1,
         grid=Grid(width=1, height=1, cells=((LetterCell(value="A"),),)),
     )
 
@@ -283,6 +287,7 @@ class PdfCompilationTest(unittest.TestCase):
     crossword = CrosswordGrid(
         format_name="krizovkar",
         kind="grid",
+        version=1,
         grid=Grid(width=1, height=1, cells=((SecretCell(value="A"),),)),
     )
 

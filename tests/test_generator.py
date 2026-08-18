@@ -163,6 +163,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         specification = CrosswordSpecification(
             format_name="krizovkar",
             kind="specification",
+            version=1,
             grid=GridDimensions(width=4, height=4),
             words=(
                 WordPlacement(
@@ -263,6 +264,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         crossword = CrosswordDocument(
             format_name="krizovkar",
             kind="crossword",
+            version=1,
             grid=CrosswordLayout(
                 width=3,
                 height=3,
@@ -401,6 +403,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         crossword = CrosswordDocument(
             format_name="krizovkar",
             kind="crossword",
+            version=1,
             grid=CrosswordLayout(
                 width=6,
                 height=1,
@@ -437,6 +440,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         crossword = CrosswordDocument(
             format_name="krizovkar",
             kind="crossword",
+            version=1,
             grid=CrosswordLayout(
                 width=6,
                 height=1,
@@ -485,6 +489,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         crossword = CrosswordDocument(
             format_name="krizovkar",
             kind="crossword",
+            version=1,
             grid=CrosswordLayout(
                 width=6,
                 height=1,
@@ -533,6 +538,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         crossword = CrosswordDocument(
             format_name="krizovkar",
             kind="crossword",
+            version=1,
             grid=CrosswordLayout(
                 width=6,
                 height=1,
@@ -563,6 +569,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         crossword = CrosswordDocument(
             format_name="krizovkar",
             kind="crossword",
+            version=1,
             grid=CrosswordLayout(
                 width=6,
                 height=1,
@@ -651,6 +658,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         crossword = CrosswordDocument(
             format_name="krizovkar",
             kind="crossword",
+            version=1,
             grid=CrosswordLayout(
                 width=6,
                 height=1,
@@ -695,6 +703,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         crossword = CrosswordDocument(
             format_name="krizovkar",
             kind="crossword",
+            version=1,
             grid=CrosswordLayout(
                 width=3,
                 height=1,
@@ -743,6 +752,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         crossword = CrosswordDocument(
             format_name="krizovkar",
             kind="crossword",
+            version=1,
             grid=CrosswordLayout(
                 width=2,
                 height=2,
@@ -789,6 +799,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         crossword = CrosswordDocument(
             format_name="krizovkar",
             kind="crossword",
+            version=1,
             grid=CrosswordLayout(
                 width=2,
                 height=2,
@@ -839,6 +850,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         crossword = CrosswordDocument(
             format_name="krizovkar",
             kind="crossword",
+            version=1,
             grid=CrosswordLayout(
                 width=2,
                 height=2,
@@ -1033,6 +1045,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         crossword = CrosswordDocument(
             format_name="krizovkar",
             kind="crossword",
+            version=1,
             grid=CrosswordLayout(
                 width=2,
                 height=2,

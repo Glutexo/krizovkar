@@ -1,5 +1,6 @@
 format: krizovkar
 kind: crossword
+version: 1
 grid:
   width: 3
   height: 1

@@ -45,6 +45,7 @@ def _good_dense_grid() -> CrosswordGrid:
     return CrosswordGrid(
         format_name="krizovkar",
         kind="grid",
+        version=1,
         grid=Grid(width=4, height=4, cells=cells),
     )
 
@@ -62,6 +63,7 @@ def _disconnected_dense_grid() -> CrosswordGrid:
     return CrosswordGrid(
         format_name="krizovkar",
         kind="grid",
+        version=1,
         grid=Grid(width=5, height=5, cells=cells),
     )
 
@@ -78,6 +80,7 @@ def _replace_cell(
     return CrosswordGrid(
         format_name=crossword.format_name,
         kind=crossword.kind,
+        version=crossword.version,
         grid=Grid(
             width=crossword.grid.width,
             height=crossword.grid.height,
@@ -111,6 +114,7 @@ class QualityValidationTest(unittest.TestCase):
         crossword = CrosswordGrid(
             format_name=crossword.format_name,
             kind=crossword.kind,
+            version=crossword.version,
             grid=Grid(width=4, height=4, cells=cells),
         )
 
@@ -134,6 +138,7 @@ class QualityValidationTest(unittest.TestCase):
         crossword = CrosswordGrid(
             format_name="krizovkar",
             kind="grid",
+            version=1,
             grid=Grid(
                 width=1,
                 height=1,
@@ -162,6 +167,7 @@ class QualityValidationTest(unittest.TestCase):
         crossword = CrosswordGrid(
             format_name=crossword.format_name,
             kind=crossword.kind,
+            version=crossword.version,
             grid=Grid(
                 width=crossword.grid.width,
                 height=crossword.grid.height,
@@ -298,6 +304,7 @@ class FileValidationTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
+                "version: 1\n"
                 "grid: {width: 0, height: 5}\n",
                 encoding="utf-8",
             )
