@@ -22,6 +22,7 @@ from krizovkar.gui import (
     CrosswordSettings,
     CrosswordSourceWindow,
     GuiInputError,
+    TemplateGenerationDialog,
     _answer_conflicts_with_crossing,
     _bind_text_entry_context_menu,
     _configure_tk_runtime,
@@ -45,6 +46,7 @@ from krizovkar.gui import (
     fill_crossword_slot,
     main,
     parse_slot_content,
+    parse_template_settings,
     set_crossword_cell_role,
     set_crossword_cell_slot_start,
     set_crossword_cells_role,
@@ -455,7 +457,7 @@ class GuiTest(unittest.TestCase):
 
         commands = file_menu.add_command.call_args_list
         self.assertEqual(
-            ["Nová šablona", "Otevřít…"],
+            ["Nová šablona…", "Otevřít…"],
             [item.kwargs["label"] for item in commands],
         )
         self.assertEqual(
@@ -1040,6 +1042,75 @@ class GuiTest(unittest.TestCase):
     def test_rejects_empty_clue(self) -> None:
         with self.assertRaisesRegex(GuiInputError, "Vyplňte nápovědu"):
             parse_slot_content("CHATA", "  ", 4)
+
+    def test_parses_template_settings(self) -> None:
+        self.assertEqual(
+            CrosswordSettings(width=15, height=10),
+            parse_template_settings(" 15 ", "10"),
+        )
+
+    def test_rejects_invalid_template_dimensions(self) -> None:
+        with self.assertRaisesRegex(GuiInputError, "musí být celé číslo"):
+            parse_template_settings("patnáct", "10")
+        with self.assertRaisesRegex(GuiInputError, "větší než nula"):
+            parse_template_settings("15", "0")
+        with self.assertRaisesRegex(GuiInputError, "nejvýše 50"):
+            parse_template_settings("51", "10")
+
+    def test_template_dialog_validates_and_generates_selected_layout(self) -> None:
+        dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
+        dialog._width_value = Mock()
+        dialog._width_value.get.return_value = "7"
+        dialog._height_value = Mock()
+        dialog._height_value.get.return_value = "6"
+        dialog._layout_value = Mock()
+        dialog._layout_value.get.return_value = "numbered"
+        dialog._width_editor = Mock()
+        dialog._generated_template = None
+        template = create_blank_template(CrosswordSettings(3, 3), "numbered")
+
+        with patch(
+            "krizovkar.gui.create_blank_template",
+            return_value=template,
+        ) as create_template:
+            valid = TemplateGenerationDialog.validate(dialog)
+            TemplateGenerationDialog.apply(dialog)
+
+        self.assertTrue(valid)
+        create_template.assert_called_once_with(
+            CrosswordSettings(width=7, height=6),
+            "numbered",
+        )
+        self.assertIs(template, dialog.result)
+
+    def test_template_dialog_keeps_invalid_settings_open(self) -> None:
+        dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
+        dialog._width_value = Mock()
+        dialog._width_value.get.return_value = "2"
+        dialog._height_value = Mock()
+        dialog._height_value.get.return_value = "2"
+        dialog._layout_value = Mock()
+        dialog._layout_value.get.return_value = "swedish"
+        dialog._width_editor = Mock()
+        dialog._generated_template = Mock()
+
+        with (
+            patch(
+                "krizovkar.gui.create_blank_template",
+                side_effect=GuiInputError("rozměr nelze rozdělit"),
+            ),
+            patch("krizovkar.gui.messagebox.showerror") as show_error,
+        ):
+            valid = TemplateGenerationDialog.validate(dialog)
+
+        self.assertFalse(valid)
+        self.assertIsNone(dialog._generated_template)
+        show_error.assert_called_once_with(
+            "Šablonu nelze vygenerovat",
+            "rozměr nelze rozdělit",
+            parent=dialog,
+        )
+        dialog._width_editor.focus_set.assert_called_once_with()
 
     def test_creates_swedish_template_before_words(self) -> None:
         crossword = create_blank_template(
@@ -3118,19 +3189,37 @@ class GuiTest(unittest.TestCase):
         template = create_blank_template(CrosswordSettings(3, 3), "numbered")
         expected_window = Mock()
         application._open_window.return_value = expected_window
+        parent = Mock()
+        application._no_document_dialog_parent.return_value = parent
 
-        with patch(
-            "krizovkar.gui.create_blank_template",
-            return_value=template,
-        ) as create_template:
+        with patch("krizovkar.gui.TemplateGenerationDialog") as dialog_type:
+            dialog_type.return_value.result = template
             result = CrosswordApplication.new_template_document(application)
 
-        create_template.assert_called_once_with(
-            CrosswordSettings(15, 10),
-            "swedish",
+        dialog_type.assert_called_once_with(
+            parent,
+            initial_settings=CrosswordSettings(15, 10),
+            initial_layout="swedish",
         )
+        application._no_document_dialog_parent.assert_called_once_with()
         application._open_window.assert_called_once_with(template, dirty=True)
         self.assertIs(expected_window, result)
+
+    def test_application_does_not_open_document_after_cancelled_generation(
+        self,
+    ) -> None:
+        application = Mock()
+        parent = Mock()
+
+        with patch("krizovkar.gui.TemplateGenerationDialog") as dialog_type:
+            dialog_type.return_value.result = None
+            result = CrosswordApplication.new_template_document(
+                application,
+                parent=parent,
+            )
+
+        self.assertIsNone(result)
+        application._open_window.assert_not_called()
 
     def test_application_owner_stays_hidden_behind_document_windows(self) -> None:
         root = Mock()

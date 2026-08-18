@@ -34,6 +34,11 @@ uv run krizovkar-gui examples/template-unfilled.yaml \
   examples/crossword-minimal.yaml
 ```
 
+Volba **Soubor → Nová šablona…** otevře dialog pro zadání počtu sloupců
+a řádků a pro volbu švédského nebo číslovaného rozvržení. Tlačítko
+**Vygenerovat** vytvoří nový samostatný dokument; neplatný nebo
+nerozvrhnutelný rozměr dialog vysvětlí a ponechá otevřený k opravě.
+
 Každé viditelné okno představuje právě jeden YAML soubor a v titulku ukazuje
 jeho název, případně **Nová šablona**. Hvězdička
 před názvem označuje neuložené změny. Na macOS má otevřený nebo uložený

@@ -583,6 +583,158 @@ class PdfExportDialog(simpledialog.Dialog):
         self.result = self._page_format_value.get()
 
 
+def parse_template_settings(width: str, height: str) -> CrosswordSettings:
+    """Převede a omezí rozměr automaticky generované šablony."""
+
+    dimensions = []
+    for value, label in ((width, "Počet sloupců"), (height, "Počet řádků")):
+        try:
+            dimension = int(value.strip())
+        except ValueError as error:
+            raise GuiInputError(f"{label} musí být celé číslo.") from error
+        if dimension <= 0:
+            raise GuiInputError(f"{label} musí být větší než nula.")
+        dimensions.append(dimension)
+
+    settings = CrosswordSettings(width=dimensions[0], height=dimensions[1])
+    if (
+        settings.width > _MAX_CROSSWORD_DIMENSION
+        or settings.height > _MAX_CROSSWORD_DIMENSION
+    ):
+        raise GuiInputError(
+            "Šablona může mít nejvýše "
+            f"{_MAX_CROSSWORD_DIMENSION} sloupců a řádků."
+        )
+    return settings
+
+
+class TemplateGenerationDialog(simpledialog.Dialog):
+    """Vybere rozměr a rozvržení nově generované šablony."""
+
+    def __init__(
+        self,
+        parent: tk.Misc | None,
+        *,
+        initial_settings: CrosswordSettings,
+        initial_layout: SpecificationLayout,
+    ) -> None:
+        self._initial_settings = initial_settings
+        self._initial_layout = initial_layout
+        self._width_value: tk.StringVar
+        self._height_value: tk.StringVar
+        self._layout_value: tk.StringVar
+        self._width_editor: ttk.Spinbox
+        self._generated_template: CrosswordDocument | None = None
+        super().__init__(parent, "Vygenerovat novou šablonu")
+
+    def body(self, master: tk.Frame) -> tk.Widget:
+        master.configure(padx=16, pady=12)
+        master.columnconfigure(0, weight=1)
+        ttk.Label(
+            master,
+            text="Zvolte rozměr a rozvržení nové šablony.",
+        ).grid(row=0, column=0, sticky="w")
+
+        dimensions = ttk.Frame(master)
+        dimensions.grid(row=1, column=0, sticky="w", pady=(12, 0))
+        ttk.Label(dimensions, text="Sloupce").grid(row=0, column=0, sticky="w")
+        ttk.Label(dimensions, text="Řádky").grid(
+            row=0,
+            column=2,
+            sticky="w",
+        )
+        self._width_value = tk.StringVar(
+            master=master,
+            value=str(self._initial_settings.width),
+        )
+        self._height_value = tk.StringVar(
+            master=master,
+            value=str(self._initial_settings.height),
+        )
+        self._width_editor = ttk.Spinbox(
+            dimensions,
+            from_=1,
+            to=_MAX_CROSSWORD_DIMENSION,
+            width=7,
+            textvariable=self._width_value,
+        )
+        self._width_editor.grid(row=1, column=0, sticky="w", pady=(3, 0))
+        ttk.Label(dimensions, text="×").grid(row=1, column=1, padx=10)
+        ttk.Spinbox(
+            dimensions,
+            from_=1,
+            to=_MAX_CROSSWORD_DIMENSION,
+            width=7,
+            textvariable=self._height_value,
+        ).grid(row=1, column=2, sticky="w", pady=(3, 0))
+
+        ttk.Label(master, text="Rozvržení").grid(
+            row=2,
+            column=0,
+            sticky="w",
+            pady=(14, 0),
+        )
+        self._layout_value = tk.StringVar(
+            master=master,
+            value=self._initial_layout,
+        )
+        ttk.Radiobutton(
+            master,
+            text="Švédské – nápovědy přímo v mřížce",
+            variable=self._layout_value,
+            value="swedish",
+        ).grid(row=3, column=0, sticky="w", pady=(5, 0))
+        ttk.Radiobutton(
+            master,
+            text="Číslované – nápovědy pod mřížkou",
+            variable=self._layout_value,
+            value="numbered",
+        ).grid(row=4, column=0, sticky="w", pady=(4, 0))
+        return self._width_editor
+
+    def buttonbox(self) -> None:
+        buttons = ttk.Frame(self, padding=(16, 0, 16, 16))
+        ttk.Button(
+            buttons,
+            text="Vygenerovat",
+            command=self.ok,
+            default="active",
+        ).pack(side="right")
+        ttk.Button(
+            buttons,
+            text="Zrušit",
+            command=self.cancel,
+        ).pack(side="right", padx=(0, 8))
+        buttons.pack(fill="x")
+        self.bind("<Return>", self.ok)
+        self.bind("<Escape>", self.cancel)
+
+    def validate(self) -> bool:
+        try:
+            settings = parse_template_settings(
+                self._width_value.get(),
+                self._height_value.get(),
+            )
+            layout_value = self._layout_value.get()
+            if layout_value not in {"swedish", "numbered"}:
+                raise GuiInputError("Vyberte rozvržení šablony.")
+            layout = cast(SpecificationLayout, layout_value)
+            self._generated_template = create_blank_template(settings, layout)
+        except GuiInputError as error:
+            self._generated_template = None
+            messagebox.showerror(
+                "Šablonu nelze vygenerovat",
+                str(error),
+                parent=self,
+            )
+            self._width_editor.focus_set()
+            return False
+        return True
+
+    def apply(self) -> None:
+        self.result = self._generated_template
+
+
 def _minimum_generated_dimension(layout: SpecificationLayout | None) -> int:
     if layout == "numbered":
         return MIN_SEGMENT_LENGTH
@@ -2537,7 +2689,7 @@ class CrosswordApplication:
         menu = tk.Menu(self.root)
         self.file_menu = tk.Menu(menu)
         self.file_menu.add_command(
-            label="Nová šablona",
+            label="Nová šablona…",
             accelerator=new_shortcut.accelerator,
             command=self.new_template_document,
         )
@@ -2678,11 +2830,22 @@ class CrosswordApplication:
         self.choose_document(parent=self._no_document_dialog_parent())
         return "break"
 
-    def new_template_document(self) -> CrosswordDocumentWindow:
-        template = create_blank_template(
-            CrosswordSettings(DEFAULT_GRID_WIDTH, DEFAULT_GRID_HEIGHT),
-            "swedish",
+    def new_template_document(
+        self,
+        *,
+        parent: tk.Misc | None = None,
+    ) -> CrosswordDocumentWindow | None:
+        dialog = TemplateGenerationDialog(
+            parent if parent is not None else self._no_document_dialog_parent(),
+            initial_settings=CrosswordSettings(
+                DEFAULT_GRID_WIDTH,
+                DEFAULT_GRID_HEIGHT,
+            ),
+            initial_layout="swedish",
         )
+        template = cast(CrosswordDocument | None, dialog.result)
+        if template is None:
+            return None
         return self._open_window(template, dirty=True)
 
     def choose_document(
@@ -2848,9 +3011,11 @@ class CrosswordDocumentWindow(ttk.Frame):
         menu = tk.Menu(self.root)
         self.file_menu = tk.Menu(menu)
         self.file_menu.add_command(
-            label="Nová šablona",
+            label="Nová šablona…",
             accelerator=new_shortcut.accelerator,
-            command=self.application.new_template_document,
+            command=lambda: self.application.new_template_document(
+                parent=self.root
+            ),
         )
         self.file_menu.add_command(
             label="Otevřít…",
@@ -4367,7 +4532,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.application.close_window(self)
 
     def _new_event(self, _event: tk.Event[tk.Misc]) -> str:
-        self.application.new_template_document()
+        self.application.new_template_document(parent=self.root)
         return "break"
 
     def _open_event(self, _event: tk.Event[tk.Misc]) -> str:
