@@ -50,10 +50,12 @@ from krizovkar.gui import (
 from krizovkar.model import (
     Coordinate,
     CrosswordDocument,
+    CrosswordSecretCellsPart,
     EmptyCellRole,
     LegendCellRole,
     LetterCell,
     LetterCellRole,
+    SecretCell,
     load_crossword_document,
     write_crossword_document,
 )
@@ -885,6 +887,75 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual(crossword, restored)
 
+    def test_changes_selected_letters_to_secret_cells_and_back(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+        coordinates = (Coordinate(1, 1), Coordinate(2, 2))
+
+        changed = set_crossword_cells_role(
+            crossword,
+            coordinates,
+            "secret",
+        )
+
+        self.assertEqual(1, len(changed.secrets))
+        part = changed.secrets[0].parts[0]
+        self.assertIsInstance(part, CrosswordSecretCellsPart)
+        assert isinstance(part, CrosswordSecretCellsPart)
+        self.assertEqual(coordinates, part.cells)
+        grid = create_grid_from_crossword(changed)
+        self.assertIsInstance(grid.grid.cells[0][0], SecretCell)
+        self.assertIsInstance(grid.grid.cells[1][1], SecretCell)
+        preview = CrosswordPreview.__new__(CrosswordPreview)
+        preview._crossword = grid
+        self.assertEqual(
+            "secret",
+            preview._editable_cell_role_at(Coordinate(1, 1)),
+        )
+
+        one_removed = set_crossword_cell_role(
+            changed,
+            coordinates[0],
+            "letter",
+        )
+        one_removed_grid = create_grid_from_crossword(one_removed)
+        self.assertIsInstance(one_removed_grid.grid.cells[0][0], LetterCell)
+        self.assertIsInstance(one_removed_grid.grid.cells[1][1], SecretCell)
+        restored = set_crossword_cell_role(
+            one_removed,
+            coordinates[1],
+            "letter",
+        )
+        self.assertEqual(crossword, restored)
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "tajenkova-pole.yaml"
+            write_crossword_document(changed, output)
+            self.assertEqual(changed, load_crossword_document(output))
+
+    def test_changes_empty_cell_to_secret_and_rejoins_slots(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+        coordinate = Coordinate(2, 2)
+        without_cell = set_crossword_cell_role(crossword, coordinate, "empty")
+
+        changed = set_crossword_cell_role(
+            without_cell,
+            coordinate,
+            "secret",
+        )
+
+        self.assertIsInstance(changed.grid.cells[1][1], LetterCellRole)
+        self.assertEqual(crossword.slots, changed.slots)
+        self.assertIsInstance(
+            create_grid_from_crossword(changed).grid.cells[1][1],
+            SecretCell,
+        )
+
     def test_empty_cell_does_not_create_numbered_inline_slot_tails(self) -> None:
         crossword = create_blank_template(
             CrosswordSettings(width=12, height=10),
@@ -1530,18 +1601,18 @@ class GuiTest(unittest.TestCase):
         menu_type.assert_called_once_with(preview, tearoff=False)
         items = menu.add_radiobutton.call_args_list
         self.assertEqual(
-            ["Písmeno", "Legenda", "Prázdné"],
+            ["Písmeno", "Tajenka", "Legenda", "Prázdné"],
             [item.kwargs["label"] for item in items],
         )
         self.assertEqual(
-            ["letter", "legend", "empty"],
+            ["letter", "secret", "legend", "empty"],
             [item.kwargs["value"] for item in items],
         )
         self.assertTrue(
             all(item.kwargs["variable"] == "cell_role" for item in items)
         )
-        items[2].kwargs["command"]()
-        preview._choose_cell_role.assert_called_once_with("empty")
+        items[1].kwargs["command"]()
+        preview._choose_cell_role.assert_called_once_with("secret")
         slot_items = menu.add_checkbutton.call_args_list
         self.assertEqual(
             ["Heslo →", "Heslo ↓"],
@@ -2647,6 +2718,60 @@ class GuiTest(unittest.TestCase):
             "Chcete pokračovat?",
             parent=window.root,
         )
+        self.assertIs(crossword, window._crossword)
+        window._set_dirty.assert_not_called()
+
+    def test_preview_cell_role_change_adds_secret_without_confirmation(
+        self,
+    ) -> None:
+        window = Mock()
+        window._save_inline_slot_edit.return_value = True
+        crossword = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+        window._crossword = crossword
+
+        with patch("krizovkar.gui.messagebox.askyesno") as ask:
+            CrosswordDocumentWindow._preview_cell_role_changed(
+                window,
+                (Coordinate(row=2, column=2),),
+                "secret",
+            )
+
+        ask.assert_not_called()
+        self.assertIsInstance(
+            create_grid_from_crossword(window._crossword).grid.cells[1][1],
+            SecretCell,
+        )
+        window._set_dirty.assert_called_once_with(True)
+        window._rebuild_slot_tree.assert_called_once_with()
+        window._refresh_crossword_view.assert_called_once_with()
+
+    def test_preview_cell_role_change_confirms_removing_secret(self) -> None:
+        window = Mock()
+        window._save_inline_slot_edit.return_value = True
+        crossword = set_crossword_cell_role(
+            create_blank_template(
+                CrosswordSettings(width=3, height=3),
+                "numbered",
+            ),
+            Coordinate(row=2, column=2),
+            "secret",
+        )
+        window._crossword = crossword
+
+        with patch(
+            "krizovkar.gui.messagebox.askyesno",
+            return_value=False,
+        ) as ask:
+            CrosswordDocumentWindow._preview_cell_role_changed(
+                window,
+                (Coordinate(row=2, column=2),),
+                "letter",
+            )
+
+        ask.assert_called_once()
         self.assertIs(crossword, window._crossword)
         window._set_dirty.assert_not_called()
 

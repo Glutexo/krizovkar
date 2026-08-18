@@ -69,14 +69,18 @@ vytvoří rozvržení; obsahuje-li dokument doplněná hesla nebo tajenku, edito
 nejprve vyžádá potvrzení. Prázdnou tiskovou křížovku lze exportovat do PDF
 kdykoli, samostatné řešení až po vyplnění všech hesel.
 
-Pravé tlačítko nad písmenným, legendovým nebo prázdným polem náhledu otevře
-nabídku jeho role **Písmeno** / **Legenda** / **Prázdné**. Podržením `Ctrl`,
-na macOS `⌘`, při kliknutí lze pole přidávat do vícenásobného výběru nebo je
-z něj odebírat. Kliknutí nebo tažení s `Shift` vybere obdélník od naposledy
-označeného pole po aktuální pole; opakované kliknutí nebo pokračující tažení
-s `Shift` posouvá konec tohoto rozsahu a zachová samostatně přidaná pole mimo
-něj. Pravé tlačítko nad kterýmkoli z nich použije vybranou roli na celou
-skupinu. Zaškrtávací volby **Heslo →** a **Heslo ↓** ponechají pole
+Pravé tlačítko nad písmenným, tajenkovým, legendovým nebo prázdným polem
+náhledu otevře nabídku jeho role **Písmeno** / **Tajenka** / **Legenda** /
+**Prázdné**. Tajenkové pole zůstává součástí procházejících hesel, ale náhled
+i PDF je odliší světle šedým podkladem. Více současně označených polí
+nastavených jako tajenka vytvoří jednu skupinu; návrat na roli **Písmeno**
+odebere vybrané pole z takové skupiny. Podržením `Ctrl`, na macOS `⌘`, při
+kliknutí lze pole přidávat do vícenásobného výběru nebo je z něj odebírat.
+Kliknutí nebo tažení s `Shift` vybere obdélník od naposledy označeného pole po
+aktuální pole; opakované kliknutí nebo pokračující tažení s `Shift` posouvá
+konec tohoto rozsahu a zachová samostatně přidaná pole mimo něj. Pravé
+tlačítko nad kterýmkoli z nich použije vybranou roli na celou skupinu.
+Zaškrtávací volby **Heslo →** a **Heslo ↓** ponechají pole
 písmenné a založí na něm začátek nelegendovaného slotu v daném směru; obě lze
 na jednom poli kombinovat. Takové pole dostane dvě globálně jedinečná čísla;
 náhled i PDF je zobrazí například jako `1→` vlevo nahoře a `2↓` vpravo
@@ -131,7 +135,8 @@ Hesla s vepsanou legendou mají místo pro nápovědu přímo v předem vytvoře
 mřížce. Hesla s vnější legendou dostanou číslo a nápovědu pod mřížkou. Ruční
 zadávání souřadnic ani směru proto není potřeba. Nesprávnou délku, opakované
 heslo nebo rozporné písmeno aplikace odmítne konkrétní zprávou. Editor zatím
-nezadává tajenky, vlastní pomůcku ani automatické vyplnění ze slovníku.
+nezadává vlastní text zadání tajenky, vlastní pomůcku ani automatické vyplnění
+ze slovníku.
 
 Export do PDF používá LuaLaTeX a vyžaduje stejnou instalaci TeX Live
 jako příkaz `render`.

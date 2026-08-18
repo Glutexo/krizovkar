@@ -89,7 +89,7 @@ _DIRECTION_STEPS: dict[WordDirection, tuple[int, int]] = {
     "vertical": (1, 0),
 }
 
-EditableCellRole = Literal["letter", "legend", "empty"]
+EditableCellRole = Literal["letter", "secret", "legend", "empty"]
 
 
 class GuiInputError(ValueError):
@@ -535,21 +535,60 @@ def _secrets_after_cell_role_change(
     affected_slots: set[str],
     coordinate: Coordinate,
 ) -> tuple[CrosswordSecret, ...]:
-    return tuple(
-        secret
-        for secret in crossword.secrets
-        if not any(
-            (
-                isinstance(part, CrosswordSecretSlotPart)
-                and part.slot_identifier in affected_slots
-            )
-            or (
-                isinstance(part, CrosswordSecretCellsPart)
-                and coordinate in part.cells
+    slots_by_identifier = {
+        slot.identifier: slot for slot in crossword.slots
+    }
+    secrets: list[CrosswordSecret] = []
+    for secret in crossword.secrets:
+        if any(
+            isinstance(part, CrosswordSecretSlotPart)
+            and (
+                part.slot_identifier in affected_slots
+                or coordinate
+                in slot_coordinates(slots_by_identifier[part.slot_identifier])
             )
             for part in secret.parts
-        )
-    )
+        ):
+            continue
+
+        parts: list[CrosswordSecretSlotPart | CrosswordSecretCellsPart] = []
+        for part in secret.parts:
+            if not (
+                isinstance(part, CrosswordSecretCellsPart)
+                and coordinate in part.cells
+            ):
+                parts.append(part)
+                continue
+            remaining = tuple(
+                cell for cell in part.cells if cell != coordinate
+            )
+            if remaining:
+                parts.append(
+                    replace(part, cells=remaining, arrows=False)
+                    if part.arrows
+                    else replace(part, cells=remaining)
+                )
+        if parts:
+            secrets.append(replace(secret, parts=tuple(parts)))
+    return tuple(secrets)
+
+
+def _crossword_secret_coordinates(
+    crossword: CrosswordDocument,
+) -> frozenset[Coordinate]:
+    slots_by_identifier = {
+        slot.identifier: slot for slot in crossword.slots
+    }
+    coordinates: set[Coordinate] = set()
+    for secret in crossword.secrets:
+        for part in secret.parts:
+            if isinstance(part, CrosswordSecretSlotPart):
+                coordinates.update(
+                    slot_coordinates(slots_by_identifier[part.slot_identifier])
+                )
+            else:
+                coordinates.update(part.cells)
+    return frozenset(coordinates)
 
 
 def _crossword_with_cell_role(
@@ -785,6 +824,61 @@ def _empty_cell_to_legend(
     )
 
 
+def _add_crossword_secret_cells(
+    crossword: CrosswordDocument,
+    coordinates: Sequence[Coordinate],
+) -> CrosswordDocument:
+    ordered_coordinates = tuple(
+        sorted(set(coordinates), key=lambda item: (item.row, item.column))
+    )
+    for coordinate in ordered_coordinates:
+        if not (
+            1 <= coordinate.row <= crossword.grid.height
+            and 1 <= coordinate.column <= crossword.grid.width
+        ):
+            raise GuiInputError("Vybrané pole leží mimo křížovku.")
+
+    changed = crossword
+    for coordinate in ordered_coordinates:
+        if coordinate in _crossword_secret_coordinates(changed):
+            continue
+        try:
+            changed = set_crossword_cell_role(changed, coordinate, "letter")
+        except GuiInputError as error:
+            if len(ordered_coordinates) == 1:
+                raise
+            raise GuiInputError(
+                f"Pole v řádku {coordinate.row}, sloupci "
+                f"{coordinate.column}: {error}"
+            ) from error
+
+    secret_coordinates = _crossword_secret_coordinates(changed)
+    additions = tuple(
+        coordinate
+        for coordinate in ordered_coordinates
+        if coordinate not in secret_coordinates
+    )
+    if not additions:
+        return changed
+    changed = replace(
+        changed,
+        secrets=changed.secrets
+        + (
+            CrosswordSecret(
+                parts=(CrosswordSecretCellsPart(cells=additions),),
+            ),
+        ),
+    )
+    try:
+        dump_crossword_document(changed, StringIO())
+    except ModelError as error:
+        raise GuiInputError(
+            "Pole nelze nastavit jako tajenku, aniž by vzniklo neplatné "
+            f"rozvržení: {error}"
+        ) from error
+    return changed
+
+
 def set_crossword_cell_role(
     crossword: CrosswordDocument,
     coordinate: Coordinate,
@@ -792,31 +886,43 @@ def set_crossword_cell_role(
 ) -> CrosswordDocument:
     """Přepne roli buňky a upraví navazující sloty."""
 
-    if role not in {"letter", "legend", "empty"}:
+    if role not in {"letter", "secret", "legend", "empty"}:
         raise GuiInputError(f"Nepodporovaná role pole {role!r}.")
     if not (
         1 <= coordinate.row <= crossword.grid.height
         and 1 <= coordinate.column <= crossword.grid.width
     ):
         raise GuiInputError("Vybrané pole leží mimo křížovku.")
+    if role == "secret":
+        return _add_crossword_secret_cells(crossword, (coordinate,))
 
     current = crossword.grid.cells[coordinate.row - 1][coordinate.column - 1]
     if role == "letter" and isinstance(current, LetterCellRole):
+        if coordinate not in _crossword_secret_coordinates(crossword):
+            return crossword
+        changed = replace(
+            crossword,
+            secrets=_secrets_after_cell_role_change(
+                crossword,
+                set(),
+                coordinate,
+            ),
+        )
+    elif (
+        role == "legend" and isinstance(current, LegendCellRole)
+    ) or (
+        role == "empty" and isinstance(current, EmptyCellRole)
+    ):
         return crossword
-    if role == "legend" and isinstance(current, LegendCellRole):
-        return crossword
-    if role == "empty" and isinstance(current, EmptyCellRole):
-        return crossword
-    if not isinstance(
+    elif not isinstance(
         current,
         (LetterCellRole, LegendCellRole, EmptyCellRole),
     ):
         raise GuiInputError(
-            "Roli lze měnit pouze mezi písmenným, legendovým a prázdným "
-            "polem."
+            "Roli lze měnit pouze mezi písmenným, tajenkovým, legendovým "
+            "a prázdným polem."
         )
-
-    if isinstance(current, LetterCellRole):
+    elif isinstance(current, LetterCellRole):
         changed = _letter_cell_to_nonletter(
             crossword,
             coordinate,
@@ -848,6 +954,8 @@ def set_crossword_cells_role(
     ordered_coordinates = tuple(
         sorted(set(coordinates), key=lambda item: (item.row, item.column))
     )
+    if role == "secret":
+        return _add_crossword_secret_cells(crossword, ordered_coordinates)
     changed = crossword
     for coordinate in ordered_coordinates:
         try:
@@ -1139,7 +1247,7 @@ def _crossword_change_discards_content(
             changed.in_help,
         ) != (slot.answer, slot.clue, slot.in_help):
             return True
-    return before.secrets != after.secrets
+    return any(secret not in after.secrets for secret in before.secrets)
 
 
 def _crossword_slot(
@@ -1321,6 +1429,7 @@ class CrosswordPreview(tk.Canvas):
     _GRID_COLOR = "#667085"
     _SELECTED_FILL = "#bfdbfe"
     _ROLE_SELECTED_FILL = "#c4b5fd"
+    _SECRET_FILL = "#d9d9d9"
     _LEGEND_FILL = "#fef3c7"
     _EMPTY_FILL = "#e2e8f0"
     _HELP_FILL = "#dcfce7"
@@ -1394,6 +1503,12 @@ class CrosswordPreview(tk.Canvas):
             value="letter",
             variable=self._cell_role_variable,
             command=lambda: self._choose_cell_role("letter"),
+        )
+        menu.add_radiobutton(
+            label="Tajenka",
+            value="secret",
+            variable=self._cell_role_variable,
+            command=lambda: self._choose_cell_role("secret"),
         )
         menu.add_radiobutton(
             label="Legenda",
@@ -1559,6 +1674,8 @@ class CrosswordPreview(tk.Canvas):
                     fill = self._HELP_FILL
                     marker = "P"
                 elif isinstance(cell, (LetterCell, SecretCell)):
+                    if isinstance(cell, SecretCell):
+                        fill = self._SECRET_FILL
                     letter = cell.value if self._show_letters else None
                     numbers = cell_numbers(cell)
                     bars = cell.bars
@@ -2047,7 +2164,9 @@ class CrosswordPreview(tk.Canvas):
         ):
             return None
         cell = crossword.grid.cells[coordinate.row - 1][coordinate.column - 1]
-        if isinstance(cell, (LetterCell, SecretCell)):
+        if isinstance(cell, SecretCell):
+            return "secret"
+        if isinstance(cell, LetterCell):
             return "letter"
         if isinstance(cell, LegendCell):
             return "legend"
@@ -2080,7 +2199,7 @@ class CrosswordPreview(tk.Canvas):
         self._context_menu_coordinates = coordinates
         self._cell_role_menu.setvar(self._cell_role_variable, current_role)
         all_letters = all(
-            self._editable_cell_role_at(selected) == "letter"
+            self._editable_cell_role_at(selected) in {"letter", "secret"}
             for selected in coordinates
         )
         for direction, label in _CELL_SLOT_LABELS.items():
