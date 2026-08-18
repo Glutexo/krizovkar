@@ -524,6 +524,13 @@ class GuiTest(unittest.TestCase):
         source_window.root.lift.assert_called_once_with()
         source_window.source_text.focus_set.assert_called_once_with()
 
+    def test_source_window_uses_narrow_default_width(self) -> None:
+        source_window = Mock()
+
+        CrosswordSourceWindow._configure_window(source_window)
+
+        source_window.root.geometry.assert_called_once_with("480x680")
+
     def test_source_window_applies_user_changes_immediately(self) -> None:
         source_window = CrosswordSourceWindow.__new__(CrosswordSourceWindow)
         source_window.source_text = Mock()
