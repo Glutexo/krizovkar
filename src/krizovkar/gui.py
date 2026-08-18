@@ -675,7 +675,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._cli_visible_value: tk.BooleanVar
         self._cli_command_value: tk.StringVar
         self._cli_command_frame: ttk.LabelFrame
-        self._cli_command_entry: ttk.Entry
+        self._cli_command_text: tk.Text
         self._width_editor: ttk.Spinbox
         self._generated_seed = random.randrange(2**63)
         self._new_template: NewTemplateResult | None = None
@@ -801,14 +801,24 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             padding=10,
         )
         self._cli_command_frame.columnconfigure(0, weight=1)
-        self._cli_command_entry = ttk.Entry(
+        self._cli_command_text = tk.Text(
             self._cli_command_frame,
-            textvariable=self._cli_command_value,
-            state="readonly",
+            height=3,
             width=1,
+            wrap="word",
             font="TkFixedFont",
+            state="disabled",
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            background=self.cget("background"),
         )
-        self._cli_command_entry.grid(row=0, column=0, sticky="ew")
+        self._cli_command_text.grid(row=0, column=0, sticky="ew")
+        self._cli_command_value.trace_add(
+            "write",
+            self._update_cli_command_text,
+        )
+        self._update_cli_command_text()
         self.bind("<Return>", self.ok)
         self.bind("<Escape>", self.cancel)
 
@@ -847,6 +857,12 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         except GuiInputError:
             command = "Příkaz bude dostupný po opravě nastavení."
         self._cli_command_value.set(command)
+
+    def _update_cli_command_text(self, *_trace_arguments: str) -> None:
+        self._cli_command_text.configure(state="normal")
+        self._cli_command_text.delete("1.0", "end")
+        self._cli_command_text.insert("1.0", self._cli_command_value.get())
+        self._cli_command_text.configure(state="disabled")
 
     def _toggle_cli_command(self) -> None:
         if self._cli_visible_value.get():

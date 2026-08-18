@@ -1143,13 +1143,13 @@ class GuiTest(unittest.TestCase):
         )
         dialog._cli_command_frame.pack_forget.assert_called_once_with()
 
-    def test_template_dialog_builds_monospace_cli_frame_below_buttons(
+    def test_template_dialog_builds_wrapped_cli_text_below_buttons(
         self,
     ) -> None:
         dialog = Mock()
         buttons = Mock()
         cli_frame = Mock()
-        cli_entry = Mock()
+        cli_text = Mock()
         cli_toggle = Mock()
         create_button = Mock()
         cancel_button = Mock()
@@ -1159,9 +1159,9 @@ class GuiTest(unittest.TestCase):
             patch("krizovkar.gui.ttk.Frame", return_value=buttons),
             patch("krizovkar.gui.ttk.LabelFrame", return_value=cli_frame),
             patch(
-                "krizovkar.gui.ttk.Entry",
-                return_value=cli_entry,
-            ) as entry,
+                "krizovkar.gui.tk.Text",
+                return_value=cli_text,
+            ) as text,
             patch(
                 "krizovkar.gui.ttk.Checkbutton",
                 return_value=cli_toggle,
@@ -1185,15 +1185,42 @@ class GuiTest(unittest.TestCase):
             style="Toolbutton",
         )
         cli_toggle.pack.assert_called_once_with(side="left")
-        entry.assert_called_once_with(
+        text.assert_called_once_with(
             cli_frame,
-            textvariable=dialog._cli_command_value,
-            state="readonly",
+            height=3,
             width=1,
+            wrap="word",
             font="TkFixedFont",
+            state="disabled",
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            background=dialog.cget.return_value,
         )
-        cli_entry.grid.assert_called_once_with(row=0, column=0, sticky="ew")
+        cli_text.grid.assert_called_once_with(row=0, column=0, sticky="ew")
         cli_frame.columnconfigure.assert_called_once_with(0, weight=1)
+        dialog._cli_command_value.trace_add.assert_called_once_with(
+            "write",
+            dialog._update_cli_command_text,
+        )
+        dialog._update_cli_command_text.assert_called_once_with()
+
+    def test_template_dialog_updates_copyable_cli_text(self) -> None:
+        dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
+        dialog._cli_command_text = Mock()
+        dialog._cli_command_value = Mock()
+        dialog._cli_command_value.get.return_value = "uv run krizovkar template"
+
+        TemplateGenerationDialog._update_cli_command_text(dialog)
+
+        dialog._cli_command_text.configure.assert_has_calls(
+            (call(state="normal"), call(state="disabled"))
+        )
+        dialog._cli_command_text.delete.assert_called_once_with("1.0", "end")
+        dialog._cli_command_text.insert.assert_called_once_with(
+            "1.0",
+            "uv run krizovkar template",
+        )
 
     def test_template_dialog_validates_selected_generated_layout(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
