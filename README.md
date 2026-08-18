@@ -47,8 +47,10 @@ doplněný obsah. Prázdná i částečně vyplněná křížovka může slouži
 Každé heslo může mít legendu uvnitř mřížky, nebo číslo a legendu pod ní;
 oba způsoby lze v jedné křížovce kombinovat. Místo se vybírá kliknutím v
 náhledu nebo v tabulce. V tabulce označuje `→` vodorovné a `↓` svislé
-místo. U nevyplněných míst tabulka šedě zobrazuje stín hesla: písmena
-známá z křížení a odrážky `•` na neznámých pozicích,
+místo. Sloupce pro heslo a nápovědu se vždy přizpůsobí dostupné šířce,
+takže se tabulka neposouvá vodorovně. U nevyplněných míst tabulka šedě
+zobrazuje stín hesla: písmena známá z křížení a odrážky `•` na neznámých
+pozicích,
 například `V•••`; dokud není známé žádné písmeno, zůstává pomlčka. Dvojklik
 na sloupec **Heslo** nebo **Nápověda** upraví oba údaje přímo v příslušném
 řádku; Enter nebo opuštění řádku změnu uloží, Escape ji zahodí.

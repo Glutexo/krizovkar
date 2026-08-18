@@ -1162,9 +1162,70 @@ class GuiTest(unittest.TestCase):
         slots_tree.column.assert_any_call(
             "slot",
             width=60,
+            minwidth=60,
             stretch=False,
             anchor="center",
         )
+        slots_tree.column.assert_any_call(
+            "length",
+            width=60,
+            minwidth=60,
+            stretch=False,
+            anchor="center",
+        )
+        slots_tree.column.assert_any_call(
+            "answer",
+            width=120,
+            minwidth=1,
+            stretch=False,
+        )
+        slots_tree.column.assert_any_call(
+            "clue",
+            width=240,
+            minwidth=1,
+            stretch=False,
+        )
+        slots_tree.bind.assert_has_calls(
+            [
+                call("<Configure>", window._fit_slot_table_columns),
+                call("<Motion>", window._slot_table_pointer_moved),
+                call("<Button-1>", window._slot_table_button_pressed),
+            ]
+        )
+
+    def test_slot_table_columns_always_fit_available_width(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window.slots_tree = Mock()
+
+        window._fit_slot_table_columns(Mock(width=533))
+
+        window.slots_tree.column.assert_has_calls(
+            [
+                call("answer", width=136),
+                call("clue", width=273),
+            ]
+        )
+        window.slots_tree.xview_moveto.assert_called_once_with(0)
+
+    def test_slot_table_does_not_allow_column_resizing(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window.slots_tree = Mock()
+        event = Mock(x=120, y=10)
+        window.slots_tree.identify_region.return_value = "separator"
+
+        motion_result = window._slot_table_pointer_moved(event)
+        button_result = window._slot_table_button_pressed(event)
+        double_button_result = window._begin_slot_edit(event)
+
+        self.assertEqual("break", motion_result)
+        self.assertEqual("break", button_result)
+        self.assertEqual("break", double_button_result)
+        window.slots_tree.configure.assert_called_once_with(cursor="")
+
+        window.slots_tree.identify_region.return_value = "cell"
+
+        self.assertIsNone(window._slot_table_pointer_moved(event))
+        self.assertIsNone(window._slot_table_button_pressed(event))
 
     def test_slot_labels_use_compact_direction_arrows(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)

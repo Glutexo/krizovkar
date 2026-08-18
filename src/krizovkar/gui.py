@@ -61,6 +61,9 @@ _SLOT_LIST_PLACEMENT_WINDOW = "window"
 _SLOT_TREE_STYLE = "KrizovkarSlots.Treeview"
 # Výchozí pole Aqua potřebuje 27 px plus okraj buňky.
 _SLOT_TREE_ROW_HEIGHT = 30
+_SLOT_COMPACT_COLUMN_WIDTH = 60
+# Některé motivy kreslí uvnitř Treeviewu dvoupixelový rámeček.
+_SLOT_TABLE_HORIZONTAL_INSET = 4
 _SLOT_EDITOR_STYLE = "KrizovkarSlot.TEntry"
 _SLOT_EDITOR_ERROR_COLOR = "#c62828"
 _PROJECT_REPOSITORY_URL = "https://github.com/Glutexo/krizovkar"
@@ -1858,13 +1861,30 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.slots_tree.heading("clue", text="Nápověda")
         self.slots_tree.column(
             "slot",
-            width=60,
+            width=_SLOT_COMPACT_COLUMN_WIDTH,
+            minwidth=_SLOT_COMPACT_COLUMN_WIDTH,
             stretch=False,
             anchor="center",
         )
-        self.slots_tree.column("length", width=60, stretch=False, anchor="center")
-        self.slots_tree.column("answer", width=180)
-        self.slots_tree.column("clue", width=360)
+        self.slots_tree.column(
+            "length",
+            width=_SLOT_COMPACT_COLUMN_WIDTH,
+            minwidth=_SLOT_COMPACT_COLUMN_WIDTH,
+            stretch=False,
+            anchor="center",
+        )
+        self.slots_tree.column(
+            "answer",
+            width=120,
+            minwidth=1,
+            stretch=False,
+        )
+        self.slots_tree.column(
+            "clue",
+            width=240,
+            minwidth=1,
+            stretch=False,
+        )
         self.slots_tree.grid(row=0, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(
             container,
@@ -1873,11 +1893,42 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.slots_tree.configure(yscrollcommand=scrollbar.set)
+        self.slots_tree.bind("<Configure>", self._fit_slot_table_columns)
+        self.slots_tree.bind("<Motion>", self._slot_table_pointer_moved)
+        self.slots_tree.bind("<Button-1>", self._slot_table_button_pressed)
         self.slots_tree.bind("<<TreeviewSelect>>", self._slot_selection_changed)
         self.slots_tree.bind("<Double-Button-1>", self._begin_slot_edit)
         self.slots_tree.bind("<Return>", self._begin_selected_slot_edit)
         self.slots_tree.bind("<Delete>", self._clear_selected_slot_event)
         self.slots_tree.bind("<BackSpace>", self._clear_selected_slot_event)
+
+    def _fit_slot_table_columns(self, event: tk.Event[tk.Misc]) -> None:
+        fixed_width = (
+            2 * _SLOT_COMPACT_COLUMN_WIDTH + _SLOT_TABLE_HORIZONTAL_INSET
+        )
+        editable_width = max(2, event.width - fixed_width)
+        answer_width = max(1, editable_width // 3)
+        clue_width = editable_width - answer_width
+        self.slots_tree.column("answer", width=answer_width)
+        self.slots_tree.column("clue", width=clue_width)
+        self.slots_tree.xview_moveto(0)
+
+    def _slot_table_pointer_moved(
+        self,
+        event: tk.Event[tk.Misc],
+    ) -> str | None:
+        if self.slots_tree.identify_region(event.x, event.y) != "separator":
+            return None
+        self.slots_tree.configure(cursor="")
+        return "break"
+
+    def _slot_table_button_pressed(
+        self,
+        event: tk.Event[tk.Misc],
+    ) -> str | None:
+        if self.slots_tree.identify_region(event.x, event.y) == "separator":
+            return "break"
+        return None
 
     def _set_slot_list_placement(self, placement: str) -> None:
         if placement not in {
@@ -2082,7 +2133,10 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._refresh_crossword_preview()
 
     def _begin_slot_edit(self, event: tk.Event[tk.Misc]) -> str | None:
-        if self.slots_tree.identify_region(event.x, event.y) != "cell":
+        region = self.slots_tree.identify_region(event.x, event.y)
+        if region == "separator":
+            return "break"
+        if region != "cell":
             return None
         identifier = self.slots_tree.identify_row(event.y)
         column = self.slots_tree.identify_column(event.x)
