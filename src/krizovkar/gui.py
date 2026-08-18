@@ -1340,6 +1340,8 @@ class CrosswordPreview(tk.Canvas):
         self._show_letters = True
         self._selected_coordinates: frozenset[Coordinate] = frozenset()
         self._role_selected_coordinates: frozenset[Coordinate] = frozenset()
+        self._role_selection_anchor: Coordinate | None = None
+        self._role_selection_base: frozenset[Coordinate] = frozenset()
         self._slot_starts: frozenset[
             tuple[Coordinate, WordDirection]
         ] = frozenset()
@@ -1377,6 +1379,7 @@ class CrosswordPreview(tk.Canvas):
             _multiple_cell_selection_sequence(),
             self._toggle_cell_role_selection,
         )
+        self.bind("<Shift-Button-1>", self._select_cell_role_range)
         self.bind("<B1-Motion>", self._resize_dragged)
         self.bind("<ButtonRelease-1>", self._resize_released)
         self.bind("<Motion>", self._pointer_moved)
@@ -1473,6 +1476,16 @@ class CrosswordPreview(tk.Canvas):
             for coordinate in self._role_selected_coordinates
             if self._editable_cell_role_at(coordinate) is not None
         )
+        self._role_selection_base = frozenset(
+            coordinate
+            for coordinate in self._role_selection_base
+            if coordinate in self._role_selected_coordinates
+        )
+        if (
+            self._role_selection_anchor is not None
+            and self._editable_cell_role_at(self._role_selection_anchor) is None
+        ):
+            self._role_selection_anchor = None
         self._show_letters = show_letters
         self._redraw()
 
@@ -1480,6 +1493,8 @@ class CrosswordPreview(tk.Canvas):
         self._crossword = None
         self._selected_coordinates = frozenset()
         self._role_selected_coordinates = frozenset()
+        self._role_selection_anchor = None
+        self._role_selection_base = frozenset()
         self._slot_starts = frozenset()
         self._external_slot_starts = frozenset()
         self._context_menu_coordinates = ()
@@ -1918,6 +1933,9 @@ class CrosswordPreview(tk.Canvas):
         coordinate = self._cell_coordinate_at(event.x, event.y)
         if coordinate is None:
             return
+        if self._editable_cell_role_at(coordinate) is not None:
+            self._role_selection_anchor = coordinate
+            self._role_selection_base = frozenset()
         handler = self._cell_click_handler
         if handler is not None:
             handler(coordinate)
@@ -1941,16 +1959,61 @@ class CrosswordPreview(tk.Canvas):
         else:
             selected.add(coordinate)
         self._role_selected_coordinates = frozenset(selected)
+        self._role_selection_anchor = coordinate
+        self._role_selection_base = frozenset(selected - {coordinate})
+        self._context_menu_coordinates = ()
+        self._redraw()
+        return "break"
+
+    def _select_cell_role_range(
+        self,
+        event: tk.Event[tk.Misc],
+    ) -> str:
+        if self._resize_edges_at(event.x, event.y) != (0, 0):
+            return "break"
+        coordinate = self._cell_coordinate_at(event.x, event.y)
+        if (
+            coordinate is None
+            or self._editable_cell_role_at(coordinate) is None
+        ):
+            return "break"
+
+        anchor = self._role_selection_anchor
+        if anchor is None or self._editable_cell_role_at(anchor) is None:
+            anchor = coordinate
+            self._role_selection_anchor = coordinate
+            self._role_selection_base = frozenset()
+        selected = set(self._role_selection_base)
+        for row in range(
+            min(anchor.row, coordinate.row),
+            max(anchor.row, coordinate.row) + 1,
+        ):
+            for column in range(
+                min(anchor.column, coordinate.column),
+                max(anchor.column, coordinate.column) + 1,
+            ):
+                ranged_coordinate = Coordinate(row=row, column=column)
+                if self._editable_cell_role_at(ranged_coordinate) is not None:
+                    selected.add(ranged_coordinate)
+        self._role_selected_coordinates = frozenset(selected)
         self._context_menu_coordinates = ()
         self._redraw()
         return "break"
 
     def _clear_cell_role_selection(self) -> None:
-        if not self._role_selected_coordinates:
+        if (
+            not self._role_selected_coordinates
+            and self._role_selection_anchor is None
+            and not self._role_selection_base
+        ):
             return
+        needs_redraw = bool(self._role_selected_coordinates)
         self._role_selected_coordinates = frozenset()
+        self._role_selection_anchor = None
+        self._role_selection_base = frozenset()
         self._context_menu_coordinates = ()
-        self._redraw()
+        if needs_redraw:
+            self._redraw()
 
     def _cell_coordinate_at(self, x: float, y: float) -> Coordinate | None:
         if self._crossword is None or self._grid_geometry is None:
@@ -1998,6 +2061,8 @@ class CrosswordPreview(tk.Canvas):
 
         if coordinate not in self._role_selected_coordinates:
             self._role_selected_coordinates = frozenset({coordinate})
+            self._role_selection_anchor = coordinate
+            self._role_selection_base = frozenset()
             self._redraw()
         coordinates = tuple(
             sorted(

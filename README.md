@@ -72,8 +72,11 @@ kdykoli, samostatné řešení až po vyplnění všech hesel.
 Pravé tlačítko nad písmenným, legendovým nebo prázdným polem náhledu otevře
 nabídku jeho role **Písmeno** / **Legenda** / **Prázdné**. Podržením `Ctrl`,
 na macOS `⌘`, při kliknutí lze pole přidávat do vícenásobného výběru nebo je
-z něj odebírat; pravé tlačítko nad kterýmkoli z nich použije vybranou roli na
-celou skupinu. Zaškrtávací volby **Heslo →** a **Heslo ↓** ponechají pole
+z něj odebírat. Kliknutí s `Shift` vybere obdélník od naposledy označeného
+pole po klepnuté; opakované kliknutí s `Shift` posune konec tohoto rozsahu a
+zachová samostatně přidaná pole mimo něj. Pravé tlačítko nad kterýmkoli z nich
+použije vybranou roli na celou skupinu. Zaškrtávací volby **Heslo →** a
+**Heslo ↓** ponechají pole
 písmenné a založí na něm začátek nelegendovaného slotu v daném směru; obě lze
 na jednom poli kombinovat. Takové pole dostane dvě globálně jedinečná čísla;
 náhled i PDF je zobrazí například jako `1→` vlevo nahoře a `2↓` vpravo

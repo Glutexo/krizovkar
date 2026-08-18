@@ -99,6 +99,8 @@ def _resizable_preview() -> tuple[CrosswordPreview, Mock]:
     preview._resize_drag = None
     preview._resize_target = None
     preview._role_selected_coordinates = frozenset()
+    preview._role_selection_anchor = None
+    preview._role_selection_base = frozenset()
     preview._context_menu_coordinates = ()
     preview._draw_resize_feedback = Mock()
     preview._redraw = Mock()
@@ -1724,7 +1726,67 @@ class GuiTest(unittest.TestCase):
         self.assertEqual("break", first)
         self.assertEqual("break", second)
         self.assertEqual(frozenset(), preview._role_selected_coordinates)
+        self.assertEqual(Coordinate(2, 2), preview._role_selection_anchor)
+        self.assertEqual(frozenset(), preview._role_selection_base)
         self.assertEqual(2, preview._redraw.call_count)
+
+    def test_crossword_preview_shift_click_selects_anchored_rectangle(
+        self,
+    ) -> None:
+        preview = CrosswordPreview.__new__(CrosswordPreview)
+        preview._crossword = create_grid_from_crossword(
+            create_blank_template(CrosswordSettings(4, 4), "numbered")
+        )
+        preview._grid_geometry = (100.0, 50.0, 20.0)
+        retained = Coordinate(4, 4)
+        anchor = Coordinate(2, 2)
+        preview._role_selected_coordinates = frozenset({retained, anchor})
+        preview._role_selection_anchor = anchor
+        preview._role_selection_base = frozenset({retained})
+        preview._context_menu_coordinates = (anchor,)
+        preview._resize_edges_at = Mock(return_value=(0, 0))
+        preview._redraw = Mock()
+
+        first = preview._select_cell_role_range(Mock(x=150, y=100))
+        second = preview._select_cell_role_range(Mock(x=150, y=60))
+
+        self.assertEqual("break", first)
+        self.assertEqual("break", second)
+        self.assertEqual(
+            frozenset(
+                {
+                    Coordinate(1, 2),
+                    Coordinate(1, 3),
+                    Coordinate(2, 2),
+                    Coordinate(2, 3),
+                    retained,
+                }
+            ),
+            preview._role_selected_coordinates,
+        )
+        self.assertEqual(anchor, preview._role_selection_anchor)
+        self.assertEqual(frozenset({retained}), preview._role_selection_base)
+        self.assertEqual((), preview._context_menu_coordinates)
+        self.assertEqual(2, preview._redraw.call_count)
+
+    def test_crossword_preview_plain_click_sets_shift_selection_anchor(
+        self,
+    ) -> None:
+        preview = CrosswordPreview.__new__(CrosswordPreview)
+        preview._crossword = create_grid_from_crossword(
+            create_blank_template(CrosswordSettings(3, 3), "numbered")
+        )
+        preview._grid_geometry = (100.0, 50.0, 20.0)
+        preview._role_selection_anchor = None
+        preview._role_selection_base = frozenset({Coordinate(1, 1)})
+        preview._cell_click_handler = Mock()
+        event = Mock(x=130, y=80)
+
+        preview._cell_clicked(event)
+
+        self.assertEqual(Coordinate(2, 2), preview._role_selection_anchor)
+        self.assertEqual(frozenset(), preview._role_selection_base)
+        preview._cell_click_handler.assert_called_once_with(Coordinate(2, 2))
 
     def test_crossword_preview_heading_refreshes_current_dimensions(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
