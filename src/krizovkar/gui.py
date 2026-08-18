@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 from io import StringIO
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
-from typing import cast
+from typing import Literal, cast
 
 from krizovkar.alphabet import split_answer_letters
 from krizovkar.generator import (
@@ -30,12 +30,18 @@ from krizovkar.model import (
     Coordinate,
     CrosswordDocument,
     CrosswordGrid,
+    CrosswordSecret,
+    CrosswordSecretCellsPart,
+    CrosswordSecretSlotPart,
     EmptyCell,
     HelpCell,
     LegendCell,
+    LegendCellRole,
     LetterCell,
+    LetterCellRole,
     ModelError,
     SecretCell,
+    WordDirection,
     WordSlot,
     dump_crossword_document,
     load_crossword_document,
@@ -71,6 +77,12 @@ _DIRECTION_LABELS = {
     "horizontal": "→",
     "vertical": "↓",
 }
+_DIRECTION_STEPS: dict[WordDirection, tuple[int, int]] = {
+    "horizontal": (0, 1),
+    "vertical": (1, 0),
+}
+
+EditableCellRole = Literal["letter", "legend"]
 
 
 class GuiInputError(ValueError):
@@ -471,6 +483,289 @@ def slot_coordinates(slot: WordSlot) -> tuple[Coordinate, ...]:
     )
 
 
+def _shift_coordinate(
+    coordinate: Coordinate,
+    direction: WordDirection,
+    distance: int,
+) -> Coordinate:
+    row_step, column_step = _DIRECTION_STEPS[direction]
+    return Coordinate(
+        row=coordinate.row + distance * row_step,
+        column=coordinate.column + distance * column_step,
+    )
+
+
+def _blank_changed_slot(slot: WordSlot, **changes: object) -> WordSlot:
+    return replace(
+        slot,
+        answer=None,
+        clue=None,
+        in_help=False,
+        **changes,
+    )
+
+
+def _next_slot_identifier(
+    identifiers: set[str],
+    direction: WordDirection,
+) -> str:
+    prefix = "h" if direction == "horizontal" else "v"
+    number = 1
+    while f"{prefix}{number}" in identifiers:
+        number += 1
+    identifier = f"{prefix}{number}"
+    identifiers.add(identifier)
+    return identifier
+
+
+def _secrets_after_cell_role_change(
+    crossword: CrosswordDocument,
+    affected_slots: set[str],
+    coordinate: Coordinate,
+) -> tuple[CrosswordSecret, ...]:
+    return tuple(
+        secret
+        for secret in crossword.secrets
+        if not any(
+            (
+                isinstance(part, CrosswordSecretSlotPart)
+                and part.slot_identifier in affected_slots
+            )
+            or (
+                isinstance(part, CrosswordSecretCellsPart)
+                and coordinate in part.cells
+            )
+            for part in secret.parts
+        )
+    )
+
+
+def _crossword_with_cell_role(
+    crossword: CrosswordDocument,
+    coordinate: Coordinate,
+    role: LetterCellRole | LegendCellRole,
+    slots: tuple[WordSlot, ...],
+    affected_slots: set[str],
+) -> CrosswordDocument:
+    rows = [list(row) for row in crossword.grid.cells]
+    rows[coordinate.row - 1][coordinate.column - 1] = role
+    return replace(
+        crossword,
+        grid=replace(
+            crossword.grid,
+            cells=tuple(tuple(row) for row in rows),
+        ),
+        slots=slots,
+        secrets=_secrets_after_cell_role_change(
+            crossword,
+            affected_slots,
+            coordinate,
+        ),
+    )
+
+
+def _letter_cell_to_legend(
+    crossword: CrosswordDocument,
+    coordinate: Coordinate,
+) -> CrosswordDocument:
+    identifiers = {slot.identifier for slot in crossword.slots}
+    affected_slots: set[str] = set()
+    slots: list[WordSlot] = []
+
+    for slot in crossword.slots:
+        coordinates = slot_coordinates(slot)
+        if coordinate not in coordinates:
+            slots.append(slot)
+            continue
+        if slot.in_help:
+            raise GuiInputError(
+                "Roli pole nelze změnit, protože jím prochází heslo "
+                "uvedené v pomůcce."
+            )
+
+        affected_slots.add(slot.identifier)
+        offset = coordinates.index(coordinate)
+        before_length = offset
+        after_length = slot.length - offset - 1
+        if before_length:
+            slots.append(
+                _blank_changed_slot(slot, length=before_length)
+            )
+        if not after_length:
+            continue
+
+        after_start = coordinates[offset + 1]
+        if before_length:
+            slots.append(
+                WordSlot(
+                    identifier=_next_slot_identifier(
+                        identifiers,
+                        slot.direction,
+                    ),
+                    start=after_start,
+                    direction=slot.direction,
+                    length=after_length,
+                    legend_position=coordinate,
+                )
+            )
+        else:
+            slots.append(
+                _blank_changed_slot(
+                    slot,
+                    start=after_start,
+                    length=after_length,
+                    legend_position=coordinate,
+                )
+            )
+
+    for index, slot in enumerate(slots):
+        expected_start = _shift_coordinate(coordinate, slot.direction, 1)
+        if slot.start == expected_start and slot.legend_position is None:
+            slots[index] = replace(slot, legend_position=coordinate)
+
+    if not any(slot.legend_position == coordinate for slot in slots):
+        raise GuiInputError(
+            "Legenda musí mít bezprostředně napravo nebo pod sebou "
+            "místo pro heslo."
+        )
+
+    return _crossword_with_cell_role(
+        crossword,
+        coordinate,
+        LegendCellRole(),
+        tuple(slots),
+        affected_slots,
+    )
+
+
+def _legend_cell_to_letter(
+    crossword: CrosswordDocument,
+    coordinate: Coordinate,
+) -> CrosswordDocument:
+    replacements: dict[str, WordSlot] = {}
+    removed_slots: set[str] = set()
+    affected_slots: set[str] = set()
+
+    for direction in ("horizontal", "vertical"):
+        before_coordinate = _shift_coordinate(coordinate, direction, -1)
+        after_coordinate = _shift_coordinate(coordinate, direction, 1)
+        before = next(
+            (
+                slot
+                for slot in crossword.slots
+                if slot.direction == direction
+                and slot_coordinates(slot)[-1] == before_coordinate
+            ),
+            None,
+        )
+        after = next(
+            (
+                slot
+                for slot in crossword.slots
+                if slot.direction == direction
+                and slot.start == after_coordinate
+            ),
+            None,
+        )
+        changed = tuple(slot for slot in (before, after) if slot is not None)
+        if any(slot.in_help for slot in changed):
+            raise GuiInputError(
+                "Roli pole nelze změnit, protože na něj navazuje heslo "
+                "uvedené v pomůcce."
+            )
+        affected_slots.update(slot.identifier for slot in changed)
+
+        if before is not None and after is not None:
+            replacements[before.identifier] = _blank_changed_slot(
+                before,
+                length=before.length + 1 + after.length,
+            )
+            removed_slots.add(after.identifier)
+        elif before is not None:
+            replacements[before.identifier] = _blank_changed_slot(
+                before,
+                length=before.length + 1,
+            )
+        elif after is not None:
+            replacements[after.identifier] = _blank_changed_slot(
+                after,
+                start=coordinate,
+                length=after.length + 1,
+                legend_position=None,
+            )
+
+    slots = tuple(
+        replacements.get(slot.identifier, slot)
+        for slot in crossword.slots
+        if slot.identifier not in removed_slots
+    )
+    return _crossword_with_cell_role(
+        crossword,
+        coordinate,
+        LetterCellRole(),
+        slots,
+        affected_slots,
+    )
+
+
+def set_crossword_cell_role(
+    crossword: CrosswordDocument,
+    coordinate: Coordinate,
+    role: EditableCellRole,
+) -> CrosswordDocument:
+    """Přepne písmennou a legendovou buňku a upraví navazující sloty."""
+
+    if role not in {"letter", "legend"}:
+        raise GuiInputError(f"Nepodporovaná role pole {role!r}.")
+    if not (
+        1 <= coordinate.row <= crossword.grid.height
+        and 1 <= coordinate.column <= crossword.grid.width
+    ):
+        raise GuiInputError("Vybrané pole leží mimo křížovku.")
+
+    current = crossword.grid.cells[coordinate.row - 1][coordinate.column - 1]
+    if role == "letter" and isinstance(current, LetterCellRole):
+        return crossword
+    if role == "legend" and isinstance(current, LegendCellRole):
+        return crossword
+    if not isinstance(current, (LetterCellRole, LegendCellRole)):
+        raise GuiInputError(
+            "Roli lze měnit pouze mezi písmenným a legendovým polem."
+        )
+
+    changed = (
+        _letter_cell_to_legend(crossword, coordinate)
+        if role == "legend"
+        else _legend_cell_to_letter(crossword, coordinate)
+    )
+    try:
+        dump_crossword_document(changed, StringIO())
+    except ModelError as error:
+        raise GuiInputError(
+            "Roli tohoto pole nelze změnit, aniž by vzniklo neplatné "
+            f"rozvržení: {error}"
+        ) from error
+    return changed
+
+
+def _cell_role_change_discards_content(
+    before: CrosswordDocument,
+    after: CrosswordDocument,
+) -> bool:
+    after_slots = {slot.identifier: slot for slot in after.slots}
+    for slot in before.slots:
+        if slot.answer is None and slot.clue is None and not slot.in_help:
+            continue
+        changed = after_slots.get(slot.identifier)
+        if changed is None or (
+            changed.answer,
+            changed.clue,
+            changed.in_help,
+        ) != (slot.answer, slot.clue, slot.in_help):
+            return True
+    return before.secrets != after.secrets
+
+
 def _crossword_slot(
     crossword: CrosswordDocument,
     identifier: str,
@@ -671,6 +966,12 @@ class CrosswordPreview(tk.Canvas):
         self._grid_geometry: tuple[float, float, float] | None = None
         self._cell_click_handler: Callable[[Coordinate], None] | None = None
         self._grid_resize_handler: Callable[[int, int], None] | None = None
+        self._cell_role_handler: (
+            Callable[[Coordinate, EditableCellRole], None] | None
+        ) = None
+        self._context_menu_coordinate: Coordinate | None = None
+        self._cell_role_variable = f"krizovkar_cell_role_{id(self)}"
+        self._cell_role_menu = self._build_cell_role_menu()
         self._minimum_dimension = 1
         self._maximum_dimension = _MAX_CROSSWORD_DIMENSION
         self._resize_drag: _GridResizeDrag | None = None
@@ -681,12 +982,35 @@ class CrosswordPreview(tk.Canvas):
         self.bind("<ButtonRelease-1>", self._resize_released)
         self.bind("<Motion>", self._pointer_moved)
         self.bind("<Leave>", self._pointer_left)
+        self.bind("<<ContextMenu>>", self._show_cell_role_menu)
+
+    def _build_cell_role_menu(self) -> tk.Menu:
+        menu = tk.Menu(self, tearoff=False)
+        menu.add_radiobutton(
+            label="Písmeno",
+            value="letter",
+            variable=self._cell_role_variable,
+            command=lambda: self._choose_cell_role("letter"),
+        )
+        menu.add_radiobutton(
+            label="Legenda",
+            value="legend",
+            variable=self._cell_role_variable,
+            command=lambda: self._choose_cell_role("legend"),
+        )
+        return menu
 
     def set_cell_click_handler(
         self,
         handler: Callable[[Coordinate], None],
     ) -> None:
         self._cell_click_handler = handler
+
+    def set_cell_role_handler(
+        self,
+        handler: Callable[[Coordinate, EditableCellRole], None],
+    ) -> None:
+        self._cell_role_handler = handler
 
     def set_grid_resize_handler(
         self,
@@ -1122,23 +1446,56 @@ class CrosswordPreview(tk.Canvas):
         return "break"
 
     def _cell_clicked(self, event: tk.Event[tk.Misc]) -> None:
-        if self._crossword is None or self._grid_geometry is None:
+        coordinate = self._cell_coordinate_at(event.x, event.y)
+        if coordinate is None:
             return
+        handler = self._cell_click_handler
+        if handler is not None:
+            handler(coordinate)
+
+    def _cell_coordinate_at(self, x: float, y: float) -> Coordinate | None:
+        if self._crossword is None or self._grid_geometry is None:
+            return None
         left, top, cell_size = self._grid_geometry
-        column = int((event.x - left) // cell_size) + 1
-        row = int((event.y - top) // cell_size) + 1
+        column = int((x - left) // cell_size) + 1
+        row = int((y - top) // cell_size) + 1
         if (
-            event.x < left
-            or event.y < top
+            x < left
+            or y < top
             or row < 1
             or column < 1
             or row > self._crossword.grid.height
             or column > self._crossword.grid.width
         ):
-            return
-        handler = self._cell_click_handler
-        if handler is not None:
-            handler(Coordinate(row=row, column=column))
+            return None
+        return Coordinate(row=row, column=column)
+
+    def _show_cell_role_menu(self, event: tk.Event[tk.Misc]) -> str | None:
+        coordinate = self._cell_coordinate_at(event.x, event.y)
+        crossword = self._crossword
+        if coordinate is None or crossword is None:
+            return None
+        cell = crossword.grid.cells[coordinate.row - 1][coordinate.column - 1]
+        if isinstance(cell, (LetterCell, SecretCell)):
+            role: EditableCellRole = "letter"
+        elif isinstance(cell, LegendCell):
+            role = "legend"
+        else:
+            return None
+
+        self._context_menu_coordinate = coordinate
+        self._cell_role_menu.setvar(self._cell_role_variable, role)
+        try:
+            self._cell_role_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self._cell_role_menu.grab_release()
+        return "break"
+
+    def _choose_cell_role(self, role: EditableCellRole) -> None:
+        coordinate = self._context_menu_coordinate
+        handler = self._cell_role_handler
+        if coordinate is not None and handler is not None:
+            handler(coordinate, role)
 
 
 def load_editable_document(
@@ -1794,6 +2151,9 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         self.crossword_preview.grid(row=0, column=0, sticky="nsew")
         self.crossword_preview.set_cell_click_handler(self._preview_cell_clicked)
+        self.crossword_preview.set_cell_role_handler(
+            self._preview_cell_role_changed
+        )
         self.crossword_preview.set_grid_resize_handler(
             self._preview_grid_resized,
             minimum_dimension=_minimum_generated_dimension(
@@ -2373,6 +2733,41 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.slots_tree.see(selected)
         self._selected_slot_identifier = selected
         self._slot_selection_changed()
+
+    def _preview_cell_role_changed(
+        self,
+        coordinate: Coordinate,
+        role: EditableCellRole,
+    ) -> None:
+        if not self._save_inline_slot_edit():
+            return
+        crossword = self._crossword
+        if crossword is None:
+            return
+        try:
+            changed = set_crossword_cell_role(crossword, coordinate, role)
+        except GuiInputError as error:
+            self._show_action_error("Roli pole nelze změnit", str(error))
+            return
+        if changed is crossword:
+            return
+        if _cell_role_change_discards_content(crossword, changed) and not (
+            messagebox.askyesno(
+                "Změnit roli pole?",
+                "Změna upraví navazující místa pro hesla a odstraní "
+                "jejich vyplněný obsah nebo nastavení tajenky. "
+                "Chcete pokračovat?",
+                parent=self.root,
+            )
+        ):
+            return
+
+        self._crossword = changed
+        self._template_layout = _template_generation_layout(changed)
+        self._selected_slot_identifier = None
+        self._set_dirty(True)
+        self._rebuild_slot_tree()
+        self._refresh_crossword_view()
 
     def clear_selected_slot(self) -> None:
         crossword = self._crossword

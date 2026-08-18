@@ -40,11 +40,15 @@ from krizovkar.gui import (
     fill_crossword_slot,
     main,
     parse_slot_content,
+    set_crossword_cell_role,
     slot_coordinates,
 )
 from krizovkar.model import (
+    Coordinate,
     CrosswordDocument,
+    LegendCellRole,
     LetterCell,
+    LetterCellRole,
     load_crossword_document,
     write_crossword_document,
 )
@@ -783,6 +787,99 @@ class GuiTest(unittest.TestCase):
             all(slot.legend_position is None for slot in crossword.slots)
         )
 
+    def test_changes_letter_to_legend_and_splits_crossing_slots(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+        coordinate = Coordinate(row=2, column=2)
+
+        changed = set_crossword_cell_role(crossword, coordinate, "legend")
+
+        self.assertIsInstance(changed.grid.cells[1][1], LegendCellRole)
+        following = tuple(
+            slot
+            for slot in changed.slots
+            if slot.legend_position == coordinate
+        )
+        self.assertEqual(
+            {"horizontal", "vertical"},
+            {slot.direction for slot in following},
+        )
+        self.assertTrue(
+            all(
+                coordinate not in slot_coordinates(slot)
+                for slot in changed.slots
+            )
+        )
+
+    def test_changing_created_legend_back_to_letter_rejoins_slots(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+        coordinate = Coordinate(row=2, column=2)
+        with_legend = set_crossword_cell_role(
+            crossword,
+            coordinate,
+            "legend",
+        )
+
+        restored = set_crossword_cell_role(
+            with_legend,
+            coordinate,
+            "letter",
+        )
+
+        self.assertEqual(crossword, restored)
+        self.assertIsInstance(restored.grid.cells[1][1], LetterCellRole)
+
+    def test_cell_role_change_preserves_unaffected_filled_slot(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+        crossword = fill_crossword_slot(
+            crossword,
+            "h1",
+            "ABC",
+            "První řádek",
+        )
+        crossword = fill_crossword_slot(
+            crossword,
+            "h2",
+            "DEF",
+            "Druhý řádek",
+        )
+
+        changed = set_crossword_cell_role(
+            crossword,
+            Coordinate(row=2, column=2),
+            "legend",
+        )
+
+        slots = {slot.identifier: slot for slot in changed.slots}
+        self.assertEqual("ABC", slots["h1"].answer)
+        self.assertEqual("První řádek", slots["h1"].clue)
+        self.assertIsNone(slots["h2"].answer)
+        self.assertIsNone(slots["h2"].clue)
+
+    def test_rejects_legend_without_following_slot(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+
+        with self.assertRaisesRegex(
+            GuiInputError,
+            "Legenda musí mít bezprostředně napravo nebo pod sebou",
+        ):
+            set_crossword_cell_role(
+                crossword,
+                Coordinate(row=3, column=3),
+                "legend",
+            )
+
     def test_reports_too_small_crossword_as_gui_error(self) -> None:
         with self.assertRaisesRegex(GuiInputError, "nelze rozdělit"):
             create_blank_template(
@@ -1004,6 +1101,7 @@ class GuiTest(unittest.TestCase):
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         parent = Mock()
         window._preview_cell_clicked = Mock()
+        window._preview_cell_role_changed = Mock()
         window._template_layout = "swedish"
         window._crossword = create_blank_template(
             CrosswordSettings(7, 6),
@@ -1040,12 +1138,69 @@ class GuiTest(unittest.TestCase):
         preview.set_cell_click_handler.assert_called_once_with(
             window._preview_cell_clicked
         )
+        preview.set_cell_role_handler.assert_called_once_with(
+            window._preview_cell_role_changed
+        )
         preview.set_grid_resize_handler.assert_called_once_with(
             window._preview_grid_resized,
             minimum_dimension=4,
             maximum_dimension=50,
         )
         spinbox_type.assert_not_called()
+
+    def test_crossword_preview_cell_role_menu_offers_both_roles(self) -> None:
+        preview = CrosswordPreview.__new__(CrosswordPreview)
+        preview._cell_role_variable = "cell_role"
+        preview._choose_cell_role = Mock()
+        menu = Mock()
+
+        with patch("krizovkar.gui.tk.Menu", return_value=menu) as menu_type:
+            created = preview._build_cell_role_menu()
+
+        self.assertIs(menu, created)
+        menu_type.assert_called_once_with(preview, tearoff=False)
+        items = menu.add_radiobutton.call_args_list
+        self.assertEqual(
+            ["Písmeno", "Legenda"],
+            [item.kwargs["label"] for item in items],
+        )
+        self.assertEqual(
+            ["letter", "legend"],
+            [item.kwargs["value"] for item in items],
+        )
+        self.assertTrue(
+            all(item.kwargs["variable"] == "cell_role" for item in items)
+        )
+        items[1].kwargs["command"]()
+        preview._choose_cell_role.assert_called_once_with("legend")
+
+    def test_crossword_preview_context_menu_targets_clicked_cell(self) -> None:
+        preview = CrosswordPreview.__new__(CrosswordPreview)
+        preview._crossword = create_grid_from_crossword(
+            create_blank_template(CrosswordSettings(3, 3), "numbered")
+        )
+        preview._grid_geometry = (100.0, 50.0, 20.0)
+        preview._cell_role_variable = "cell_role"
+        preview._cell_role_menu = Mock()
+        preview._context_menu_coordinate = None
+        preview._cell_role_handler = Mock()
+        event = Mock(x=130, y=80, x_root=230, y_root=180)
+
+        result = preview._show_cell_role_menu(event)
+        preview._choose_cell_role("legend")
+
+        self.assertEqual("break", result)
+        self.assertEqual(Coordinate(2, 2), preview._context_menu_coordinate)
+        preview._cell_role_menu.setvar.assert_called_once_with(
+            "cell_role",
+            "letter",
+        )
+        preview._cell_role_menu.tk_popup.assert_called_once_with(230, 180)
+        preview._cell_role_menu.grab_release.assert_called_once_with()
+        preview._cell_role_handler.assert_called_once_with(
+            Coordinate(2, 2),
+            "legend",
+        )
 
     def test_crossword_preview_heading_refreshes_current_dimensions(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
@@ -1823,6 +1978,62 @@ class GuiTest(unittest.TestCase):
 
         ask.assert_called_once()
         create_template.assert_not_called()
+        self.assertIs(crossword, window._crossword)
+        window._set_dirty.assert_not_called()
+
+    def test_preview_cell_role_change_updates_only_its_document(self) -> None:
+        window = Mock()
+        window._save_inline_slot_edit.return_value = True
+        crossword = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+        window._crossword = crossword
+
+        CrosswordDocumentWindow._preview_cell_role_changed(
+            window,
+            Coordinate(row=2, column=2),
+            "legend",
+        )
+
+        self.assertIsInstance(window._crossword.grid.cells[1][1], LegendCellRole)
+        self.assertEqual("swedish", window._template_layout)
+        window._set_dirty.assert_called_once_with(True)
+        window._rebuild_slot_tree.assert_called_once_with()
+        window._refresh_crossword_view.assert_called_once_with()
+
+    def test_preview_cell_role_change_confirms_discarding_content(self) -> None:
+        window = Mock()
+        window._save_inline_slot_edit.return_value = True
+        crossword = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+        crossword = fill_crossword_slot(
+            crossword,
+            "h2",
+            "DEF",
+            "Druhý řádek",
+        )
+        window._crossword = crossword
+
+        with patch(
+            "krizovkar.gui.messagebox.askyesno",
+            return_value=False,
+        ) as ask:
+            CrosswordDocumentWindow._preview_cell_role_changed(
+                window,
+                Coordinate(row=2, column=2),
+                "legend",
+            )
+
+        ask.assert_called_once_with(
+            "Změnit roli pole?",
+            "Změna upraví navazující místa pro hesla a odstraní "
+            "jejich vyplněný obsah nebo nastavení tajenky. "
+            "Chcete pokračovat?",
+            parent=window.root,
+        )
         self.assertIs(crossword, window._crossword)
         window._set_dirty.assert_not_called()
 

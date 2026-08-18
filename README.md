@@ -69,6 +69,12 @@ vytvoří rozvržení; obsahuje-li dokument doplněná hesla nebo tajenku, edito
 nejprve vyžádá potvrzení. Prázdnou tiskovou křížovku lze exportovat do PDF
 kdykoli, samostatné řešení až po vyplnění všech hesel.
 
+Pravé tlačítko nad písmenným nebo legendovým polem náhledu otevře nabídku
+jeho role **Písmeno** / **Legenda**. Editor podle změny rozdělí nebo spojí
+navazující místa pro hesla. Pokud by tím odstranil jejich vyplněný obsah nebo
+nastavení tajenky, nejprve si vyžádá potvrzení; změnu vedoucí k neplatnému
+rozvržení odmítne.
+
 Nabídka **Soubor** otevírá existující `kind: crossword` v dalším okně.
 Na macOS používá zkratky `⌘N`, `⌘O`,
 `⌘S`, `⇧⌘S` a `⌘W`; na ostatních systémech odpovídající `Ctrl+N`,
