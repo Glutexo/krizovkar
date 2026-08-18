@@ -42,9 +42,9 @@ pseudonáhodně. Tlačítko **Vytvořit** otevře výsledek jako nový samostatn
 dokument. Neplatný nebo nerozvrhnutelný rozměr dialog vysvětlí a ponechá
 otevřený k opravě. Tlačítko-přepínač **CLI** vlevo dole rozbalí ve spodní
 části dialogu pole s příkazem, který na příkazové řádce vytvoří totožnou
-šablonu. Pole používá písmo s pevnou šířkou a jeho zobrazení nemění
-velikost dialogu. U vygenerované varianty obsahuje také konkrétní seed,
-takže zachová stejné pseudonáhodné rozvržení.
+šablonu. Pole používá písmo s pevnou šířkou a otevře se pod tlačítky,
+aniž změní šířku dialogu. U vygenerované varianty obsahuje také
+konkrétní seed, takže zachová stejné pseudonáhodné rozvržení.
 
 Každé viditelné okno představuje právě jeden YAML soubor a v titulku ukazuje
 jeho název, případně **Nová šablona**. Hvězdička

@@ -674,8 +674,8 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._creation_mode_value: tk.StringVar
         self._cli_visible_value: tk.BooleanVar
         self._cli_command_value: tk.StringVar
+        self._cli_command_frame: ttk.LabelFrame
         self._cli_command_entry: ttk.Entry
-        self._cli_command_placeholder: ttk.Frame
         self._width_editor: ttk.Spinbox
         self._generated_seed = random.randrange(2**63)
         self._new_template: NewTemplateResult | None = None
@@ -684,13 +684,8 @@ class TemplateGenerationDialog(simpledialog.Dialog):
     def body(self, master: tk.Frame) -> tk.Widget:
         master.configure(padx=16, pady=12)
         master.columnconfigure(0, weight=1)
-        ttk.Label(
-            master,
-            text="Nastavte novou šablonu křížovky.",
-        ).grid(row=0, column=0, sticky="w")
-
         dimensions = ttk.Frame(master)
-        dimensions.grid(row=1, column=0, sticky="w", pady=(12, 0))
+        dimensions.grid(row=0, column=0, sticky="w")
         ttk.Label(dimensions, text="Sloupce").grid(row=0, column=0, sticky="w")
         ttk.Label(dimensions, text="Řádky").grid(
             row=0,
@@ -723,7 +718,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         ).grid(row=1, column=2, sticky="w", pady=(3, 0))
 
         ttk.Label(master, text="Typ křížovky").grid(
-            row=2,
+            row=1,
             column=0,
             sticky="w",
             pady=(14, 0),
@@ -737,16 +732,16 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             text="Švédská – nápovědy přímo v mřížce",
             variable=self._layout_value,
             value="swedish",
-        ).grid(row=3, column=0, sticky="w", pady=(5, 0))
+        ).grid(row=2, column=0, sticky="w", pady=(5, 0))
         ttk.Radiobutton(
             master,
             text="Číslovaná – nápovědy pod mřížkou",
             variable=self._layout_value,
             value="numbered",
-        ).grid(row=4, column=0, sticky="w", pady=(4, 0))
+        ).grid(row=3, column=0, sticky="w", pady=(4, 0))
 
         ttk.Label(master, text="Počáteční obsah").grid(
-            row=5,
+            row=4,
             column=0,
             sticky="w",
             pady=(14, 0),
@@ -760,13 +755,13 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             text="Prázdná – bez vnitřních předělů",
             variable=self._creation_mode_value,
             value="empty",
-        ).grid(row=6, column=0, sticky="w", pady=(5, 0))
+        ).grid(row=5, column=0, sticky="w", pady=(5, 0))
         ttk.Radiobutton(
             master,
             text="Vygenerovaná – pseudonáhodně rozdělená na hesla",
             variable=self._creation_mode_value,
             value="generated",
-        ).grid(row=7, column=0, sticky="w", pady=(4, 0))
+        ).grid(row=6, column=0, sticky="w", pady=(4, 0))
         self._cli_command_value = tk.StringVar(master=master)
         for value in (
             self._width_value,
@@ -799,27 +794,21 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             text="Zrušit",
             command=self.cancel,
         ).pack(side="right", padx=(0, 8))
+        buttons.pack(fill="x")
+        self._cli_command_frame = ttk.LabelFrame(
+            self,
+            text="Příkaz CLI",
+            padding=10,
+        )
+        self._cli_command_frame.columnconfigure(0, weight=1)
         self._cli_command_entry = ttk.Entry(
-            buttons,
+            self._cli_command_frame,
             textvariable=self._cli_command_value,
             state="readonly",
             width=1,
             font="TkFixedFont",
         )
-        self.update_idletasks()
-        self._cli_command_placeholder = ttk.Frame(
-            buttons,
-            width=1,
-            height=self._cli_command_entry.winfo_reqheight(),
-        )
-        self._cli_command_placeholder.pack_propagate(False)
-        self._cli_command_placeholder.pack(
-            side="left",
-            fill="x",
-            expand=True,
-            padx=8,
-        )
-        buttons.pack(fill="x")
+        self._cli_command_entry.grid(row=0, column=0, sticky="ew")
         self.bind("<Return>", self.ok)
         self.bind("<Escape>", self.cancel)
 
@@ -862,21 +851,13 @@ class TemplateGenerationDialog(simpledialog.Dialog):
     def _toggle_cli_command(self) -> None:
         if self._cli_visible_value.get():
             self._refresh_cli_command()
-            self._cli_command_placeholder.pack_forget()
-            self._cli_command_entry.pack(
-                side="left",
+            self._cli_command_frame.pack(
                 fill="x",
-                expand=True,
-                padx=8,
+                padx=16,
+                pady=(0, 16),
             )
         else:
-            self._cli_command_entry.pack_forget()
-            self._cli_command_placeholder.pack(
-                side="left",
-                fill="x",
-                expand=True,
-                padx=8,
-            )
+            self._cli_command_frame.pack_forget()
 
     def validate(self) -> bool:
         try:
