@@ -1062,6 +1062,10 @@ class GuiTest(unittest.TestCase):
             "KrizovkarSlots.Treeview",
             rowheight=30,
         )
+        slot_style.map.assert_called_once_with(
+            "KrizovkarSlot.TEntry",
+            foreground=[("invalid", "#c62828")],
+        )
         self.assertEqual(
             "KrizovkarSlots.Treeview",
             treeview_type.call_args.kwargs["style"],
@@ -1340,6 +1344,34 @@ class GuiTest(unittest.TestCase):
         clue_editor.focus_set.assert_called_once_with()
         clue_editor.selection_range.assert_called_once_with(0, tk.END)
 
+    def test_slot_cell_editor_clears_crossing_error_when_typing(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window.slots_tree = Mock()
+        editor = Mock()
+
+        with patch(
+            "krizovkar.gui.ttk.Entry",
+            return_value=editor,
+        ) as entry_type:
+            created = window._create_slot_cell_editor(
+                (10, 20, 180, 30),
+                "KOZY",
+            )
+
+        self.assertIs(editor, created)
+        entry_type.assert_called_once_with(
+            window.slots_tree,
+            style="KrizovkarSlot.TEntry",
+        )
+        editor.bind.assert_any_call(
+            "<KeyPress>",
+            window._clear_slot_editor_error,
+        )
+
+        window._clear_slot_editor_error(Mock(widget=editor))
+
+        editor.state.assert_called_once_with(("!invalid",))
+
     def test_inline_slot_edit_saves_both_values(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         original = create_blank_template(
@@ -1371,6 +1403,46 @@ class GuiTest(unittest.TestCase):
         window._show_action_error.assert_not_called()
         self.assertIsNone(window._slot_edit_identifier)
 
+    def test_conflicting_inline_slot_edit_marks_answer_red(self) -> None:
+        original = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        original = fill_crossword_slot(
+            original,
+            "h1",
+            "ABC",
+            "První řádek",
+        )
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window._crossword = original
+        window._slot_edit_identifier = "v1"
+        answer_editor = Mock()
+        clue_editor = Mock()
+        answer_editor.get.return_value = "ZDE"
+        clue_editor.get.return_value = "Na tomto místě"
+        window._slot_answer_editor = answer_editor
+        window._slot_clue_editor = clue_editor
+        window._set_dirty = Mock()
+        window._rebuild_slot_tree = Mock()
+        window._refresh_crossword_view = Mock()
+        window._show_action_error = Mock()
+
+        saved = window._save_inline_slot_edit()
+
+        self.assertFalse(saved)
+        self.assertIs(original, window._crossword)
+        answer_editor.state.assert_has_calls(
+            [call(("!invalid",)), call(("invalid",))]
+        )
+        window._show_action_error.assert_called_once_with(
+            "Heslo nelze uložit",
+            "Na křížení s heslem 'ABC' musí být v 1. poli "
+            "písmeno 'A', ne 'Z'.",
+        )
+        answer_editor.focus_set.assert_called_once_with()
+        window._set_dirty.assert_not_called()
+
     def test_invalid_inline_slot_edit_stays_open(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         original = create_blank_template(
@@ -1396,6 +1468,7 @@ class GuiTest(unittest.TestCase):
         self.assertIs(original, window._crossword)
         self.assertEqual("h1", window._slot_edit_identifier)
         window._show_action_error.assert_called_once()
+        answer_editor.state.assert_called_once_with(("!invalid",))
         answer_editor.focus_set.assert_called_once_with()
         answer_editor.destroy.assert_not_called()
         clue_editor.destroy.assert_not_called()

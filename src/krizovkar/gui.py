@@ -61,6 +61,8 @@ _SLOT_LIST_PLACEMENT_WINDOW = "window"
 _SLOT_TREE_STYLE = "KrizovkarSlots.Treeview"
 # Výchozí pole Aqua potřebuje 27 px plus okraj buňky.
 _SLOT_TREE_ROW_HEIGHT = 30
+_SLOT_EDITOR_STYLE = "KrizovkarSlot.TEntry"
+_SLOT_EDITOR_ERROR_COLOR = "#c62828"
 _PROJECT_REPOSITORY_URL = "https://github.com/Glutexo/krizovkar"
 _DIRECTION_LABELS = {
     "horizontal": "Vodorovně",
@@ -70,6 +72,10 @@ _DIRECTION_LABELS = {
 
 class GuiInputError(ValueError):
     """Nastavení zadané v grafickém rozhraní není platné."""
+
+
+class _CrossingConflictError(GuiInputError):
+    """Zadané heslo odporuje písmenu už uloženému na křížení."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -466,7 +472,7 @@ def fill_crossword_slot(
         if fixed is None or fixed[0] == letter:
             continue
         expected, crossing_answer = fixed
-        raise GuiInputError(
+        raise _CrossingConflictError(
             f"Na křížení s heslem {crossing_answer!r} musí být v "
             f"{position}. poli písmeno {expected!r}, ne {letter!r}."
         )
@@ -1762,9 +1768,14 @@ class CrosswordDocumentWindow(ttk.Frame):
         container.grid(row=0, column=0, sticky="nsew")
         container.columnconfigure(0, weight=1)
         container.rowconfigure(0, weight=1)
-        ttk.Style(parent).configure(
+        slot_style = ttk.Style(parent)
+        slot_style.configure(
             _SLOT_TREE_STYLE,
             rowheight=_SLOT_TREE_ROW_HEIGHT,
+        )
+        slot_style.map(
+            _SLOT_EDITOR_STYLE,
+            foreground=[("invalid", _SLOT_EDITOR_ERROR_COLOR)],
         )
         self.slots_tree = ttk.Treeview(
             container,
@@ -2064,7 +2075,10 @@ class CrosswordDocumentWindow(ttk.Frame):
         value: str,
     ) -> ttk.Entry:
         x, y, width, height = bounding_box
-        editor = ttk.Entry(self.slots_tree)
+        editor = ttk.Entry(
+            self.slots_tree,
+            style=_SLOT_EDITOR_STYLE,
+        )
         editor.insert(0, value)
         editor.place(
             x=x + 1,
@@ -2075,7 +2089,12 @@ class CrosswordDocumentWindow(ttk.Frame):
         editor.bind("<Return>", self._commit_inline_slot_edit)
         editor.bind("<Escape>", self._cancel_inline_slot_edit)
         editor.bind("<FocusOut>", self._inline_slot_editor_focus_out)
+        editor.bind("<KeyPress>", self._clear_slot_editor_error)
         return editor
+
+    def _clear_slot_editor_error(self, event: tk.Event[tk.Misc]) -> None:
+        editor = cast(ttk.Entry, event.widget)
+        editor.state(("!invalid",))
 
     def _inline_slot_editor_focus_out(
         self,
@@ -2114,6 +2133,7 @@ class CrosswordDocumentWindow(ttk.Frame):
 
         answer = answer_editor.get()
         clue = clue_editor.get()
+        answer_editor.state(("!invalid",))
         try:
             if not answer.strip() and not clue.strip():
                 updated = clear_crossword_slot(crossword, identifier)
@@ -2125,6 +2145,8 @@ class CrosswordDocumentWindow(ttk.Frame):
                     clue,
                 )
         except GuiInputError as error:
+            if isinstance(error, _CrossingConflictError):
+                answer_editor.state(("invalid",))
             self._show_action_error(
                 "Heslo nelze uložit",
                 str(error),
