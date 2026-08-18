@@ -147,6 +147,11 @@ def _keyboard_shortcut(key: str, *, shift: bool = False) -> _KeyboardShortcut:
     return _KeyboardShortcut(accelerator, sequence)
 
 
+def _multiple_cell_selection_sequence() -> str:
+    modifier = "Command" if sys.platform == "darwin" else "Control"
+    return f"<{modifier}-Button-1>"
+
+
 def _recent_documents_storage_path() -> Path:
     if sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
@@ -748,6 +753,30 @@ def set_crossword_cell_role(
     return changed
 
 
+def set_crossword_cells_role(
+    crossword: CrosswordDocument,
+    coordinates: Sequence[Coordinate],
+    role: EditableCellRole,
+) -> CrosswordDocument:
+    """Atomicky přepne roli všech vybraných buněk."""
+
+    ordered_coordinates = tuple(
+        sorted(set(coordinates), key=lambda item: (item.row, item.column))
+    )
+    changed = crossword
+    for coordinate in ordered_coordinates:
+        try:
+            changed = set_crossword_cell_role(changed, coordinate, role)
+        except GuiInputError as error:
+            if len(ordered_coordinates) == 1:
+                raise
+            raise GuiInputError(
+                f"Pole v řádku {coordinate.row}, sloupci "
+                f"{coordinate.column}: {error}"
+            ) from error
+    return changed
+
+
 def _cell_role_change_discards_content(
     before: CrosswordDocument,
     after: CrosswordDocument,
@@ -944,6 +973,7 @@ class CrosswordPreview(tk.Canvas):
 
     _GRID_COLOR = "#667085"
     _SELECTED_FILL = "#bfdbfe"
+    _ROLE_SELECTED_FILL = "#c4b5fd"
     _LEGEND_FILL = "#fef3c7"
     _EMPTY_FILL = "#e2e8f0"
     _HELP_FILL = "#dcfce7"
@@ -962,14 +992,15 @@ class CrosswordPreview(tk.Canvas):
         self._crossword: CrosswordGrid | None = None
         self._show_letters = True
         self._selected_coordinates: frozenset[Coordinate] = frozenset()
+        self._role_selected_coordinates: frozenset[Coordinate] = frozenset()
         self._empty_message = "Vytvořte rozvržení mřížky."
         self._grid_geometry: tuple[float, float, float] | None = None
         self._cell_click_handler: Callable[[Coordinate], None] | None = None
         self._grid_resize_handler: Callable[[int, int], None] | None = None
         self._cell_role_handler: (
-            Callable[[Coordinate, EditableCellRole], None] | None
+            Callable[[tuple[Coordinate, ...], EditableCellRole], None] | None
         ) = None
-        self._context_menu_coordinate: Coordinate | None = None
+        self._context_menu_coordinates: tuple[Coordinate, ...] = ()
         self._cell_role_variable = f"krizovkar_cell_role_{id(self)}"
         self._cell_role_menu = self._build_cell_role_menu()
         self._minimum_dimension = 1
@@ -978,6 +1009,10 @@ class CrosswordPreview(tk.Canvas):
         self._resize_target: tuple[int, int] | None = None
         self.bind("<Configure>", self._redraw)
         self.bind("<Button-1>", self._pointer_pressed)
+        self.bind(
+            _multiple_cell_selection_sequence(),
+            self._toggle_cell_role_selection,
+        )
         self.bind("<B1-Motion>", self._resize_dragged)
         self.bind("<ButtonRelease-1>", self._resize_released)
         self.bind("<Motion>", self._pointer_moved)
@@ -1008,7 +1043,7 @@ class CrosswordPreview(tk.Canvas):
 
     def set_cell_role_handler(
         self,
-        handler: Callable[[Coordinate, EditableCellRole], None],
+        handler: Callable[[tuple[Coordinate, ...], EditableCellRole], None],
     ) -> None:
         self._cell_role_handler = handler
 
@@ -1037,12 +1072,19 @@ class CrosswordPreview(tk.Canvas):
 
         self._crossword = crossword
         self._selected_coordinates = frozenset(selected_coordinates)
+        self._role_selected_coordinates = frozenset(
+            coordinate
+            for coordinate in self._role_selected_coordinates
+            if self._editable_cell_role_at(coordinate) is not None
+        )
         self._show_letters = show_letters
         self._redraw()
 
     def clear_preview(self, message: str) -> None:
         self._crossword = None
         self._selected_coordinates = frozenset()
+        self._role_selected_coordinates = frozenset()
+        self._context_menu_coordinates = ()
         self._empty_message = message
         self._grid_geometry = None
         self._resize_drag = None
@@ -1108,6 +1150,8 @@ class CrosswordPreview(tk.Canvas):
                     bars = cell.bars
                     if coordinate in self._selected_coordinates:
                         fill = self._SELECTED_FILL
+                if coordinate in self._role_selected_coordinates:
+                    fill = self._ROLE_SELECTED_FILL
 
                 self.create_rectangle(
                     x1,
@@ -1295,6 +1339,7 @@ class CrosswordPreview(tk.Canvas):
     def _pointer_pressed(self, event: tk.Event[tk.Misc]) -> str | None:
         edges = self._resize_edges_at(event.x, event.y)
         if edges == (0, 0):
+            self._clear_cell_role_selection()
             self._cell_clicked(event)
             return None
 
@@ -1453,6 +1498,36 @@ class CrosswordPreview(tk.Canvas):
         if handler is not None:
             handler(coordinate)
 
+    def _toggle_cell_role_selection(
+        self,
+        event: tk.Event[tk.Misc],
+    ) -> str:
+        if self._resize_edges_at(event.x, event.y) != (0, 0):
+            return "break"
+        coordinate = self._cell_coordinate_at(event.x, event.y)
+        if (
+            coordinate is None
+            or self._editable_cell_role_at(coordinate) is None
+        ):
+            return "break"
+
+        selected = set(self._role_selected_coordinates)
+        if coordinate in selected:
+            selected.remove(coordinate)
+        else:
+            selected.add(coordinate)
+        self._role_selected_coordinates = frozenset(selected)
+        self._context_menu_coordinates = ()
+        self._redraw()
+        return "break"
+
+    def _clear_cell_role_selection(self) -> None:
+        if not self._role_selected_coordinates:
+            return
+        self._role_selected_coordinates = frozenset()
+        self._context_menu_coordinates = ()
+        self._redraw()
+
     def _cell_coordinate_at(self, x: float, y: float) -> Coordinate | None:
         if self._crossword is None or self._grid_geometry is None:
             return None
@@ -1470,21 +1545,48 @@ class CrosswordPreview(tk.Canvas):
             return None
         return Coordinate(row=row, column=column)
 
-    def _show_cell_role_menu(self, event: tk.Event[tk.Misc]) -> str | None:
-        coordinate = self._cell_coordinate_at(event.x, event.y)
+    def _editable_cell_role_at(
+        self,
+        coordinate: Coordinate,
+    ) -> EditableCellRole | None:
         crossword = self._crossword
-        if coordinate is None or crossword is None:
+        if (
+            crossword is None
+            or coordinate.row < 1
+            or coordinate.column < 1
+            or coordinate.row > crossword.grid.height
+            or coordinate.column > crossword.grid.width
+        ):
             return None
         cell = crossword.grid.cells[coordinate.row - 1][coordinate.column - 1]
         if isinstance(cell, (LetterCell, SecretCell)):
-            role: EditableCellRole = "letter"
-        elif isinstance(cell, LegendCell):
-            role = "legend"
-        else:
+            return "letter"
+        if isinstance(cell, LegendCell):
+            return "legend"
+        return None
+
+    def _show_cell_role_menu(self, event: tk.Event[tk.Misc]) -> str | None:
+        coordinate = self._cell_coordinate_at(event.x, event.y)
+        if coordinate is None or self._editable_cell_role_at(coordinate) is None:
             return None
 
-        self._context_menu_coordinate = coordinate
-        self._cell_role_menu.setvar(self._cell_role_variable, role)
+        if coordinate not in self._role_selected_coordinates:
+            self._role_selected_coordinates = frozenset({coordinate})
+            self._redraw()
+        coordinates = tuple(
+            sorted(
+                self._role_selected_coordinates,
+                key=lambda item: (item.row, item.column),
+            )
+        )
+        roles = {
+            role
+            for selected in coordinates
+            if (role := self._editable_cell_role_at(selected)) is not None
+        }
+        current_role = roles.pop() if len(roles) == 1 else ""
+        self._context_menu_coordinates = coordinates
+        self._cell_role_menu.setvar(self._cell_role_variable, current_role)
         try:
             self._cell_role_menu.tk_popup(event.x_root, event.y_root)
         finally:
@@ -1492,10 +1594,10 @@ class CrosswordPreview(tk.Canvas):
         return "break"
 
     def _choose_cell_role(self, role: EditableCellRole) -> None:
-        coordinate = self._context_menu_coordinate
+        coordinates = self._context_menu_coordinates
         handler = self._cell_role_handler
-        if coordinate is not None and handler is not None:
-            handler(coordinate, role)
+        if coordinates and handler is not None:
+            handler(coordinates, role)
 
 
 def load_editable_document(
@@ -2736,7 +2838,7 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _preview_cell_role_changed(
         self,
-        coordinate: Coordinate,
+        coordinates: tuple[Coordinate, ...],
         role: EditableCellRole,
     ) -> None:
         if not self._save_inline_slot_edit():
@@ -2745,15 +2847,22 @@ class CrosswordDocumentWindow(ttk.Frame):
         if crossword is None:
             return
         try:
-            changed = set_crossword_cell_role(crossword, coordinate, role)
+            changed = set_crossword_cells_role(crossword, coordinates, role)
         except GuiInputError as error:
-            self._show_action_error("Roli pole nelze změnit", str(error))
+            title = (
+                "Role polí nelze změnit"
+                if len(coordinates) > 1
+                else "Roli pole nelze změnit"
+            )
+            self._show_action_error(title, str(error))
             return
         if changed is crossword:
             return
         if _cell_role_change_discards_content(crossword, changed) and not (
             messagebox.askyesno(
-                "Změnit roli pole?",
+                "Změnit role polí?"
+                if len(coordinates) > 1
+                else "Změnit roli pole?",
                 "Změna upraví navazující místa pro hesla a odstraní "
                 "jejich vyplněný obsah nebo nastavení tajenky. "
                 "Chcete pokračovat?",

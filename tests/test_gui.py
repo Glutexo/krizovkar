@@ -28,6 +28,7 @@ from krizovkar.gui import (
     _create_view_menu,
     _create_window_menu,
     _keyboard_shortcut,
+    _multiple_cell_selection_sequence,
     _ReadOnlyText,
     _recent_document_label,
     _recent_documents_storage_path,
@@ -41,6 +42,7 @@ from krizovkar.gui import (
     main,
     parse_slot_content,
     set_crossword_cell_role,
+    set_crossword_cells_role,
     slot_coordinates,
 )
 from krizovkar.model import (
@@ -93,7 +95,10 @@ def _resizable_preview() -> tuple[CrosswordPreview, Mock]:
     preview._maximum_dimension = 50
     preview._resize_drag = None
     preview._resize_target = None
+    preview._role_selected_coordinates = frozenset()
+    preview._context_menu_coordinates = ()
     preview._draw_resize_feedback = Mock()
+    preview._redraw = Mock()
     preview._set_resize_cursor = Mock()
     preview._cell_clicked = Mock()
     preview.delete = Mock()
@@ -190,6 +195,18 @@ class GuiTest(unittest.TestCase):
         self.assertEqual("<Control-n>", new_shortcut.sequence)
         self.assertEqual("Ctrl+Shift+S", save_as_shortcut.accelerator)
         self.assertEqual("<Control-Shift-S>", save_as_shortcut.sequence)
+
+    def test_multiple_cell_selection_uses_platform_modifier(self) -> None:
+        with patch("krizovkar.gui.sys.platform", "darwin"):
+            self.assertEqual(
+                "<Command-Button-1>",
+                _multiple_cell_selection_sequence(),
+            )
+        with patch("krizovkar.gui.sys.platform", "linux"):
+            self.assertEqual(
+                "<Control-Button-1>",
+                _multiple_cell_selection_sequence(),
+            )
 
     def test_menu_uses_macos_tk_command_accelerators(self) -> None:
         window = Mock()
@@ -834,6 +851,56 @@ class GuiTest(unittest.TestCase):
         self.assertEqual(crossword, restored)
         self.assertIsInstance(restored.grid.cells[1][1], LetterCellRole)
 
+    def test_changes_multiple_selected_cells_to_legends_at_once(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=4, height=4),
+            "numbered",
+        )
+        coordinates = (Coordinate(2, 2), Coordinate(3, 3))
+
+        changed = set_crossword_cells_role(
+            crossword,
+            coordinates,
+            "legend",
+        )
+
+        for coordinate in coordinates:
+            with self.subTest(coordinate=coordinate):
+                self.assertIsInstance(
+                    changed.grid.cells[coordinate.row - 1][coordinate.column - 1],
+                    LegendCellRole,
+                )
+                self.assertTrue(
+                    any(
+                        slot.legend_position == coordinate
+                        for slot in changed.slots
+                    )
+                )
+
+    def test_multiple_cell_role_change_is_atomic_on_error(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+
+        with self.assertRaisesRegex(
+            GuiInputError,
+            "Pole v řádku 3, sloupci 3",
+        ):
+            set_crossword_cells_role(
+                crossword,
+                (Coordinate(2, 2), Coordinate(3, 3)),
+                "legend",
+            )
+
+        self.assertTrue(
+            all(
+                isinstance(cell, LetterCellRole)
+                for row in crossword.grid.cells
+                for cell in row
+            )
+        )
+
     def test_cell_role_change_preserves_unaffected_filled_slot(self) -> None:
         crossword = create_blank_template(
             CrosswordSettings(width=3, height=3),
@@ -1182,15 +1249,20 @@ class GuiTest(unittest.TestCase):
         preview._grid_geometry = (100.0, 50.0, 20.0)
         preview._cell_role_variable = "cell_role"
         preview._cell_role_menu = Mock()
-        preview._context_menu_coordinate = None
+        preview._role_selected_coordinates = frozenset()
+        preview._context_menu_coordinates = ()
         preview._cell_role_handler = Mock()
+        preview._redraw = Mock()
         event = Mock(x=130, y=80, x_root=230, y_root=180)
 
         result = preview._show_cell_role_menu(event)
         preview._choose_cell_role("legend")
 
         self.assertEqual("break", result)
-        self.assertEqual(Coordinate(2, 2), preview._context_menu_coordinate)
+        self.assertEqual(
+            (Coordinate(2, 2),),
+            preview._context_menu_coordinates,
+        )
         preview._cell_role_menu.setvar.assert_called_once_with(
             "cell_role",
             "letter",
@@ -1198,9 +1270,62 @@ class GuiTest(unittest.TestCase):
         preview._cell_role_menu.tk_popup.assert_called_once_with(230, 180)
         preview._cell_role_menu.grab_release.assert_called_once_with()
         preview._cell_role_handler.assert_called_once_with(
-            Coordinate(2, 2),
+            (Coordinate(2, 2),),
             "legend",
         )
+
+    def test_crossword_preview_context_menu_uses_multiple_selection(self) -> None:
+        preview = CrosswordPreview.__new__(CrosswordPreview)
+        preview._crossword = create_grid_from_crossword(
+            create_blank_template(CrosswordSettings(3, 3), "numbered")
+        )
+        preview._grid_geometry = (100.0, 50.0, 20.0)
+        preview._cell_role_variable = "cell_role"
+        preview._cell_role_menu = Mock()
+        selected = frozenset({Coordinate(1, 1), Coordinate(2, 2)})
+        preview._role_selected_coordinates = selected
+        preview._context_menu_coordinates = ()
+        preview._cell_role_handler = Mock()
+        preview._redraw = Mock()
+        event = Mock(x=130, y=80, x_root=230, y_root=180)
+
+        result = preview._show_cell_role_menu(event)
+        preview._choose_cell_role("legend")
+
+        self.assertEqual("break", result)
+        self.assertEqual(
+            (Coordinate(1, 1), Coordinate(2, 2)),
+            preview._context_menu_coordinates,
+        )
+        preview._cell_role_menu.setvar.assert_called_once_with(
+            "cell_role",
+            "letter",
+        )
+        preview._redraw.assert_not_called()
+        preview._cell_role_handler.assert_called_once_with(
+            (Coordinate(1, 1), Coordinate(2, 2)),
+            "legend",
+        )
+
+    def test_crossword_preview_modifier_click_toggles_selected_cell(self) -> None:
+        preview = CrosswordPreview.__new__(CrosswordPreview)
+        preview._crossword = create_grid_from_crossword(
+            create_blank_template(CrosswordSettings(3, 3), "numbered")
+        )
+        preview._grid_geometry = (100.0, 50.0, 20.0)
+        preview._role_selected_coordinates = frozenset()
+        preview._context_menu_coordinates = ()
+        preview._resize_edges_at = Mock(return_value=(0, 0))
+        preview._redraw = Mock()
+        event = Mock(x=130, y=80)
+
+        first = preview._toggle_cell_role_selection(event)
+        second = preview._toggle_cell_role_selection(event)
+
+        self.assertEqual("break", first)
+        self.assertEqual("break", second)
+        self.assertEqual(frozenset(), preview._role_selected_coordinates)
+        self.assertEqual(2, preview._redraw.call_count)
 
     def test_crossword_preview_heading_refreshes_current_dimensions(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
@@ -1981,22 +2106,31 @@ class GuiTest(unittest.TestCase):
         self.assertIs(crossword, window._crossword)
         window._set_dirty.assert_not_called()
 
-    def test_preview_cell_role_change_updates_only_its_document(self) -> None:
+    def test_preview_cell_role_change_updates_selected_cells_in_its_document(
+        self,
+    ) -> None:
         window = Mock()
         window._save_inline_slot_edit.return_value = True
         crossword = create_blank_template(
-            CrosswordSettings(width=3, height=3),
+            CrosswordSettings(width=4, height=4),
             "numbered",
         )
         window._crossword = crossword
+        coordinates = (Coordinate(row=2, column=2), Coordinate(row=3, column=3))
 
         CrosswordDocumentWindow._preview_cell_role_changed(
             window,
-            Coordinate(row=2, column=2),
+            coordinates,
             "legend",
         )
 
-        self.assertIsInstance(window._crossword.grid.cells[1][1], LegendCellRole)
+        for coordinate in coordinates:
+            self.assertIsInstance(
+                window._crossword.grid.cells[
+                    coordinate.row - 1
+                ][coordinate.column - 1],
+                LegendCellRole,
+            )
         self.assertEqual("swedish", window._template_layout)
         window._set_dirty.assert_called_once_with(True)
         window._rebuild_slot_tree.assert_called_once_with()
@@ -2023,7 +2157,7 @@ class GuiTest(unittest.TestCase):
         ) as ask:
             CrosswordDocumentWindow._preview_cell_role_changed(
                 window,
-                Coordinate(row=2, column=2),
+                (Coordinate(row=2, column=2),),
                 "legend",
             )
 
