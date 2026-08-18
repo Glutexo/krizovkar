@@ -30,8 +30,8 @@ from krizovkar.gui import (
     _create_window_menu,
     _keyboard_shortcut,
     _multiple_cell_selection_sequence,
-    _open_pdf_in_preview,
-    _PreviewError,
+    _open_pdf_in_default_application,
+    _PdfOpenError,
     _PrintError,
     _ReadOnlyText,
     _recent_document_label,
@@ -226,7 +226,7 @@ class GuiTest(unittest.TestCase):
         file_menu = Mock()
         recent_documents_menu = Mock()
         export_menu = Mock()
-        preview_pdf_menu = Mock()
+        open_pdf_menu = Mock()
         print_menu = Mock()
         view_menu = Mock()
         slot_list_placement_menu = Mock()
@@ -245,7 +245,7 @@ class GuiTest(unittest.TestCase):
                     file_menu,
                     recent_documents_menu,
                     export_menu,
-                    preview_pdf_menu,
+                    open_pdf_menu,
                     print_menu,
                     view_menu,
                     slot_list_placement_menu,
@@ -288,8 +288,8 @@ class GuiTest(unittest.TestCase):
             menu=export_menu,
         )
         file_menu.add_cascade.assert_any_call(
-            label="Otevřít v Náhledu",
-            menu=preview_pdf_menu,
+            label="Otevřít jako PDF",
+            menu=open_pdf_menu,
         )
         file_menu.add_cascade.assert_any_call(
             label="Tisknout",
@@ -3320,7 +3320,7 @@ class GuiTest(unittest.TestCase):
         )
         create_grid.assert_called_once_with(application._crossword)
 
-    def test_preview_actions_choose_puzzle_and_solution(self) -> None:
+    def test_open_pdf_actions_choose_puzzle_and_solution(self) -> None:
         application = Mock()
         application._crossword = create_blank_template(
             CrosswordSettings(3, 3),
@@ -3330,25 +3330,25 @@ class GuiTest(unittest.TestCase):
         application._complete_grid_or_error.return_value = solution
 
         with patch("krizovkar.gui.create_grid_from_crossword") as create_grid:
-            CrosswordDocumentWindow.open_crossword_in_preview(application)
-            CrosswordDocumentWindow.open_solution_in_preview(application)
+            CrosswordDocumentWindow.open_crossword_pdf(application)
+            CrosswordDocumentWindow.open_solution_pdf(application)
 
         self.assertEqual(
             [
                 call(
                     create_grid.return_value,
                     filled=False,
-                    title="Otevřít v Náhledu – křížovka bez písmen",
+                    title="Otevřít jako PDF – křížovka bez písmen",
                     filename="krizovka.pdf",
                 ),
                 call(
                     solution,
                     filled=True,
-                    title="Otevřít v Náhledu – řešení s písmeny",
+                    title="Otevřít jako PDF – řešení s písmeny",
                     filename="reseni.pdf",
                 ),
             ],
-            application._open_pdf_in_preview.call_args_list,
+            application._open_temporary_pdf.call_args_list,
         )
         create_grid.assert_called_once_with(application._crossword)
 
@@ -3394,32 +3394,32 @@ class GuiTest(unittest.TestCase):
             crossword_window.print_menu.add_command.call_args_list,
         )
 
-    def test_preview_actions_offer_crossword_and_solution(self) -> None:
+    def test_open_pdf_actions_offer_crossword_and_solution(self) -> None:
         crossword_window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
-        crossword_window.preview_pdf_menu = Mock()
+        crossword_window.open_pdf_menu = Mock()
 
-        CrosswordDocumentWindow._add_preview_pdf_actions(crossword_window)
+        CrosswordDocumentWindow._add_open_pdf_actions(crossword_window)
 
         self.assertEqual(
             [
                 call(
                     label="Křížovku bez písmen…",
-                    command=crossword_window.open_crossword_in_preview,
+                    command=crossword_window.open_crossword_pdf,
                 ),
                 call(
                     label="Řešení s písmeny…",
-                    command=crossword_window.open_solution_in_preview,
+                    command=crossword_window.open_solution_pdf,
                     state="disabled",
                 ),
             ],
-            crossword_window.preview_pdf_menu.add_command.call_args_list,
+            crossword_window.open_pdf_menu.add_command.call_args_list,
         )
 
     def test_file_menu_enables_complete_crossword_outputs(self) -> None:
         application = Mock()
         application._save_menu_index = 4
         application._save_as_menu_index = 5
-        application.preview_pdf_menu = Mock()
+        application.open_pdf_menu = Mock()
         application._crossword = _filled_numbered_crossword()
 
         CrosswordDocumentWindow._refresh_file_menu(application)
@@ -3450,14 +3450,14 @@ class GuiTest(unittest.TestCase):
                 call(0, state="normal"),
                 call(1, state="normal"),
             ],
-            application.preview_pdf_menu.entryconfigure.call_args_list,
+            application.open_pdf_menu.entryconfigure.call_args_list,
         )
 
     def test_file_menu_disables_incomplete_crossword_outputs(self) -> None:
         application = Mock()
         application._save_menu_index = 4
         application._save_as_menu_index = 5
-        application.preview_pdf_menu = Mock()
+        application.open_pdf_menu = Mock()
         application._crossword = create_blank_template(
             CrosswordSettings(3, 3),
             "numbered",
@@ -3482,7 +3482,7 @@ class GuiTest(unittest.TestCase):
         )
         self.assertEqual(
             [call(0, state="normal"), call(1, state="disabled")],
-            application.preview_pdf_menu.entryconfigure.call_args_list,
+            application.open_pdf_menu.entryconfigure.call_args_list,
         )
 
     def test_page_format_is_chosen_in_export_dialog_and_remembered(self) -> None:
@@ -3729,7 +3729,7 @@ class GuiTest(unittest.TestCase):
         application.root.configure.assert_not_called()
         application.root.after.assert_not_called()
 
-    def test_opens_pdf_in_preview_with_chosen_page_format(self) -> None:
+    def test_opens_pdf_in_default_application_with_chosen_page_format(self) -> None:
         crossword = _filled_numbered_crossword()
         grid = create_grid_from_crossword(crossword)
         application = Mock()
@@ -3740,33 +3740,35 @@ class GuiTest(unittest.TestCase):
                 "krizovkar.renderer._run_lualatex",
                 side_effect=_fake_lualatex,
             ),
-            patch("krizovkar.gui._open_pdf_in_preview") as open_in_preview,
+            patch(
+                "krizovkar.gui._open_pdf_in_default_application"
+            ) as open_pdf,
         ):
-            CrosswordDocumentWindow._open_pdf_in_preview(
+            CrosswordDocumentWindow._open_temporary_pdf(
                 application,
                 grid,
                 filled=False,
-                title="Otevřít v Náhledu – křížovka bez písmen",
+                title="Otevřít jako PDF – křížovka bez písmen",
                 filename="krizovka.pdf",
             )
 
         application._choose_page_format.assert_called_once_with(
-            title="Otevřít v Náhledu – křížovka bez písmen",
-            confirm_label="Otevřít v Náhledu",
+            title="Otevřít jako PDF – křížovka bez písmen",
+            confirm_label="Otevřít jako PDF",
         )
-        previewed_pdf = open_in_preview.call_args.args[1]
-        self.assertEqual(PDF_BYTES, previewed_pdf.read_bytes())
-        open_in_preview.assert_called_once_with(
+        opened_pdf = open_pdf.call_args.args[1]
+        self.assertEqual(PDF_BYTES, opened_pdf.read_bytes())
+        open_pdf.assert_called_once_with(
             application.root,
-            previewed_pdf,
+            opened_pdf,
         )
         application.root.after.assert_called_once()
         delay, cleanup = application.root.after.call_args.args
         self.assertEqual(5 * 60 * 1000, delay)
         cleanup()
-        self.assertFalse(previewed_pdf.exists())
+        self.assertFalse(opened_pdf.exists())
 
-    def test_preview_system_error_removes_temporary_pdf(self) -> None:
+    def test_pdf_open_error_removes_temporary_pdf(self) -> None:
         crossword = _filled_numbered_crossword()
         grid = create_grid_from_crossword(crossword)
         application = Mock()
@@ -3778,42 +3780,37 @@ class GuiTest(unittest.TestCase):
                 side_effect=_fake_lualatex,
             ),
             patch(
-                "krizovkar.gui._open_pdf_in_preview",
-                side_effect=_PreviewError("Náhled není dostupný"),
-            ) as open_in_preview,
+                "krizovkar.gui._open_pdf_in_default_application",
+                side_effect=_PdfOpenError("výchozí aplikace není dostupná"),
+            ) as open_pdf,
         ):
-            CrosswordDocumentWindow._open_pdf_in_preview(
+            CrosswordDocumentWindow._open_temporary_pdf(
                 application,
                 grid,
                 filled=False,
-                title="Otevřít v Náhledu – křížovka bez písmen",
+                title="Otevřít jako PDF – křížovka bez písmen",
                 filename="krizovka.pdf",
             )
 
-        previewed_pdf = open_in_preview.call_args.args[1]
-        self.assertFalse(previewed_pdf.parent.exists())
+        opened_pdf = open_pdf.call_args.args[1]
+        self.assertFalse(opened_pdf.parent.exists())
         application._show_action_error.assert_called_once_with(
-            "PDF nelze otevřít v Náhledu",
-            "Náhled není dostupný",
+            "PDF nelze otevřít",
+            "výchozí aplikace není dostupná",
         )
         application.root.after.assert_not_called()
 
-    def test_macos_preview_uses_preview_bundle_identifier(self) -> None:
+    def test_macos_pdf_opening_uses_default_application(self) -> None:
         root = Mock()
         root.tk.call.return_value = "aqua"
         source = Path("krizovka.pdf")
         result = Mock(returncode=0, stdout="")
 
         with patch("krizovkar.gui.subprocess.run", return_value=result) as run:
-            _open_pdf_in_preview(root, source)
+            _open_pdf_in_default_application(root, source)
 
         run.assert_called_once_with(
-            (
-                "/usr/bin/open",
-                "-b",
-                "com.apple.Preview",
-                str(source),
-            ),
+            ("/usr/bin/open", str(source)),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -3823,17 +3820,37 @@ class GuiTest(unittest.TestCase):
             check=False,
         )
 
-    def test_preview_rejects_other_windowing_systems(self) -> None:
+    def test_windows_pdf_opening_uses_file_association(self) -> None:
+        root = Mock()
+        root.tk.call.return_value = "win32"
+        source = Path("krizovka.pdf")
+
+        with patch("krizovkar.gui.os.startfile", create=True) as startfile:
+            _open_pdf_in_default_application(root, source)
+
+        startfile.assert_called_once_with(str(source))
+
+    def test_x11_pdf_opening_uses_xdg_open(self) -> None:
         root = Mock()
         root.tk.call.return_value = "x11"
+        source = Path("krizovka.pdf")
+        result = Mock(returncode=0, stdout="")
 
-        with self.assertRaisesRegex(
-            _PreviewError,
-            "Náhled je dostupná pouze na macOS",
-        ):
-            _open_pdf_in_preview(root, Path("krizovka.pdf"))
+        with patch("krizovkar.gui.subprocess.run", return_value=result) as run:
+            _open_pdf_in_default_application(root, source)
 
-    def test_macos_preview_reports_open_failure(self) -> None:
+        run.assert_called_once_with(
+            ("xdg-open", str(source)),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+
+    def test_macos_pdf_opening_reports_command_failure(self) -> None:
         root = Mock()
         root.tk.call.return_value = "aqua"
         result = Mock(returncode=1, stdout="application not found")
@@ -3841,11 +3858,11 @@ class GuiTest(unittest.TestCase):
         with (
             patch("krizovkar.gui.subprocess.run", return_value=result),
             self.assertRaisesRegex(
-                _PreviewError,
-                "Aplikaci Náhled nelze spustit: application not found",
+                _PdfOpenError,
+                "PDF nelze otevřít ve výchozí aplikaci: application not found",
             ),
         ):
-            _open_pdf_in_preview(root, Path("krizovka.pdf"))
+            _open_pdf_in_default_application(root, Path("krizovka.pdf"))
 
     def test_macos_printing_uses_native_pdf_dialog(self) -> None:
         root = Mock()

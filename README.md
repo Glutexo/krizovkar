@@ -137,9 +137,9 @@ systémový tiskový dialog; na Windows a systémech X11 je odešle na výchozí
 tiskárnu. Pokud tiskárna ani tiskový systém nejsou dostupné, zobrazí konkrétní
 chybu. Dočasný soubor se nikam neexportuje a aplikace jej sama odstraní.
 
-Na macOS nabízí podnabídka **Soubor → Otevřít v Náhledu** stejné dvě
-podoby pro rychlou kontrolu hotového PDF. Po volbě formátu stránky je
-Křížovkář vytvoří jen dočasně a otevře přímo v systémové aplikaci Náhled;
+Podnabídka **Soubor → Otevřít jako PDF** nabízí stejné dvě podoby pro
+rychlou kontrolu hotového PDF. Po volbě formátu stránky je Křížovkář
+vytvoří jen dočasně a otevře ve výchozí aplikaci operačního systému;
 pro trvalé uložení nadále slouží export.
 
 Hesla s vepsanou legendou mají místo pro nápovědu přímo v předem vytvořené
