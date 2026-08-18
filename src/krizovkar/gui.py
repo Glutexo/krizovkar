@@ -55,6 +55,7 @@ _GRID_RESIZE_HIT_RADIUS = 7
 _GRID_RESIZE_HANDLE_RADIUS = 3
 _GRID_RESIZE_FEEDBACK_TAG = "grid-resize-feedback"
 _WINDOW_MENU_SELECTION_VARIABLE = "krizovkar_active_window"
+_SHADOW_ANSWER_TAG = "shadow-answer"
 _PROJECT_REPOSITORY_URL = "https://github.com/Glutexo/krizovkar"
 _DIRECTION_LABELS = {
     "horizontal": "Vodorovně",
@@ -1796,16 +1797,30 @@ class CrosswordDocumentWindow(ttk.Frame):
                 return f"{_DIRECTION_LABELS[slot.direction]} {number}"
         return selected.identifier
 
+    def _slot_shadow_answer(self, slot: WordSlot) -> str | None:
+        crossword = self._crossword
+        if crossword is None or slot.answer is not None:
+            return None
+        pattern = crossword_slot_pattern(crossword, slot.identifier)
+        if not any(pattern):
+            return None
+        return "".join(letter or "•" for letter in pattern)
+
     def _rebuild_slot_tree(self) -> None:
         self._cancel_inline_slot_edit()
         selected_identifier = self._selected_slot_identifier
         for item in self.slots_tree.get_children():
             self.slots_tree.delete(item)
+        self.slots_tree.tag_configure(
+            _SHADOW_ANSWER_TAG,
+            foreground="gray50",
+        )
         crossword = self._crossword
         if crossword is None:
             self._slot_selection_changed()
             return
         for slot in crossword.slots:
+            shadow_answer = self._slot_shadow_answer(slot)
             self.slots_tree.insert(
                 "",
                 "end",
@@ -1813,10 +1828,20 @@ class CrosswordDocumentWindow(ttk.Frame):
                 values=(
                     self._slot_label(slot),
                     slot.length,
-                    slot.answer or "—",
+                    slot.answer or shadow_answer or "—",
                     slot.clue or "—",
                 ),
             )
+            if shadow_answer is not None:
+                # Tkinter zatím buněčné tagy Treeviewu z Tk 9 neobaluje.
+                self.slots_tree.tk.call(
+                    self.slots_tree._w,
+                    "tag",
+                    "cell",
+                    "add",
+                    _SHADOW_ANSWER_TAG,
+                    ((slot.identifier, "answer"),),
+                )
         identifiers = {slot.identifier for slot in crossword.slots}
         if selected_identifier not in identifiers:
             selected_identifier = crossword.slots[0].identifier

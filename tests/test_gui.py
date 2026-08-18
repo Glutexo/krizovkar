@@ -908,6 +908,47 @@ class GuiTest(unittest.TestCase):
         window._refresh_crossword_preview.assert_called_once_with()
         window._refresh_file_menu.assert_called_once_with()
 
+    def test_slot_table_shows_crossing_pattern_as_gray_shadow(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        crossword = create_blank_template(
+            CrosswordSettings(12, 9),
+            "swedish",
+        )
+        window._crossword = fill_crossword_slot(
+            crossword,
+            "h1",
+            "VAGÍNA",
+            "Pohlavní orgán",
+        )
+        window._selected_slot_identifier = "v1"
+        window._cancel_inline_slot_edit = Mock()
+        window._slot_selection_changed = Mock()
+        window.slots_tree = Mock()
+        window.slots_tree._w = ".slots"
+        window.slots_tree.get_children.return_value = ()
+
+        window._rebuild_slot_tree()
+
+        rows = {
+            item.kwargs["iid"]: item.kwargs["values"]
+            for item in window.slots_tree.insert.call_args_list
+        }
+        self.assertEqual("VAGÍNA", rows["h1"][2])
+        self.assertEqual("—", rows["h2"][2])
+        self.assertEqual("V•••", rows["v1"][2])
+        window.slots_tree.tag_configure.assert_called_once_with(
+            "shadow-answer",
+            foreground="gray50",
+        )
+        window.slots_tree.tk.call.assert_any_call(
+            ".slots",
+            "tag",
+            "cell",
+            "add",
+            "shadow-answer",
+            (("v1", "answer"),),
+        )
+
     def test_crossword_preview_detects_every_edge_and_corner(self) -> None:
         preview, _resize_handler = _resizable_preview()
         positions = {
