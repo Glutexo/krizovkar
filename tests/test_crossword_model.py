@@ -39,7 +39,6 @@ class CrosswordModelTest(unittest.TestCase):
 
         self.assertEqual("krizovkar", crossword.format_name)
         self.assertEqual("crossword", crossword.kind)
-        self.assertEqual(1, crossword.version)
         self.assertEqual(3, crossword.grid.width)
         self.assertEqual(1, crossword.grid.height)
         self.assertTrue(
@@ -54,6 +53,16 @@ class CrosswordModelTest(unittest.TestCase):
             output = Path(directory) / "written.yaml"
             write_crossword_document(crossword, output)
             self.assertEqual(crossword, load_crossword_document(output))
+
+    def test_rejects_version_key(self) -> None:
+        content = CROSSWORD_MINIMAL_EXAMPLE.read_text(encoding="utf-8")
+        content = content.replace(
+            "kind: crossword\n",
+            "kind: crossword\nversion: 1\n",
+        )
+
+        with self.assertRaisesRegex(ModelError, "nepovolený klíč 'version'"):
+            load_crossword_document(StringIO(content))
 
     def test_loads_fixed_template_created_from_specification(self) -> None:
         template = load_crossword_document(
@@ -79,7 +88,6 @@ class CrosswordModelTest(unittest.TestCase):
         crossword = self._load(
             "format: krizovkar\n"
             "kind: crossword\n"
-            "version: 1\n"
             "grid:\n"
             "  width: 2\n"
             "  height: 1\n"
@@ -103,7 +111,6 @@ class CrosswordModelTest(unittest.TestCase):
         crossword = self._load(
             "format: krizovkar\n"
             "kind: crossword\n"
-            "version: 1\n"
             "grid:\n"
             "  width: 1\n"
             "  height: 1\n"
@@ -140,6 +147,7 @@ class CrosswordModelTest(unittest.TestCase):
         dump_crossword_document(crossword, output)
 
         self.assertTrue(output.getvalue().startswith("format: krizovkar\n"))
+        self.assertNotIn("\nversion:", output.getvalue())
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "stream.yaml"
             source.write_text(output.getvalue(), encoding="utf-8")
@@ -171,7 +179,6 @@ class CrosswordModelTest(unittest.TestCase):
         crossword = self._load(
             "format: krizovkar\n"
             "kind: crossword\n"
-            "version: 1\n"
             "grid:\n"
             "  width: 3\n"
             "  height: 1\n"
@@ -190,7 +197,6 @@ class CrosswordModelTest(unittest.TestCase):
         crossword = self._load(
             "format: krizovkar\n"
             "kind: crossword\n"
-            "version: 1\n"
             "grid:\n"
             "  width: 1\n"
             "  height: 1\n"
@@ -213,7 +219,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -230,7 +235,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -247,7 +251,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -265,7 +268,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -282,7 +284,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -300,7 +301,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 3\n"
                 "  height: 1\n"
@@ -317,7 +317,6 @@ class CrosswordModelTest(unittest.TestCase):
         crossword = self._load(
             "format: krizovkar\n"
             "kind: crossword\n"
-            "version: 1\n"
             "grid:\n"
             "  width: 3\n"
             "  height: 3\n"
@@ -342,7 +341,6 @@ class CrosswordModelTest(unittest.TestCase):
         crossword = self._load(
             "format: krizovkar\n"
             "kind: crossword\n"
-            "version: 1\n"
             "grid:\n"
             "  width: 2\n"
             "  height: 1\n"
@@ -371,7 +369,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 2\n"
@@ -389,7 +386,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 2\n"
                 "  height: 2\n"
@@ -406,7 +402,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 2\n"
                 "  height: 1\n"
@@ -421,7 +416,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 3\n"
                 "  height: 1\n"
@@ -437,7 +431,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 2\n"
                 "  height: 1\n"
@@ -452,7 +445,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 2\n"
                 "  height: 1\n"
@@ -467,7 +459,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 3\n"
                 "  height: 1\n"
@@ -486,7 +477,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -505,7 +495,6 @@ class CrosswordModelTest(unittest.TestCase):
             self._load(
                 "format: krizovkar\n"
                 "kind: crossword\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"

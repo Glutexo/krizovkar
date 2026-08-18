@@ -1,14 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/master/src/krizovkar/schemas/crossword-v1.schema.json",
-  "title": "Editovatelná křížovka Křížovkáře, verze 1",
+  "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/master/src/krizovkar/schemas/crossword.schema.json",
+  "title": "Editovatelná křížovka Křížovkáře",
   "description": "Prázdná, rozpracovaná nebo hotová editovatelná křížovka, kterou lze použít jako šablonu; obsahuje role buněk, místa pro hesla, volitelně doplněný obsah, pomůcku a tajenky.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "format",
     "kind",
-    "version",
     "grid",
     "slots"
   ],
@@ -20,10 +19,6 @@
     "kind": {
       "description": "Druh dokumentu.",
       "const": "crossword"
-    },
-    "version": {
-      "description": "Hlavní verze datového modelu editovatelné křížovky.",
-      "const": 1
     },
     "grid": {
       "description": "Obdélníková matice rolí všech buněk křížovky.",

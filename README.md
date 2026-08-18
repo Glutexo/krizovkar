@@ -209,7 +209,6 @@ Nejmenší platná cílová mřížka zatím určuje pouze rozměr:
 ```yaml
 format: krizovkar
 kind: grid
-version: 1
 grid:
   width: 15
   height: 10
@@ -237,7 +236,6 @@ Samostatné zadání popisuje rozměr a umístěná slova:
 ```yaml
 format: krizovkar
 kind: specification
-version: 1
 grid:
   width: 7
   height: 6
@@ -306,9 +304,9 @@ secrets:
 Slovní části bez výslovné `legend` dostanou postupně popisky `1. část tajenky`, `2. část tajenky` a tak dále. Vlastní text může použít také formulaci `2. díl tajenky` nebo `Tajenka: 3. díl`. Části `type: cells` vlastní legendu nemají, mohou obsahovat samostatná pole a každá může samostatně zapnout zobáčky pro souvislou cestu. Obě vícedílné podoby ukazuje [zadání s vícedílnými tajenkami](examples/specification-multipart-secrets.yaml).
 
 Význam dokumentů popisuje [specifikace datového modelu](docs/datovy-model.md).
-Strojová pravidla jsou oddělená v [JSON Schema zadání](src/krizovkar/schemas/specification-v1.schema.json),
-[JSON Schema editovatelné křížovky](src/krizovkar/schemas/crossword-v1.schema.json) a
-[JSON Schema cílové mřížky](src/krizovkar/schemas/grid-v1.schema.json).
+Strojová pravidla jsou oddělená v [JSON Schema zadání](src/krizovkar/schemas/specification.schema.json),
+[JSON Schema editovatelné křížovky](src/krizovkar/schemas/crossword.schema.json) a
+[JSON Schema cílové mřížky](src/krizovkar/schemas/grid.schema.json).
 
 Model nemá přepínač mezi švédskou a čárkovanou křížovkou. Zadání hesla, jeho odpovědi a legendy je v obou případech stejné; konkrétní cílová mřížka pouze určí, zda legendu vloží do samostatné buňky, nebo ji spojí s číslem písmenné buňky a uvede pod mřížkou. Legendová buňka zabírá místo, takže stejné zadání může být platné pro jedno rozložení a nevejít se do jiného. Oba způsoby lze v jedné mřížce libovolně kombinovat.
 

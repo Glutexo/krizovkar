@@ -1,14 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/master/src/krizovkar/schemas/specification-v1.schema.json",
-  "title": "Zadání křížovky Křížovkáře, verze 1",
+  "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/master/src/krizovkar/schemas/specification.schema.json",
+  "title": "Zadání křížovky Křížovkáře",
   "description": "Společný datový model vstupního zadání pro švédské, čárkované i smíšené rozložení.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "format",
-    "kind",
-    "version"
+    "kind"
   ],
   "properties": {
     "format": {
@@ -18,10 +17,6 @@
     "kind": {
       "description": "Druh dokumentu.",
       "const": "specification"
-    },
-    "version": {
-      "description": "Hlavní verze datového modelu zadání.",
-      "const": 1
     },
     "grid": {
       "description": "Rozměr cílové mřížky.",

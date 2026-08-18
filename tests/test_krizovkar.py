@@ -90,10 +90,16 @@ class ModelTest(unittest.TestCase):
 
         self.assertEqual("krizovkar", crossword.format_name)
         self.assertEqual("grid", crossword.kind)
-        self.assertEqual(1, crossword.version)
         self.assertEqual(15, crossword.grid.width)
         self.assertEqual(10, crossword.grid.height)
         self.assertIsNone(crossword.grid.cells)
+
+    def test_rejects_version_key(self) -> None:
+        content = GRID_MINIMAL_EXAMPLE.read_text(encoding="utf-8")
+        content = content.replace("kind: grid\n", "kind: grid\nversion: 1\n")
+
+        with self.assertRaisesRegex(ModelError, "nepovolený klíč 'version'"):
+            load_crossword_grid(io.StringIO(content))
 
     def test_loads_grid_filled_with_letter_cells(self) -> None:
         crossword = load_crossword_grid(GRID_RANDOM_LETTERS_EXAMPLE)
@@ -202,7 +208,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid: {width: 1, height: 1}\n"
                 "secret_prompts:\n"
                 "  - text: Zadání tajenky\n",
@@ -239,7 +244,6 @@ class ModelTest(unittest.TestCase):
                 source.write_text(
                     "format: krizovkar\n"
                     "kind: grid\n"
-                    "version: 1\n"
                     "grid: {width: 1, height: 1}\n"
                     "secret_prompts:\n"
                     f"{prompt}",
@@ -258,7 +262,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 2\n"
                 "  height: 1\n"
@@ -280,7 +283,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -303,7 +305,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -357,7 +358,6 @@ class ModelTest(unittest.TestCase):
                 source.write_text(
                     "format: krizovkar\n"
                     "kind: grid\n"
-                    "version: 1\n"
                     f"{grid}"
                     "clues:\n"
                     f"  - {{number: 2, direction: {direction}, "
@@ -378,7 +378,6 @@ class ModelTest(unittest.TestCase):
                 source.write_text(
                     "format: krizovkar\n"
                     "kind: grid\n"
-                    "version: 1\n"
                     "grid:\n"
                     "  width: 1\n"
                     "  height: 1\n"
@@ -395,7 +394,6 @@ class ModelTest(unittest.TestCase):
 
         self.assertEqual("krizovkar", specification.format_name)
         self.assertEqual("specification", specification.kind)
-        self.assertEqual(1, specification.version)
         self.assertIsNone(specification.grid)
         self.assertEqual((), specification.words)
         self.assertEqual((), specification.secrets)
@@ -478,7 +476,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 2, height: 1}\n"
                 "words:\n"
                 "  - answer: AB\n"
@@ -567,7 +564,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 7, height: 1}\n"
                 "secrets:\n"
                 "  - type: word\n"
@@ -634,7 +630,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 3, height: 2}\n"
                 "words:\n"
                 "  - answer: ABC\n"
@@ -677,7 +672,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 3, height: 1}\n"
                 "words:\n"
                 "  - answer: ABC\n"
@@ -701,7 +695,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 3, height: 2}\n"
                 "words:\n"
                 "  - answer: ABC\n"
@@ -723,7 +716,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 3, height: 1}\n"
                 "words:\n"
                 "  - answer: ABC\n"
@@ -750,7 +742,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 3, height: 1}\n"
                 "words:\n"
                 "  - answer: ABC\n"
@@ -779,7 +770,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 1, height: 1}\n"
                 "words:\n"
                 "  - answer: A\n"
@@ -804,7 +794,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 3, height: 3}\n"
                 "words:\n"
                 "  - answer: ABC\n"
@@ -829,7 +818,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 3, height: 2}\n"
                 "words:\n"
                 "  - answer: ABC\n"
@@ -854,7 +842,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 3, height: 3}\n"
                 "words:\n"
                 "  - answer: ABC\n"
@@ -877,7 +864,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 7, height: 1}\n"
                 "words:\n"
                 "  - answer: OCHOČENÁ\n"
@@ -897,7 +883,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 3, height: 3}\n"
                 "words:\n"
                 "  - answer: ABC\n"
@@ -916,7 +901,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 3, height: 3}\n"
                 "words:\n"
                 "  - answer: ABC\n"
@@ -939,7 +923,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 3, height: 3}\n"
                 "words:\n"
                 "  - answer: ABC\n"
@@ -961,7 +944,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: specification\n"
-                "version: 1\n"
                 "grid: {width: 1, height: 1}\n"
                 "words:\n"
                 "  - answer: A\n"
@@ -1003,7 +985,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -1034,7 +1015,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -1058,7 +1038,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 3\n"
                 "  height: 1\n"
@@ -1086,7 +1065,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -1104,7 +1082,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -1148,6 +1125,7 @@ class ModelTest(unittest.TestCase):
         dump_crossword_grid(crossword, output)
 
         self.assertTrue(output.getvalue().startswith("format: krizovkar\n"))
+        self.assertNotIn("\nversion:", output.getvalue())
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "stream.yaml"
             source.write_text(output.getvalue(), encoding="utf-8")
@@ -1178,7 +1156,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 0\n"
                 "  height: 10\n",
@@ -1194,7 +1171,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 15\n"
                 "  width: 20\n"
@@ -1206,7 +1182,7 @@ class ModelTest(unittest.TestCase):
                 load_crossword_grid(source)
 
         message = str(caught.exception)
-        self.assertIn("řádek 6, sloupec 3", message)
+        self.assertIn("řádek 5, sloupec 3", message)
         self.assertIn("duplicitní klíč", message)
         self.assertNotIn("duplicate key", message)
 
@@ -1216,7 +1192,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 2\n"
                 "  height: 1\n"
@@ -1234,7 +1209,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -1254,7 +1228,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -1272,7 +1245,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -1313,7 +1285,6 @@ class ModelTest(unittest.TestCase):
                 source.write_text(
                     "format: krizovkar\n"
                     "kind: grid\n"
-                    "version: 1\n"
                     "grid:\n"
                     "  width: 1\n"
                     "  height: 1\n"
@@ -1336,7 +1307,6 @@ class ModelTest(unittest.TestCase):
                 source.write_text(
                     "format: krizovkar\n"
                     "kind: grid\n"
-                    "version: 1\n"
                     "grid:\n"
                     "  width: 1\n"
                     "  height: 1\n"
@@ -1356,7 +1326,6 @@ class ModelTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
@@ -2213,7 +2182,6 @@ class CommandTest(unittest.TestCase):
             source.write_text(
                 "format: krizovkar\n"
                 "kind: grid\n"
-                "version: 1\n"
                 "grid:\n"
                 "  width: 1\n"
                 "  height: 1\n"
