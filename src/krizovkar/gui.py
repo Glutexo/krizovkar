@@ -9,7 +9,7 @@ import sys
 import tkinter as tk
 import webbrowser
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -60,6 +60,7 @@ from krizovkar.renderer import (
 )
 
 _MAX_CROSSWORD_DIMENSION = 50
+_MAX_DOCUMENT_HISTORY = 200
 _MAX_RECENT_DOCUMENTS = 10
 _MINIMUM_TK_VERSION = 9.0
 _GRID_RESIZE_HIT_RADIUS = 7
@@ -138,6 +139,16 @@ class _KeyboardShortcut:
 
     accelerator: str
     sequence: str
+
+
+@dataclass(frozen=True, slots=True)
+class _DocumentHistoryEntry:
+    """Jeden obnovitelný stav dokumentu včetně rozepsaného YAML."""
+
+    crossword: CrosswordDocument | None
+    yaml_source: str
+    yaml_source_error: str | None
+    selected_slot_identifier: str | None = field(compare=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1374,24 +1385,6 @@ def set_crossword_cells_slot_start(
     return changed
 
 
-def _crossword_change_discards_content(
-    before: CrosswordDocument,
-    after: CrosswordDocument,
-) -> bool:
-    after_slots = {slot.identifier: slot for slot in after.slots}
-    for slot in before.slots:
-        if slot.answer is None and slot.clue is None and not slot.in_help:
-            continue
-        changed = after_slots.get(slot.identifier)
-        if changed is None or (
-            changed.answer,
-            changed.clue,
-            changed.in_help,
-        ) != (slot.answer, slot.clue, slot.in_help):
-            return True
-    return any(secret not in after.secrets for secret in before.secrets)
-
-
 def _crossword_slot(
     crossword: CrosswordDocument,
     identifier: str,
@@ -2444,6 +2437,7 @@ class CrosswordSourceWindow(ttk.Frame):
         vertical_scrollbar.grid(row=0, column=1, sticky="ns")
         horizontal_scrollbar.grid(row=1, column=0, sticky="ew")
         self.source_text.bind("<<Modified>>", self._source_changed, add="+")
+        self._document_window._bind_history_shortcuts(self.source_text)
         self.source_text.edit_modified(False)
 
     def _source_changed(
@@ -2816,6 +2810,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             f"krizovkar_slot_list_placement_{id(self)}"
         )
         self._page_format = DEFAULT_PAGE_FORMAT
+        self._initialize_document_history()
 
         self._configure_window()
         self._build_menu()
@@ -2842,6 +2837,8 @@ class CrosswordDocumentWindow(ttk.Frame):
         save_shortcut = _keyboard_shortcut("s")
         save_as_shortcut = _keyboard_shortcut("s", shift=True)
         close_shortcut = _keyboard_shortcut("w")
+        undo_shortcut = _keyboard_shortcut("z")
+        redo_shortcut = _keyboard_shortcut("z", shift=True)
         menu = tk.Menu(self.root)
         self.file_menu = tk.Menu(menu)
         self.file_menu.add_command(
@@ -2895,6 +2892,23 @@ class CrosswordDocumentWindow(ttk.Frame):
             command=self.request_close,
         )
         menu.add_cascade(label="Soubor", menu=self.file_menu)
+        self.edit_menu = tk.Menu(
+            menu,
+            postcommand=self._refresh_edit_menu,
+        )
+        self.edit_menu.add_command(
+            label="Zpět",
+            accelerator=undo_shortcut.accelerator,
+            command=self.undo_document,
+        )
+        self._undo_menu_index = cast(int, self.edit_menu.index("end"))
+        self.edit_menu.add_command(
+            label="Vpřed",
+            accelerator=redo_shortcut.accelerator,
+            command=self.redo_document,
+        )
+        self._redo_menu_index = cast(int, self.edit_menu.index("end"))
+        menu.add_cascade(label="Úpravy", menu=self.edit_menu)
         self.view_menu = _create_view_menu(
             menu,
             lambda: self.application.show_source_window(self),
@@ -2924,6 +2938,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.root.bind(save_shortcut.sequence, self._save_event)
         self.root.bind(save_as_shortcut.sequence, self._save_as_event)
         self.root.bind(close_shortcut.sequence, self._close_event)
+        self._bind_history_shortcuts(self.root)
 
     def _add_export_actions(self) -> None:
         for action in self._export_actions():
@@ -3027,6 +3042,26 @@ class CrosswordDocumentWindow(ttk.Frame):
             self.window_menu,
             current=self,
         )
+
+    def _refresh_edit_menu(self) -> None:
+        self.edit_menu.entryconfigure(
+            self._undo_menu_index,
+            state="normal" if self._history_index > 0 else "disabled",
+        )
+        self.edit_menu.entryconfigure(
+            self._redo_menu_index,
+            state=(
+                "normal"
+                if self._history_index + 1 < len(self._history)
+                else "disabled"
+            ),
+        )
+
+    def _bind_history_shortcuts(self, widget: tk.Misc) -> None:
+        undo_shortcut = _keyboard_shortcut("z")
+        redo_shortcut = _keyboard_shortcut("z", shift=True)
+        widget.bind(undo_shortcut.sequence, self._undo_event)
+        widget.bind(redo_shortcut.sequence, self._redo_event)
 
     def _document_focus_in(
         self,
@@ -3284,17 +3319,6 @@ class CrosswordDocumentWindow(ttk.Frame):
         if (
             current.grid.width == settings.width
             and current.grid.height == settings.height
-        ):
-            return
-        has_authored_content = bool(current.secrets) or any(
-            slot.answer is not None or slot.clue is not None
-            for slot in current.slots
-        )
-        if has_authored_content and not messagebox.askyesno(
-            "Změnit rozměry křížovky?",
-            "Změna rozměrů znovu vytvoří rozvržení a odstraní "
-            "vyplněná hesla i nastavení tajenky. Chcete pokračovat?",
-            parent=self.root,
         ):
             return
         layout = self._template_layout or "swedish"
@@ -3707,18 +3731,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             return
         if changed is crossword:
             return
-        if _crossword_change_discards_content(crossword, changed) and not (
-            messagebox.askyesno(
-                "Změnit role polí?"
-                if len(coordinates) > 1
-                else "Změnit roli pole?",
-                "Změna upraví navazující místa pro hesla a odstraní "
-                "jejich vyplněný obsah nebo nastavení tajenky. "
-                "Chcete pokračovat?",
-                parent=self.root,
-            )
-        ):
-            return
 
         self._crossword = changed
         self._template_layout = _template_generation_layout(changed)
@@ -3754,18 +3766,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             self._show_action_error(title, str(error))
             return
         if changed is crossword:
-            return
-        if _crossword_change_discards_content(crossword, changed) and not (
-            messagebox.askyesno(
-                "Změnit začátky hesel?"
-                if len(coordinates) > 1
-                else "Změnit začátek hesla?",
-                "Změna upraví navazující místa pro hesla a odstraní "
-                "jejich vyplněný obsah nebo nastavení tajenky. "
-                "Chcete pokračovat?",
-                parent=self.root,
-            )
-        ):
             return
 
         self._crossword = changed
@@ -4154,6 +4154,82 @@ class CrosswordDocumentWindow(ttk.Frame):
             raise GuiInputError("Zdroj YAML není platný.")
         return self._crossword
 
+    def _history_entry(self) -> _DocumentHistoryEntry:
+        return _DocumentHistoryEntry(
+            crossword=self._crossword,
+            yaml_source=self._yaml_source(),
+            yaml_source_error=self._yaml_source_error,
+            selected_slot_identifier=self._selected_slot_identifier,
+        )
+
+    def _initialize_document_history(self) -> None:
+        self._history = [self._history_entry()]
+        self._history_index = 0
+        self._saved_history_index: int | None = 0 if not self._dirty else None
+
+    def _record_document_history(self) -> None:
+        entry = self._history_entry()
+        if entry == self._history[self._history_index]:
+            self._history[self._history_index] = entry
+            return
+
+        if (
+            self._saved_history_index is not None
+            and self._saved_history_index > self._history_index
+        ):
+            self._saved_history_index = None
+        del self._history[self._history_index + 1 :]
+        self._history.append(entry)
+        self._history_index += 1
+
+        overflow = len(self._history) - _MAX_DOCUMENT_HISTORY
+        if overflow <= 0:
+            return
+        del self._history[:overflow]
+        self._history_index -= overflow
+        if self._saved_history_index is not None:
+            self._saved_history_index -= overflow
+            if self._saved_history_index < 0:
+                self._saved_history_index = None
+
+    def _restore_document_history(self) -> None:
+        entry = self._history[self._history_index]
+        self._crossword = entry.crossword
+        self._yaml_source_buffer = entry.yaml_source
+        self._yaml_source_error = entry.yaml_source_error
+        self._selected_slot_identifier = entry.selected_slot_identifier
+        if self._crossword is not None:
+            self._template_layout = _template_generation_layout(self._crossword)
+        self._dirty = (
+            self._saved_history_index is None
+            or self._history_index != self._saved_history_index
+        )
+        self._update_title()
+        self.application.document_window_changed(self)
+        self._rebuild_slot_tree()
+        self._refresh_crossword_view()
+
+    def undo_document(self) -> bool:
+        """Vrátí poslední změnu tohoto dokumentu."""
+
+        if not self._save_inline_slot_edit() or self._history_index == 0:
+            return False
+        self._history_index -= 1
+        self._restore_document_history()
+        return True
+
+    def redo_document(self) -> bool:
+        """Znovu provede naposledy vrácenou změnu tohoto dokumentu."""
+
+        if (
+            not self._save_inline_slot_edit()
+            or self._history_index + 1 >= len(self._history)
+        ):
+            return False
+        self._history_index += 1
+        self._restore_document_history()
+        return True
+
     def _yaml_source(self) -> str:
         if self._yaml_source_buffer is not None:
             return self._yaml_source_buffer
@@ -4255,7 +4331,15 @@ class CrosswordDocumentWindow(ttk.Frame):
         if not source_changed:
             self._yaml_source_buffer = None
             self._yaml_source_error = None
-        self._dirty = dirty
+        if dirty:
+            self._record_document_history()
+        else:
+            self._history[self._history_index] = self._history_entry()
+            self._saved_history_index = self._history_index
+        self._dirty = (
+            self._saved_history_index is None
+            or self._history_index != self._saved_history_index
+        )
         self._update_title()
         self.application.document_window_changed(self)
 
@@ -4290,6 +4374,14 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _save_as_event(self, _event: tk.Event[tk.Misc]) -> str:
         self.save_document_as()
+        return "break"
+
+    def _undo_event(self, _event: tk.Event[tk.Misc]) -> str:
+        self.undo_document()
+        return "break"
+
+    def _redo_event(self, _event: tk.Event[tk.Misc]) -> str:
+        self.redo_document()
         return "break"
 
     def _close_event(self, _event: tk.Event[tk.Misc]) -> str:

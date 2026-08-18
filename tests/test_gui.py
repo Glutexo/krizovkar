@@ -117,6 +117,28 @@ def _resizable_preview() -> tuple[CrosswordPreview, Mock]:
     return preview, resize_handler
 
 
+def _document_history_window(
+    crossword: CrosswordDocument,
+    *,
+    dirty: bool = False,
+) -> CrosswordDocumentWindow:
+    window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+    window._dirty = dirty
+    window._crossword = crossword
+    window._grid = None
+    window._yaml_source_buffer = None
+    window._yaml_source_error = None
+    window._template_layout = _template_generation_layout(crossword)
+    window._selected_slot_identifier = None
+    window._save_inline_slot_edit = Mock(return_value=True)
+    window._update_title = Mock()
+    window.application = Mock()
+    window._rebuild_slot_tree = Mock()
+    window._refresh_crossword_view = Mock()
+    window._initialize_document_history()
+    return window
+
+
 class GuiTest(unittest.TestCase):
     def test_recent_documents_use_macos_application_support(self) -> None:
         with (
@@ -208,6 +230,50 @@ class GuiTest(unittest.TestCase):
         self.assertEqual("Ctrl+Shift+S", save_as_shortcut.accelerator)
         self.assertEqual("<Control-Shift-S>", save_as_shortcut.sequence)
 
+    def test_document_history_shortcuts_bind_undo_and_redo(self) -> None:
+        window = Mock()
+        widget = Mock()
+
+        with patch("krizovkar.gui.sys.platform", "darwin"):
+            CrosswordDocumentWindow._bind_history_shortcuts(window, widget)
+
+        self.assertEqual(
+            [
+                call("<Command-z>", window._undo_event),
+                call("<Command-Shift-Z>", window._redo_event),
+            ],
+            widget.bind.call_args_list,
+        )
+
+    def test_edit_menu_reflects_available_document_history(self) -> None:
+        window = Mock()
+        window._undo_menu_index = 0
+        window._redo_menu_index = 1
+        window._history = [object(), object()]
+        window._history_index = 0
+
+        CrosswordDocumentWindow._refresh_edit_menu(window)
+
+        self.assertEqual(
+            [
+                call(0, state="disabled"),
+                call(1, state="normal"),
+            ],
+            window.edit_menu.entryconfigure.call_args_list,
+        )
+
+        window.edit_menu.reset_mock()
+        window._history_index = 1
+        CrosswordDocumentWindow._refresh_edit_menu(window)
+
+        self.assertEqual(
+            [
+                call(0, state="normal"),
+                call(1, state="disabled"),
+            ],
+            window.edit_menu.entryconfigure.call_args_list,
+        )
+
     def test_multiple_cell_selection_uses_platform_modifier(self) -> None:
         with patch("krizovkar.gui.sys.platform", "darwin"):
             self.assertEqual(
@@ -228,6 +294,7 @@ class GuiTest(unittest.TestCase):
         export_menu = Mock()
         open_pdf_menu = Mock()
         print_menu = Mock()
+        edit_menu = Mock()
         view_menu = Mock()
         slot_list_placement_menu = Mock()
         window_menu = Mock()
@@ -247,6 +314,7 @@ class GuiTest(unittest.TestCase):
                     export_menu,
                     open_pdf_menu,
                     print_menu,
+                    edit_menu,
                     view_menu,
                     slot_list_placement_menu,
                     window_menu,
@@ -295,6 +363,21 @@ class GuiTest(unittest.TestCase):
             label="Tisknout",
             menu=print_menu,
         )
+        self.assertEqual(
+            ["Zpět", "Vpřed"],
+            [
+                item.kwargs["label"]
+                for item in edit_menu.add_command.call_args_list
+            ],
+        )
+        self.assertEqual(
+            ["Command-Z", "Command-Shift-Z"],
+            [
+                item.kwargs["accelerator"]
+                for item in edit_menu.add_command.call_args_list
+            ],
+        )
+        window._bind_history_shortcuts.assert_called_once_with(window.root)
         menu_type.assert_any_call(menu, name="window")
         menu_type.assert_any_call(menu, name="help")
         help_menu.add_command.assert_called_once()
@@ -336,6 +419,7 @@ class GuiTest(unittest.TestCase):
         menu.add_cascade.assert_has_calls(
             [
                 call(label="Soubor", menu=file_menu),
+                call(label="Úpravy", menu=edit_menu),
                 call(label="Zobrazení", menu=view_menu),
                 call(label="Okno", menu=window_menu),
                 call(label="Nápověda", menu=help_menu),
@@ -636,6 +720,111 @@ class GuiTest(unittest.TestCase):
         window._yaml_source_buffer = "format: [\n"
 
         self.assertEqual("format: [\n", window._yaml_source())
+
+    def test_document_history_restores_invalid_yaml_source(self) -> None:
+        original = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        window = _document_history_window(original)
+
+        window._apply_yaml_source("format: [\n")
+
+        self.assertIsNone(window._crossword)
+        self.assertTrue(window._dirty)
+
+        self.assertTrue(window.undo_document())
+        self.assertEqual(original, window._crossword)
+        self.assertIsNone(window._yaml_source_error)
+        self.assertFalse(window._dirty)
+
+        self.assertTrue(window.redo_document())
+        self.assertIsNone(window._crossword)
+        self.assertIn("neplatný YAML", window._yaml_source_error)
+        self.assertTrue(window._dirty)
+
+    def test_document_history_discards_redo_after_a_new_change(self) -> None:
+        original = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        window = _document_history_window(original)
+        window._crossword = fill_crossword_slot(
+            original,
+            "h1",
+            "ABC",
+            "První řádek",
+        )
+        window._set_dirty(True)
+        self.assertTrue(window.undo_document())
+
+        window._crossword = fill_crossword_slot(
+            original,
+            "h2",
+            "DEF",
+            "Druhý řádek",
+        )
+        window._set_dirty(True)
+
+        self.assertFalse(window.redo_document())
+        self.assertEqual(2, len(window._history))
+
+    def test_document_history_tracks_the_saved_state(self) -> None:
+        original = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        window = _document_history_window(original)
+        changed = fill_crossword_slot(
+            original,
+            "h1",
+            "ABC",
+            "První řádek",
+        )
+        window._crossword = changed
+        window._set_dirty(True)
+        window._set_dirty(False)
+
+        self.assertFalse(window._dirty)
+        self.assertTrue(window.undo_document())
+        self.assertEqual(original, window._crossword)
+        self.assertTrue(window._dirty)
+
+        self.assertTrue(window.redo_document())
+        self.assertEqual(changed, window._crossword)
+        self.assertFalse(window._dirty)
+
+    def test_undo_restores_content_discarded_by_slot_change(self) -> None:
+        original = fill_crossword_slot(
+            create_blank_template(
+                CrosswordSettings(3, 3),
+                "numbered",
+            ),
+            "h2",
+            "DEF",
+            "Druhý řádek",
+        )
+        window = _document_history_window(original)
+
+        with patch("krizovkar.gui.messagebox.askyesno") as ask:
+            window._preview_cell_slot_changed(
+                (Coordinate(2, 2),),
+                "horizontal",
+                True,
+            )
+
+        changed = window._crossword
+        ask.assert_not_called()
+        self.assertNotEqual(original, changed)
+        self.assertTrue(window._dirty)
+
+        self.assertTrue(window.undo_document())
+        self.assertEqual(original, window._crossword)
+        self.assertFalse(window._dirty)
+
+        self.assertTrue(window.redo_document())
+        self.assertEqual(changed, window._crossword)
+        self.assertTrue(window._dirty)
 
     def test_other_platforms_refresh_window_menu_before_opening(self) -> None:
         parent = Mock()
@@ -2693,7 +2882,7 @@ class GuiTest(unittest.TestCase):
         window._set_dirty.assert_not_called()
         window._refresh_crossword_view.assert_not_called()
 
-    def test_preview_resize_requires_confirmation_for_filled_crossword(
+    def test_preview_resize_replaces_filled_crossword_without_confirmation(
         self,
     ) -> None:
         window = Mock()
@@ -2707,20 +2896,27 @@ class GuiTest(unittest.TestCase):
         )
         window._crossword = crossword
         window._template_layout = "numbered"
+        new_template = create_blank_template(
+            CrosswordSettings(4, 4),
+            "numbered",
+        )
 
         with (
+            patch("krizovkar.gui.messagebox.askyesno") as ask,
             patch(
-                "krizovkar.gui.messagebox.askyesno",
-                return_value=False,
-            ) as ask,
-            patch("krizovkar.gui.create_blank_template") as create_template,
+                "krizovkar.gui.create_blank_template",
+                return_value=new_template,
+            ) as create_template,
         ):
             CrosswordDocumentWindow._preview_grid_resized(window, 4, 4)
 
-        ask.assert_called_once()
-        create_template.assert_not_called()
-        self.assertIs(crossword, window._crossword)
-        window._set_dirty.assert_not_called()
+        ask.assert_not_called()
+        create_template.assert_called_once_with(
+            CrosswordSettings(4, 4),
+            "numbered",
+        )
+        self.assertIs(new_template, window._crossword)
+        window._set_dirty.assert_called_once_with(True)
 
     def test_preview_cell_role_change_updates_selected_cells_in_its_document(
         self,
@@ -2752,7 +2948,9 @@ class GuiTest(unittest.TestCase):
         window._rebuild_slot_tree.assert_called_once_with()
         window._refresh_crossword_view.assert_called_once_with()
 
-    def test_preview_cell_role_change_confirms_discarding_content(self) -> None:
+    def test_preview_cell_role_change_discards_content_without_confirmation(
+        self,
+    ) -> None:
         window = Mock()
         window._save_inline_slot_edit.return_value = True
         crossword = create_blank_template(
@@ -2767,25 +2965,16 @@ class GuiTest(unittest.TestCase):
         )
         window._crossword = crossword
 
-        with patch(
-            "krizovkar.gui.messagebox.askyesno",
-            return_value=False,
-        ) as ask:
+        with patch("krizovkar.gui.messagebox.askyesno") as ask:
             CrosswordDocumentWindow._preview_cell_role_changed(
                 window,
                 (Coordinate(row=2, column=2),),
                 "legend",
             )
 
-        ask.assert_called_once_with(
-            "Změnit roli pole?",
-            "Změna upraví navazující místa pro hesla a odstraní "
-            "jejich vyplněný obsah nebo nastavení tajenky. "
-            "Chcete pokračovat?",
-            parent=window.root,
-        )
-        self.assertIs(crossword, window._crossword)
-        window._set_dirty.assert_not_called()
+        ask.assert_not_called()
+        self.assertIsNot(crossword, window._crossword)
+        window._set_dirty.assert_called_once_with(True)
 
     def test_preview_cell_role_change_adds_secret_without_confirmation(
         self,
@@ -2814,7 +3003,9 @@ class GuiTest(unittest.TestCase):
         window._rebuild_slot_tree.assert_called_once_with()
         window._refresh_crossword_view.assert_called_once_with()
 
-    def test_preview_cell_role_change_confirms_removing_secret(self) -> None:
+    def test_preview_cell_role_change_removes_secret_without_confirmation(
+        self,
+    ) -> None:
         window = Mock()
         window._save_inline_slot_edit.return_value = True
         crossword = set_crossword_cell_role(
@@ -2827,19 +3018,16 @@ class GuiTest(unittest.TestCase):
         )
         window._crossword = crossword
 
-        with patch(
-            "krizovkar.gui.messagebox.askyesno",
-            return_value=False,
-        ) as ask:
+        with patch("krizovkar.gui.messagebox.askyesno") as ask:
             CrosswordDocumentWindow._preview_cell_role_changed(
                 window,
                 (Coordinate(row=2, column=2),),
                 "letter",
             )
 
-        ask.assert_called_once()
-        self.assertIs(crossword, window._crossword)
-        window._set_dirty.assert_not_called()
+        ask.assert_not_called()
+        self.assertIsNot(crossword, window._crossword)
+        window._set_dirty.assert_called_once_with(True)
 
     def test_preview_cell_slot_change_adds_directional_start(self) -> None:
         window = Mock()
@@ -2869,7 +3057,9 @@ class GuiTest(unittest.TestCase):
         window._rebuild_slot_tree.assert_called_once_with()
         window._refresh_crossword_view.assert_called_once_with()
 
-    def test_preview_cell_slot_change_confirms_discarding_content(self) -> None:
+    def test_preview_cell_slot_change_discards_content_without_confirmation(
+        self,
+    ) -> None:
         window = Mock()
         window._save_inline_slot_edit.return_value = True
         crossword = create_blank_template(
@@ -2884,10 +3074,7 @@ class GuiTest(unittest.TestCase):
         )
         window._crossword = crossword
 
-        with patch(
-            "krizovkar.gui.messagebox.askyesno",
-            return_value=False,
-        ) as ask:
+        with patch("krizovkar.gui.messagebox.askyesno") as ask:
             CrosswordDocumentWindow._preview_cell_slot_changed(
                 window,
                 (Coordinate(2, 2),),
@@ -2895,15 +3082,9 @@ class GuiTest(unittest.TestCase):
                 True,
             )
 
-        ask.assert_called_once_with(
-            "Změnit začátek hesla?",
-            "Změna upraví navazující místa pro hesla a odstraní "
-            "jejich vyplněný obsah nebo nastavení tajenky. "
-            "Chcete pokračovat?",
-            parent=window.root,
-        )
-        self.assertIs(crossword, window._crossword)
-        window._set_dirty.assert_not_called()
+        ask.assert_not_called()
+        self.assertIsNot(crossword, window._crossword)
+        window._set_dirty.assert_called_once_with(True)
 
     def test_preview_receives_slot_start_states(self) -> None:
         window = Mock()

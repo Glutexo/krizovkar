@@ -65,9 +65,9 @@ Rozměr křížovky se mění tažením kteréhokoli okraje náhledu; levý a pr
 okraj mění počet sloupců, horní a dolní počet řádků a rohy oba rozměry
 současně. Nadpis náhledu uvádí aktuální rozměr jako počet sloupců × počet
 řádků. Nový rozměr se použije po puštění tlačítka. Změna rozměru znovu
-vytvoří rozvržení; obsahuje-li dokument doplněná hesla nebo tajenku, editor si
-nejprve vyžádá potvrzení. Prázdnou tiskovou křížovku lze exportovat do PDF
-kdykoli, samostatné řešení až po vyplnění všech hesel.
+vytvoří rozvržení a případný doplněný obsah lze po změně obnovit pomocí
+**Zpět**. Prázdnou tiskovou křížovku lze exportovat do PDF kdykoli, samostatné
+řešení až po vyplnění všech hesel.
 
 Pravé tlačítko nad písmenným, tajenkovým, legendovým nebo prázdným polem
 náhledu otevře nabídku jeho role **Písmeno** / **Tajenka** / **Legenda** /
@@ -92,8 +92,9 @@ Editor podle změny rozdělí nebo spojí navazující místa pro hesla. Legendo
 pole, které tím ztratí poslední navazující místo, změní na prázdné. Část
 původně vepsaného hesla za novým prázdným polem bez vlastní legendy se sama
 nestane číslovaným heslem ani nevytvoří silné předěly. Pokud by úprava
-odstranila vyplněný obsah hesel nebo nastavení tajenky, nejprve si vyžádá
-potvrzení; změnu vedoucí k neplatnému rozvržení odmítne.
+odstranila vyplněný obsah hesel nebo nastavení tajenky, provede se rovnou a
+lze ji vrátit pomocí **Zpět**; změnu vedoucí k neplatnému rozvržení editor
+odmítne.
 
 Nabídka **Soubor** otevírá existující `kind: crossword` v dalším okně.
 Na macOS používá zkratky `⌘N`, `⌘O`,
@@ -103,6 +104,12 @@ dané okno; pokud obsahuje neuložené změny, editor se zeptá na jejich
 uložení. Po zavření posledního okna zůstane aplikace spuštěná bez
 dokumentu. Každé otevřené okno je nezávislé; změna jednoho proto obsah
 druhého neovlivní.
+
+Nabídka **Úpravy** obsahuje **Zpět** a **Vpřed**. Na macOS používají zkratky
+`⌘Z` a `⇧⌘Z`, na ostatních systémech `Ctrl+Z` a `Ctrl+Shift+Z`. Historie je
+samostatná pro každý dokument a zahrnuje doplnění hesel, změny rozměru, rolí
+a začátků hesel i úpravy YAML zdroje včetně dočasně neplatného zápisu. Nová
+změna po návratu do staršího stavu zahodí dosavadní kroky **Vpřed**.
 
 Nabídka **Zobrazení** obsahuje volbu **Zdroj YAML**, která pro zvolený dokument
 otevře vlastní běžné okno s jeho upravitelnou YAML podobou. Každá změna
