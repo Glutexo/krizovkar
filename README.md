@@ -24,7 +24,7 @@ uv run krizovkar-gui
 
 Tím se otevře systémový dialog pro výběr existující křížovky. Po jeho
 zavření zůstane aplikace spuštěná bez otevřeného dokumentu; z nabídky
-**Soubor** lze vygenerovat novou šablonu, otevřít soubor nebo vybrat některý z
+**Soubor** lze vytvořit novou šablonu, otevřít soubor nebo vybrat některý z
 posledních dokumentů. Existující soubor
 lze také otevřít přímo při spuštění; každá zadaná cesta dostane vlastní
 okno a systémový dialog se v tom případě nezobrazí:
@@ -35,9 +35,12 @@ uv run krizovkar-gui examples/template-unfilled.yaml \
 ```
 
 Volba **Soubor → Nová šablona…** otevře dialog pro zadání počtu sloupců
-a řádků a pro volbu švédského nebo číslovaného rozvržení. Tlačítko
-**Vygenerovat** vytvoří nový samostatný dokument; neplatný nebo
-nerozvrhnutelný rozměr dialog vysvětlí a ponechá otevřený k opravě.
+a řádků, pro volbu švédské nebo číslované křížovky a pro volbu
+počátečního obsahu. Prázdná varianta vytvoří jednoduchý základ bez
+vnitřních předělů; vygenerovaná varianta rozvrhne místa pro hesla
+pseudonáhodně. Tlačítko **Vytvořit** otevře výsledek jako nový samostatný
+dokument. Neplatný nebo nerozvrhnutelný rozměr dialog vysvětlí a ponechá
+otevřený k opravě.
 
 Každé viditelné okno představuje právě jeden YAML soubor a v titulku ukazuje
 jeho název, případně **Nová šablona**. Hvězdička

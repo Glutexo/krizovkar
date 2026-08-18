@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import subprocess
 import sys
 import tkinter as tk
@@ -20,6 +21,7 @@ from krizovkar.alphabet import split_answer_letters
 from krizovkar.generator import (
     DEFAULT_GRID_HEIGHT,
     DEFAULT_GRID_WIDTH,
+    DEFAULT_SEED,
     GenerationError,
     SpecificationLayout,
     create_grid_from_crossword,
@@ -33,6 +35,7 @@ from krizovkar.model import (
     Coordinate,
     CrosswordDocument,
     CrosswordGrid,
+    CrosswordLayout,
     CrosswordSecret,
     CrosswordSecretCellsPart,
     CrosswordSecretSlotPart,
@@ -94,6 +97,7 @@ _DIRECTION_STEPS: dict[WordDirection, tuple[int, int]] = {
 }
 
 EditableCellRole = Literal["letter", "secret", "legend", "empty"]
+TemplateCreationMode = Literal["empty", "generated"]
 
 
 class GuiInputError(ValueError):
@@ -118,6 +122,15 @@ class CrosswordSettings:
 
     width: int
     height: int
+
+
+@dataclass(frozen=True, slots=True)
+class NewTemplateResult:
+    """Nová šablona spolu s volbami potřebnými pro další úpravy."""
+
+    document: CrosswordDocument
+    layout: SpecificationLayout
+    creation_mode: TemplateCreationMode
 
 
 @dataclass(frozen=True, slots=True)
@@ -609,7 +622,7 @@ def parse_template_settings(width: str, height: str) -> CrosswordSettings:
 
 
 class TemplateGenerationDialog(simpledialog.Dialog):
-    """Vybere rozměr a rozvržení nově generované šablony."""
+    """Vybere podobu nové prázdné nebo generované šablony."""
 
     def __init__(
         self,
@@ -617,22 +630,25 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         *,
         initial_settings: CrosswordSettings,
         initial_layout: SpecificationLayout,
+        initial_creation_mode: TemplateCreationMode,
     ) -> None:
         self._initial_settings = initial_settings
         self._initial_layout = initial_layout
+        self._initial_creation_mode = initial_creation_mode
         self._width_value: tk.StringVar
         self._height_value: tk.StringVar
         self._layout_value: tk.StringVar
+        self._creation_mode_value: tk.StringVar
         self._width_editor: ttk.Spinbox
-        self._generated_template: CrosswordDocument | None = None
-        super().__init__(parent, "Vygenerovat novou šablonu")
+        self._new_template: NewTemplateResult | None = None
+        super().__init__(parent, "Nová šablona")
 
     def body(self, master: tk.Frame) -> tk.Widget:
         master.configure(padx=16, pady=12)
         master.columnconfigure(0, weight=1)
         ttk.Label(
             master,
-            text="Zvolte rozměr a rozvržení nové šablony.",
+            text="Nastavte novou šablonu křížovky.",
         ).grid(row=0, column=0, sticky="w")
 
         dimensions = ttk.Frame(master)
@@ -668,7 +684,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             textvariable=self._height_value,
         ).grid(row=1, column=2, sticky="w", pady=(3, 0))
 
-        ttk.Label(master, text="Rozvržení").grid(
+        ttk.Label(master, text="Typ křížovky").grid(
             row=2,
             column=0,
             sticky="w",
@@ -680,23 +696,46 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         )
         ttk.Radiobutton(
             master,
-            text="Švédské – nápovědy přímo v mřížce",
+            text="Švédská – nápovědy přímo v mřížce",
             variable=self._layout_value,
             value="swedish",
         ).grid(row=3, column=0, sticky="w", pady=(5, 0))
         ttk.Radiobutton(
             master,
-            text="Číslované – nápovědy pod mřížkou",
+            text="Číslovaná – nápovědy pod mřížkou",
             variable=self._layout_value,
             value="numbered",
         ).grid(row=4, column=0, sticky="w", pady=(4, 0))
+
+        ttk.Label(master, text="Počáteční obsah").grid(
+            row=5,
+            column=0,
+            sticky="w",
+            pady=(14, 0),
+        )
+        self._creation_mode_value = tk.StringVar(
+            master=master,
+            value=self._initial_creation_mode,
+        )
+        ttk.Radiobutton(
+            master,
+            text="Prázdná – bez vnitřních předělů",
+            variable=self._creation_mode_value,
+            value="empty",
+        ).grid(row=6, column=0, sticky="w", pady=(5, 0))
+        ttk.Radiobutton(
+            master,
+            text="Vygenerovaná – pseudonáhodně rozdělená na hesla",
+            variable=self._creation_mode_value,
+            value="generated",
+        ).grid(row=7, column=0, sticky="w", pady=(4, 0))
         return self._width_editor
 
     def buttonbox(self) -> None:
         buttons = ttk.Frame(self, padding=(16, 0, 16, 16))
         ttk.Button(
             buttons,
-            text="Vygenerovat",
+            text="Vytvořit",
             command=self.ok,
             default="active",
         ).pack(side="right")
@@ -717,13 +756,25 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             )
             layout_value = self._layout_value.get()
             if layout_value not in {"swedish", "numbered"}:
-                raise GuiInputError("Vyberte rozvržení šablony.")
+                raise GuiInputError("Vyberte typ křížovky.")
             layout = cast(SpecificationLayout, layout_value)
-            self._generated_template = create_blank_template(settings, layout)
+            creation_mode_value = self._creation_mode_value.get()
+            if creation_mode_value not in {"empty", "generated"}:
+                raise GuiInputError("Vyberte počáteční obsah šablony.")
+            creation_mode = cast(TemplateCreationMode, creation_mode_value)
+            self._new_template = NewTemplateResult(
+                document=create_new_template(
+                    settings,
+                    layout,
+                    creation_mode,
+                ),
+                layout=layout,
+                creation_mode=creation_mode,
+            )
         except GuiInputError as error:
-            self._generated_template = None
+            self._new_template = None
             messagebox.showerror(
-                "Šablonu nelze vygenerovat",
+                "Šablonu nelze vytvořit",
                 str(error),
                 parent=self,
             )
@@ -732,7 +783,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         return True
 
     def apply(self) -> None:
-        self.result = self._generated_template
+        self.result = self._new_template
 
 
 def _minimum_generated_dimension(layout: SpecificationLayout | None) -> int:
@@ -741,9 +792,111 @@ def _minimum_generated_dimension(layout: SpecificationLayout | None) -> int:
     return MIN_SEGMENT_LENGTH + 1
 
 
+def _minimum_template_dimension(
+    layout: SpecificationLayout | None,
+    creation_mode: TemplateCreationMode,
+) -> int:
+    if creation_mode == "empty":
+        return 1
+    return _minimum_generated_dimension(layout)
+
+
+def create_empty_template(
+    settings: CrosswordSettings,
+    layout: SpecificationLayout,
+) -> CrosswordDocument:
+    """Vytvoří platný základ bez vnitřního rozdělení hesel."""
+
+    if layout not in {"swedish", "numbered"}:
+        raise GuiInputError(f"Nepodporované rozvržení křížovky {layout!r}.")
+    width = settings.width
+    height = settings.height
+    if width < 1 or height < 1:
+        raise GuiInputError("Rozměry šablony musí být větší než nula.")
+
+    if layout == "numbered":
+        cells = tuple(
+            tuple(LetterCellRole() for _ in range(width))
+            for _ in range(height)
+        )
+        slots = tuple(
+            WordSlot(
+                identifier=f"h{row}",
+                start=Coordinate(row=row, column=1),
+                direction="horizontal",
+                length=width,
+            )
+            for row in range(1, height + 1)
+        ) + tuple(
+            WordSlot(
+                identifier=f"v{column}",
+                start=Coordinate(row=1, column=column),
+                direction="vertical",
+                length=height,
+            )
+            for column in range(1, width + 1)
+        )
+    else:
+        if width == height == 1:
+            raise GuiInputError(
+                "Prázdná švédská šablona musí mít alespoň dva "
+                "sloupce nebo dva řádky."
+            )
+        cell_rows = []
+        for row in range(1, height + 1):
+            cell_row = []
+            for column in range(1, width + 1):
+                if row == column == 1 and width > 1 and height > 1:
+                    cell_row.append(EmptyCellRole())
+                elif (row == 1 and height > 1) or (
+                    column == 1 and width > 1
+                ):
+                    cell_row.append(LegendCellRole())
+                else:
+                    cell_row.append(LetterCellRole())
+            cell_rows.append(tuple(cell_row))
+        cells = tuple(cell_rows)
+        horizontal_rows = range(1 if height == 1 else 2, height + 1)
+        vertical_columns = range(1 if width == 1 else 2, width + 1)
+        slots = tuple(
+            WordSlot(
+                identifier=f"h{number}",
+                start=Coordinate(row=row, column=2),
+                direction="horizontal",
+                length=width - 1,
+                clue_placement="inline",
+            )
+            for number, row in enumerate(horizontal_rows, start=1)
+        ) + tuple(
+            WordSlot(
+                identifier=f"v{number}",
+                start=Coordinate(row=2, column=column),
+                direction="vertical",
+                length=height - 1,
+                clue_placement="inline",
+            )
+            for number, column in enumerate(vertical_columns, start=1)
+        )
+
+    return CrosswordDocument(
+        format_name="krizovkar",
+        kind="crossword",
+        version=1,
+        grid=CrosswordLayout(
+            width=width,
+            height=height,
+            cells=cells,
+        ),
+        slots=slots,
+    )
+
+
 def create_blank_template(
     settings: CrosswordSettings,
     layout: SpecificationLayout,
+    *,
+    seed: int = DEFAULT_SEED,
+    randomize_layout: bool = False,
 ) -> CrosswordDocument:
     """Vygeneruje hustou prázdnou šablonu z rozvržení a rozměru."""
 
@@ -755,9 +908,39 @@ def create_blank_template(
         else generate_swedish_template
     )
     try:
-        return generator(width=settings.width, height=settings.height)
+        return generator(
+            width=settings.width,
+            height=settings.height,
+            seed=seed,
+            randomize_layout=randomize_layout,
+        )
     except GenerationError as error:
         raise GuiInputError(str(error)) from error
+
+
+def create_new_template(
+    settings: CrosswordSettings,
+    layout: SpecificationLayout,
+    creation_mode: TemplateCreationMode,
+    *,
+    seed: int | None = None,
+) -> CrosswordDocument:
+    """Vytvoří prázdnou nebo pseudonáhodně rozvrženou šablonu."""
+
+    if creation_mode == "empty":
+        return create_empty_template(settings, layout)
+    if creation_mode != "generated":
+        raise GuiInputError(
+            f"Nepodporovaný počáteční obsah šablony {creation_mode!r}."
+        )
+    if seed is None:
+        seed = random.randrange(2**63)
+    return create_blank_template(
+        settings,
+        layout,
+        seed=seed,
+        randomize_layout=True,
+    )
 
 
 def parse_slot_content(
@@ -1688,6 +1871,20 @@ def _template_generation_layout(
     if any(slot.clue_placement == "inline" for slot in document.slots):
         return "swedish"
     return "numbered"
+
+
+def _template_creation_mode(
+    document: CrosswordDocument,
+    layout: SpecificationLayout,
+) -> TemplateCreationMode:
+    """Rozpozná nezměněný prázdný základ po opětovném otevření."""
+
+    settings = CrosswordSettings(document.grid.width, document.grid.height)
+    try:
+        empty_template = create_empty_template(settings, layout)
+    except GuiInputError:
+        return "generated"
+    return "empty" if document == empty_template else "generated"
 
 
 def _word_count_text(count: int) -> str:
@@ -2842,11 +3039,17 @@ class CrosswordApplication:
                 DEFAULT_GRID_HEIGHT,
             ),
             initial_layout="swedish",
+            initial_creation_mode="empty",
         )
-        template = cast(CrosswordDocument | None, dialog.result)
-        if template is None:
+        new_template = cast(NewTemplateResult | None, dialog.result)
+        if new_template is None:
             return None
-        return self._open_window(template, dirty=True)
+        return self._open_window(
+            new_template.document,
+            dirty=True,
+            template_layout=new_template.layout,
+            template_creation_mode=new_template.creation_mode,
+        )
 
     def choose_document(
         self,
@@ -2914,6 +3117,8 @@ class CrosswordApplication:
         *,
         path: Path | None = None,
         dirty: bool,
+        template_layout: SpecificationLayout | None = None,
+        template_creation_mode: TemplateCreationMode | None = None,
     ) -> CrosswordDocumentWindow:
         self.root.withdraw()
         window_root = tk.Toplevel(self.root)
@@ -2923,6 +3128,8 @@ class CrosswordApplication:
             document=document,
             path=path,
             dirty=dirty,
+            template_layout=template_layout,
+            template_creation_mode=template_creation_mode,
         )
         self._windows.append(window)
         self.document_window_activated(window)
@@ -2958,6 +3165,8 @@ class CrosswordDocumentWindow(ttk.Frame):
         document: CrosswordDocument,
         path: Path | None,
         dirty: bool,
+        template_layout: SpecificationLayout | None = None,
+        template_creation_mode: TemplateCreationMode | None = None,
     ) -> None:
         super().__init__(root, padding=(12, 10))
         self.root = root
@@ -2968,7 +3177,12 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._grid: CrosswordGrid | None = None
         self._yaml_source_buffer: str | None = None
         self._yaml_source_error: str | None = None
-        self._template_layout = _template_generation_layout(document)
+        self._template_layout = (
+            template_layout or _template_generation_layout(document)
+        )
+        self._template_creation_mode = template_creation_mode or (
+            _template_creation_mode(document, self._template_layout)
+        )
         self._selected_slot_identifier: str | None = None
         self._slot_edit_identifier: str | None = None
         self._slot_answer_editor: ttk.Entry | None = None
@@ -3289,8 +3503,9 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         self.crossword_preview.set_grid_resize_handler(
             self._preview_grid_resized,
-            minimum_dimension=_minimum_generated_dimension(
-                self._template_layout
+            minimum_dimension=_minimum_template_dimension(
+                self._template_layout,
+                self._template_creation_mode,
             ),
             maximum_dimension=_MAX_CROSSWORD_DIMENSION,
         )
@@ -3494,7 +3709,11 @@ class CrosswordDocumentWindow(ttk.Frame):
             return
         layout = self._template_layout or "swedish"
         try:
-            template = create_blank_template(settings, layout)
+            template = create_new_template(
+                settings,
+                layout,
+                self._template_creation_mode,
+            )
         except GuiInputError:
             return
 

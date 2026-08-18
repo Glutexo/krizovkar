@@ -441,14 +441,20 @@ def generate_swedish_template(
     height: int = DEFAULT_GRID_HEIGHT,
     seed: int = DEFAULT_SEED,
     secret: SecretRequirement | None = None,
+    randomize_layout: bool = False,
 ) -> CrosswordDocument:
     """Vytvoří nevyplněnou šablonu s vepsanými legendami."""
 
     if secret is None:
         try:
-            return _swedish_template_from_layout(
-                create_dense_swedish_layout(width, height)
+            layout = (
+                random.Random(seed).choice(
+                    create_dense_swedish_layout_candidates(width, height)
+                )
+                if randomize_layout
+                else create_dense_swedish_layout(width, height)
             )
+            return _swedish_template_from_layout(layout)
         except LayoutError as error:
             raise GenerationError(str(error)) from error
 
@@ -486,14 +492,20 @@ def generate_numbered_template(
     height: int = DEFAULT_GRID_HEIGHT,
     seed: int = DEFAULT_SEED,
     secret: SecretRequirement | None = None,
+    randomize_layout: bool = False,
 ) -> CrosswordDocument:
     """Vytvoří nevyplněnou šablonu s vnějšími legendami."""
 
     if secret is None:
         try:
-            return _numbered_template_from_layout(
-                create_dense_numbered_layout(width, height)
+            layout = (
+                random.Random(seed).choice(
+                    create_dense_numbered_layout_candidates(width, height)
+                )
+                if randomize_layout
+                else create_dense_numbered_layout(width, height)
             )
+            return _numbered_template_from_layout(layout)
         except LayoutError as error:
             raise GenerationError(str(error)) from error
 

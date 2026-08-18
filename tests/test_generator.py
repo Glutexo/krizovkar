@@ -928,6 +928,29 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         self.assertEqual("inline", first_slot.clue_placement)
         self.assertEqual(Coordinate(2, 1), first_slot.inline_clue_position)
 
+    def test_randomized_template_layout_is_repeatable_from_seed(self) -> None:
+        first = generate_swedish_template(
+            width=15,
+            height=10,
+            seed=1,
+            randomize_layout=True,
+        )
+        repeated = generate_swedish_template(
+            width=15,
+            height=10,
+            seed=1,
+            randomize_layout=True,
+        )
+        second = generate_swedish_template(
+            width=15,
+            height=10,
+            seed=2,
+            randomize_layout=True,
+        )
+
+        self.assertEqual(first, repeated)
+        self.assertNotEqual(first, second)
+
     def test_generates_numbered_template_without_dictionary(self) -> None:
         first = generate_numbered_template(width=7, height=7)
         second = generate_numbered_template(width=7, height=7)
