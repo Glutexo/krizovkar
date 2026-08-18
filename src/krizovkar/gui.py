@@ -621,12 +621,21 @@ def parse_template_settings(width: str, height: str) -> CrosswordSettings:
     return settings
 
 
+def parse_template_seed(value: str) -> int:
+    """Převede sémě pseudonáhodného rozvržení na celé číslo."""
+
+    try:
+        return int(value.strip())
+    except ValueError as error:
+        raise GuiInputError("Sémě musí být celé číslo.") from error
+
+
 def _template_cli_command(
     settings: CrosswordSettings,
     layout: SpecificationLayout,
     creation_mode: TemplateCreationMode,
     *,
-    seed: int,
+    seed: int | None,
 ) -> str:
     """Sestaví CLI příkaz pro stejnou novou šablonu jako dialog."""
 
@@ -634,6 +643,8 @@ def _template_cli_command(
     if creation_mode == "empty":
         arguments.append("--empty")
     elif creation_mode == "generated":
+        if seed is None:
+            raise GuiInputError("Vygenerovaná šablona vyžaduje sémě.")
         arguments.extend(("--randomize", "--seed", str(seed)))
     else:
         raise GuiInputError(
@@ -672,12 +683,15 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._height_value: tk.StringVar
         self._layout_value: tk.StringVar
         self._creation_mode_value: tk.StringVar
+        self._seed_value: tk.StringVar
+        self._seed_controls: ttk.Frame
+        self._seed_editor: ttk.Entry
         self._cli_visible_value: tk.BooleanVar
         self._cli_command_value: tk.StringVar
         self._cli_command_frame: ttk.LabelFrame
         self._cli_command_text: tk.Text
         self._width_editor: ttk.Spinbox
-        self._generated_seed = random.randrange(2**63)
+        self._initial_seed = random.randrange(2**63)
         self._new_template: NewTemplateResult | None = None
         super().__init__(parent, "Nová šablona")
 
@@ -762,14 +776,43 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             variable=self._creation_mode_value,
             value="generated",
         ).grid(row=6, column=0, sticky="w", pady=(4, 0))
+        self._seed_value = tk.StringVar(
+            master=master,
+            value=str(self._initial_seed),
+        )
+        self._seed_controls = ttk.Frame(master)
+        self._seed_controls.grid(
+            row=7,
+            column=0,
+            sticky="w",
+            padx=(24, 0),
+            pady=(7, 0),
+        )
+        ttk.Label(self._seed_controls, text="Sémě").grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
+        self._seed_editor = ttk.Entry(
+            self._seed_controls,
+            width=22,
+            textvariable=self._seed_value,
+        )
+        self._seed_editor.grid(row=0, column=1, sticky="w", padx=(8, 0))
         self._cli_command_value = tk.StringVar(master=master)
         for value in (
             self._width_value,
             self._height_value,
             self._layout_value,
             self._creation_mode_value,
+            self._seed_value,
         ):
             value.trace_add("write", self._refresh_cli_command)
+        self._creation_mode_value.trace_add(
+            "write",
+            self._update_seed_controls,
+        )
+        self._update_seed_controls()
         self._refresh_cli_command()
         return self._width_editor
 
@@ -828,6 +871,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         CrosswordSettings,
         SpecificationLayout,
         TemplateCreationMode,
+        int | None,
     ]:
         settings = parse_template_settings(
             self._width_value.get(),
@@ -839,20 +883,28 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         creation_mode_value = self._creation_mode_value.get()
         if creation_mode_value not in {"empty", "generated"}:
             raise GuiInputError("Vyberte počáteční obsah šablony.")
+        seed = (
+            parse_template_seed(self._seed_value.get())
+            if creation_mode_value == "generated"
+            else None
+        )
         return (
             settings,
             cast(SpecificationLayout, layout_value),
             cast(TemplateCreationMode, creation_mode_value),
+            seed,
         )
 
     def _refresh_cli_command(self, *_trace_arguments: str) -> None:
         try:
-            settings, layout, creation_mode = self._selected_configuration()
+            settings, layout, creation_mode, seed = (
+                self._selected_configuration()
+            )
             command = _template_cli_command(
                 settings,
                 layout,
                 creation_mode,
-                seed=self._generated_seed,
+                seed=seed,
             )
         except GuiInputError:
             command = "Příkaz bude dostupný po opravě nastavení."
@@ -863,6 +915,12 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._cli_command_text.delete("1.0", "end")
         self._cli_command_text.insert("1.0", self._cli_command_value.get())
         self._cli_command_text.configure(state="disabled")
+
+    def _update_seed_controls(self, *_trace_arguments: str) -> None:
+        if self._creation_mode_value.get() == "generated":
+            self._seed_controls.grid()
+        else:
+            self._seed_controls.grid_remove()
 
     def _toggle_cli_command(self) -> None:
         if self._cli_visible_value.get():
@@ -877,17 +935,15 @@ class TemplateGenerationDialog(simpledialog.Dialog):
 
     def validate(self) -> bool:
         try:
-            settings, layout, creation_mode = self._selected_configuration()
+            settings, layout, creation_mode, seed = (
+                self._selected_configuration()
+            )
             self._new_template = NewTemplateResult(
                 document=create_new_template(
                     settings,
                     layout,
                     creation_mode,
-                    seed=(
-                        self._generated_seed
-                        if creation_mode == "generated"
-                        else None
-                    ),
+                    seed=seed,
                 ),
                 layout=layout,
                 creation_mode=creation_mode,

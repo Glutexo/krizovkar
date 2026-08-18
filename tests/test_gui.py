@@ -51,6 +51,7 @@ from krizovkar.gui import (
     fill_crossword_slot,
     main,
     parse_slot_content,
+    parse_template_seed,
     parse_template_settings,
     set_crossword_cell_role,
     set_crossword_cell_slot_start,
@@ -1062,6 +1063,17 @@ class GuiTest(unittest.TestCase):
         with self.assertRaisesRegex(GuiInputError, "nejvýše 50"):
             parse_template_settings("51", "10")
 
+    def test_parses_template_seed(self) -> None:
+        self.assertEqual(-42, parse_template_seed(" -42 "))
+
+    def test_rejects_invalid_template_seed(self) -> None:
+        for value in ("", "1,5", "sémě"):
+            with self.subTest(value=value), self.assertRaisesRegex(
+                GuiInputError,
+                "Sémě musí být celé číslo",
+            ):
+                parse_template_seed(value)
+
     def test_builds_cli_command_for_empty_template(self) -> None:
         self.assertEqual(
             "uv run krizovkar template --empty --layout swedish "
@@ -1070,7 +1082,7 @@ class GuiTest(unittest.TestCase):
                 CrosswordSettings(width=15, height=10),
                 "swedish",
                 "empty",
-                seed=123,
+                seed=None,
             ),
         )
 
@@ -1096,7 +1108,8 @@ class GuiTest(unittest.TestCase):
         dialog._layout_value.get.return_value = "numbered"
         dialog._creation_mode_value = Mock()
         dialog._creation_mode_value.get.return_value = "generated"
-        dialog._generated_seed = 123
+        dialog._seed_value = Mock()
+        dialog._seed_value.get.return_value = "123"
         dialog._cli_command_value = Mock()
 
         TemplateGenerationDialog._refresh_cli_command(dialog)
@@ -1116,7 +1129,6 @@ class GuiTest(unittest.TestCase):
         dialog._layout_value.get.return_value = "numbered"
         dialog._creation_mode_value = Mock()
         dialog._creation_mode_value.get.return_value = "empty"
-        dialog._generated_seed = 123
         dialog._cli_command_value = Mock()
 
         TemplateGenerationDialog._refresh_cli_command(dialog)
@@ -1222,6 +1234,20 @@ class GuiTest(unittest.TestCase):
             "uv run krizovkar template",
         )
 
+    def test_template_dialog_shows_seed_only_for_generated_template(
+        self,
+    ) -> None:
+        dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
+        dialog._creation_mode_value = Mock()
+        dialog._creation_mode_value.get.side_effect = ("empty", "generated")
+        dialog._seed_controls = Mock()
+
+        TemplateGenerationDialog._update_seed_controls(dialog)
+        TemplateGenerationDialog._update_seed_controls(dialog)
+
+        dialog._seed_controls.grid_remove.assert_called_once_with()
+        dialog._seed_controls.grid.assert_called_once_with()
+
     def test_template_dialog_validates_selected_generated_layout(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
         dialog._width_value = Mock()
@@ -1232,7 +1258,8 @@ class GuiTest(unittest.TestCase):
         dialog._layout_value.get.return_value = "numbered"
         dialog._creation_mode_value = Mock()
         dialog._creation_mode_value.get.return_value = "generated"
-        dialog._generated_seed = 123
+        dialog._seed_value = Mock()
+        dialog._seed_value.get.return_value = "123"
         dialog._width_editor = Mock()
         dialog._new_template = None
         template = create_blank_template(CrosswordSettings(3, 3), "numbered")
@@ -1256,6 +1283,38 @@ class GuiTest(unittest.TestCase):
             dialog.result,
         )
 
+    def test_template_dialog_ignores_hidden_invalid_seed_for_empty_template(
+        self,
+    ) -> None:
+        dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
+        dialog._width_value = Mock()
+        dialog._width_value.get.return_value = "4"
+        dialog._height_value = Mock()
+        dialog._height_value.get.return_value = "3"
+        dialog._layout_value = Mock()
+        dialog._layout_value.get.return_value = "swedish"
+        dialog._creation_mode_value = Mock()
+        dialog._creation_mode_value.get.return_value = "empty"
+        dialog._seed_value = Mock()
+        dialog._seed_value.get.return_value = "neplatné"
+        dialog._width_editor = Mock()
+        dialog._new_template = None
+        template = create_empty_template(CrosswordSettings(4, 3), "swedish")
+
+        with patch(
+            "krizovkar.gui.create_new_template",
+            return_value=template,
+        ) as create_template:
+            valid = TemplateGenerationDialog.validate(dialog)
+
+        self.assertTrue(valid)
+        create_template.assert_called_once_with(
+            CrosswordSettings(width=4, height=3),
+            "swedish",
+            "empty",
+            seed=None,
+        )
+
     def test_template_dialog_keeps_invalid_settings_open(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
         dialog._width_value = Mock()
@@ -1266,7 +1325,8 @@ class GuiTest(unittest.TestCase):
         dialog._layout_value.get.return_value = "swedish"
         dialog._creation_mode_value = Mock()
         dialog._creation_mode_value.get.return_value = "generated"
-        dialog._generated_seed = 123
+        dialog._seed_value = Mock()
+        dialog._seed_value.get.return_value = "123"
         dialog._width_editor = Mock()
         dialog._new_template = Mock()
 

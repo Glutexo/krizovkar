@@ -38,9 +38,11 @@ Volba **Soubor → Nová šablona…** otevře dialog pro zadání počtu sloupc
 a řádků, pro volbu švédské nebo číslované křížovky a pro volbu
 počátečního obsahu. Prázdná varianta vytvoří jednoduchý základ bez
 vnitřních předělů; vygenerovaná varianta rozvrhne místa pro hesla
-pseudonáhodně. Tlačítko **Vytvořit** otevře výsledek jako nový samostatný
-dokument. Neplatný nebo nerozvrhnutelný rozměr dialog vysvětlí a ponechá
-otevřený k opravě. Tlačítko-přepínač **CLI** vlevo dole rozbalí ve spodní
+pseudonáhodně. Po jejím zvolení se zobrazí pole **Sémě**, předvyplněné
+náhodným celým číslem, které lze pro opakování konkrétního rozvržení
+změnit. Tlačítko **Vytvořit** otevře výsledek jako nový samostatný dokument.
+Neplatný nebo nerozvrhnutelný rozměr dialog vysvětlí a ponechá otevřený
+k opravě. Tlačítko-přepínač **CLI** vlevo dole rozbalí ve spodní
 části dialogu kopírovatelný příkaz, který na příkazové řádce vytvoří
 totožnou šablonu. Text používá písmo s pevnou šířkou, podle
 dostupného místa se zalamuje a otevře se pod tlačítky, aniž změní šířku
