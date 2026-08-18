@@ -48,6 +48,7 @@ from krizovkar.gui import (
 from krizovkar.model import (
     Coordinate,
     CrosswordDocument,
+    EmptyCellRole,
     LegendCellRole,
     LetterCell,
     LetterCellRole,
@@ -875,6 +876,32 @@ class GuiTest(unittest.TestCase):
                         slot.legend_position == coordinate
                         for slot in changed.slots
                     )
+                )
+
+    def test_multiple_cell_role_change_empties_orphaned_legend(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=12, height=10),
+            "swedish",
+        )
+        coordinates = (
+            Coordinate(2, 3),
+            Coordinate(3, 4),
+            Coordinate(4, 3),
+            Coordinate(5, 3),
+        )
+
+        changed = set_crossword_cells_role(
+            crossword,
+            coordinates,
+            "legend",
+        )
+
+        self.assertIsInstance(changed.grid.cells[0][2], EmptyCellRole)
+        for coordinate in coordinates:
+            with self.subTest(coordinate=coordinate):
+                self.assertIsInstance(
+                    changed.grid.cells[coordinate.row - 1][coordinate.column - 1],
+                    LegendCellRole,
                 )
 
     def test_multiple_cell_role_change_is_atomic_on_error(self) -> None:

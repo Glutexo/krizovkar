@@ -34,6 +34,7 @@ from krizovkar.model import (
     CrosswordSecretCellsPart,
     CrosswordSecretSlotPart,
     EmptyCell,
+    EmptyCellRole,
     HelpCell,
     LegendCell,
     LegendCellRole,
@@ -554,6 +555,19 @@ def _crossword_with_cell_role(
 ) -> CrosswordDocument:
     rows = [list(row) for row in crossword.grid.cells]
     rows[coordinate.row - 1][coordinate.column - 1] = role
+    used_legends = {
+        slot.legend_position
+        for slot in slots
+        if slot.legend_position is not None
+    }
+    for row_index, row in enumerate(rows, start=1):
+        for column_index, cell in enumerate(row, start=1):
+            cell_coordinate = Coordinate(row_index, column_index)
+            if (
+                isinstance(cell, LegendCellRole)
+                and cell_coordinate not in used_legends
+            ):
+                row[column_index - 1] = EmptyCellRole()
     return replace(
         crossword,
         grid=replace(
