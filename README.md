@@ -435,7 +435,7 @@ uv run krizovkar template --width 15 --height 10 \
   | uv run krizovkar render - > build/unfilled-grid.pdf
 ```
 
-## Vygenerování šablony
+## Vytvoření šablony
 
 Umístěné zadání převede na šablonu volitelný poziční argument:
 
@@ -453,8 +453,8 @@ písmeno, převod skončí s konkrétní chybou. `--layout numbered` samostatné
 legendové buňky nepotřebuje a texty připraví jako vnější číslované legendy.
 
 Rozměr i tajenky už v tomto režimu určuje zadání. Volby `--width`,
-`--height`, `--seed` a volby tajenky proto nelze se vstupním souborem
-kombinovat.
+`--height`, `--empty`, `--randomize`, `--seed` a volby tajenky proto nelze se
+vstupním souborem kombinovat.
 
 Bez vstupního zadání vygeneruje stejný příkaz hustou nevyplněnou šablonu
 bez slovníku a bez znalosti budoucích odpovědí. Výchozí rozvržení je švédské:
@@ -476,7 +476,36 @@ uv run krizovkar template \
   --output build/numbered-template.yaml
 ```
 
-Stejné rozvržení a rozměry vytvoří stejnou šablonu. Švédský
+Volba `--empty` místo toho vytvoří jednoduchý základ bez vnitřních
+předělů. Švédská varianta ponechá jediný souvislý blok s legendami na
+horním a levém okraji, číslovaná jediná souvislá hesla přes celé řádky a
+sloupce:
+
+```shell
+uv run krizovkar template \
+  --empty \
+  --layout swedish \
+  --width 15 \
+  --height 10 \
+  --output build/empty-template.yaml
+```
+
+Automatické rozvržení lze vybírat pseudonáhodně pomocí `--randomize`.
+Volitelný `--seed` umožní stejnou variantu později zopakovat:
+
+```shell
+uv run krizovkar template \
+  --randomize \
+  --seed 42 \
+  --layout numbered \
+  --width 15 \
+  --height 10 \
+  --output build/random-template.yaml
+```
+
+`--empty` nelze spojit s `--randomize`, `--seed` ani volbami tajenky.
+Bez `--randomize` vytvoří stejné rozvržení a rozměry stejnou šablonu;
+s ní rozhoduje navíc seed. Švédský
 generátor rozdělí plochu na písmenné obdélníky, legendové buňky a jejich
 nevyplňované průsečíky. Číslovaná varianta ponechá všechny buňky písmenné,
 obě osy rozdělí silnými předěly a budoucí legendy umístí vně mřížky.

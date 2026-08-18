@@ -470,6 +470,9 @@ def generate_swedish_template(
         except LayoutError as error:
             last_error = error
             continue
+        if randomize_layout:
+            layouts = list(layouts)
+            random.Random(seed).shuffle(layouts)
         for layout in layouts:
             try:
                 return place_secret_in_template(
@@ -483,6 +486,106 @@ def generate_swedish_template(
     detail = f": {last_error}" if last_error is not None else ""
     raise GenerationError(
         f"pro rozměr {width} × {height} nelze rozvrhnout tajenku{detail}"
+    )
+
+
+def generate_empty_template(
+    *,
+    width: int = DEFAULT_GRID_WIDTH,
+    height: int = DEFAULT_GRID_HEIGHT,
+    layout: SpecificationLayout = "swedish",
+) -> CrosswordDocument:
+    """Vytvoří platný základ bez vnitřního rozdělení hesel."""
+
+    if layout not in {"swedish", "numbered"}:
+        raise GenerationError(f"nepodporované rozvržení {layout!r}")
+    if width < 1 or height < 1:
+        raise GenerationError("rozměry šablony musí být větší než nula")
+
+    if layout == "numbered":
+        cells = tuple(
+            tuple(LetterCellRole() for _ in range(width))
+            for _ in range(height)
+        )
+        slots = tuple(
+            WordSlot(
+                identifier=f"h{row}",
+                start=Coordinate(row=row, column=1),
+                direction="horizontal",
+                length=width,
+            )
+            for row in range(1, height + 1)
+        ) + tuple(
+            WordSlot(
+                identifier=f"v{column}",
+                start=Coordinate(row=1, column=column),
+                direction="vertical",
+                length=height,
+            )
+            for column in range(1, width + 1)
+        )
+    else:
+        if width == height == 1:
+            raise GenerationError(
+                "prázdná švédská šablona musí mít alespoň dva "
+                "sloupce nebo dva řádky"
+            )
+        cell_rows = []
+        for row in range(1, height + 1):
+            cell_row = []
+            for column in range(1, width + 1):
+                if row == column == 1 and width > 1 and height > 1:
+                    cell_row.append(EmptyCellRole())
+                elif (row == 1 and height > 1) or (
+                    column == 1 and width > 1
+                ):
+                    cell_row.append(LegendCellRole())
+                else:
+                    cell_row.append(LetterCellRole())
+            cell_rows.append(tuple(cell_row))
+        cells = tuple(cell_rows)
+        horizontal_rows = range(1 if height == 1 else 2, height + 1)
+        vertical_columns = range(1 if width == 1 else 2, width + 1)
+        horizontal_slots = (
+            tuple(
+                WordSlot(
+                    identifier=f"h{number}",
+                    start=Coordinate(row=row, column=2),
+                    direction="horizontal",
+                    length=width - 1,
+                    clue_placement="inline",
+                )
+                for number, row in enumerate(horizontal_rows, start=1)
+            )
+            if width > 1
+            else ()
+        )
+        vertical_slots = (
+            tuple(
+                WordSlot(
+                    identifier=f"v{number}",
+                    start=Coordinate(row=2, column=column),
+                    direction="vertical",
+                    length=height - 1,
+                    clue_placement="inline",
+                )
+                for number, column in enumerate(vertical_columns, start=1)
+            )
+            if height > 1
+            else ()
+        )
+        slots = horizontal_slots + vertical_slots
+
+    return CrosswordDocument(
+        format_name="krizovkar",
+        kind="crossword",
+        version=1,
+        grid=CrosswordLayout(
+            width=width,
+            height=height,
+            cells=cells,
+        ),
+        slots=slots,
     )
 
 
@@ -521,6 +624,9 @@ def generate_numbered_template(
         except LayoutError as error:
             last_error = error
             continue
+        if randomize_layout:
+            layouts = list(layouts)
+            random.Random(seed).shuffle(layouts)
         for layout in layouts:
             try:
                 return place_secret_in_template(

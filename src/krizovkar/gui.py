@@ -26,6 +26,7 @@ from krizovkar.generator import (
     SpecificationLayout,
     create_grid_from_crossword,
     crossword_external_slot_numbers,
+    generate_empty_template,
     generate_numbered_template,
     generate_swedish_template,
 )
@@ -35,7 +36,6 @@ from krizovkar.model import (
     Coordinate,
     CrosswordDocument,
     CrosswordGrid,
-    CrosswordLayout,
     CrosswordSecret,
     CrosswordSecretCellsPart,
     CrosswordSecretSlotPart,
@@ -807,88 +807,14 @@ def create_empty_template(
 ) -> CrosswordDocument:
     """Vytvoří platný základ bez vnitřního rozdělení hesel."""
 
-    if layout not in {"swedish", "numbered"}:
-        raise GuiInputError(f"Nepodporované rozvržení křížovky {layout!r}.")
-    width = settings.width
-    height = settings.height
-    if width < 1 or height < 1:
-        raise GuiInputError("Rozměry šablony musí být větší než nula.")
-
-    if layout == "numbered":
-        cells = tuple(
-            tuple(LetterCellRole() for _ in range(width))
-            for _ in range(height)
+    try:
+        return generate_empty_template(
+            width=settings.width,
+            height=settings.height,
+            layout=layout,
         )
-        slots = tuple(
-            WordSlot(
-                identifier=f"h{row}",
-                start=Coordinate(row=row, column=1),
-                direction="horizontal",
-                length=width,
-            )
-            for row in range(1, height + 1)
-        ) + tuple(
-            WordSlot(
-                identifier=f"v{column}",
-                start=Coordinate(row=1, column=column),
-                direction="vertical",
-                length=height,
-            )
-            for column in range(1, width + 1)
-        )
-    else:
-        if width == height == 1:
-            raise GuiInputError(
-                "Prázdná švédská šablona musí mít alespoň dva "
-                "sloupce nebo dva řádky."
-            )
-        cell_rows = []
-        for row in range(1, height + 1):
-            cell_row = []
-            for column in range(1, width + 1):
-                if row == column == 1 and width > 1 and height > 1:
-                    cell_row.append(EmptyCellRole())
-                elif (row == 1 and height > 1) or (
-                    column == 1 and width > 1
-                ):
-                    cell_row.append(LegendCellRole())
-                else:
-                    cell_row.append(LetterCellRole())
-            cell_rows.append(tuple(cell_row))
-        cells = tuple(cell_rows)
-        horizontal_rows = range(1 if height == 1 else 2, height + 1)
-        vertical_columns = range(1 if width == 1 else 2, width + 1)
-        slots = tuple(
-            WordSlot(
-                identifier=f"h{number}",
-                start=Coordinate(row=row, column=2),
-                direction="horizontal",
-                length=width - 1,
-                clue_placement="inline",
-            )
-            for number, row in enumerate(horizontal_rows, start=1)
-        ) + tuple(
-            WordSlot(
-                identifier=f"v{number}",
-                start=Coordinate(row=2, column=column),
-                direction="vertical",
-                length=height - 1,
-                clue_placement="inline",
-            )
-            for number, column in enumerate(vertical_columns, start=1)
-        )
-
-    return CrosswordDocument(
-        format_name="krizovkar",
-        kind="crossword",
-        version=1,
-        grid=CrosswordLayout(
-            width=width,
-            height=height,
-            cells=cells,
-        ),
-        slots=slots,
-    )
+    except GenerationError as error:
+        raise GuiInputError(str(error)) from error
 
 
 def create_blank_template(

@@ -21,6 +21,7 @@ from krizovkar.generator import (
     create_grid_from_crossword,
     create_template_from_specification,
     fill_crossword,
+    generate_empty_template,
     generate_numbered_template,
     generate_swedish_template,
     normalize_secret_text,
@@ -157,11 +158,12 @@ def _parser() -> argparse.ArgumentParser:
 
     template = commands.add_parser(
         "template",
-        help="vygeneruje šablonu křížovky ze zadání nebo bez něj",
+        help="vytvoří šablonu křížovky ze zadání nebo bez něj",
         description=(
             "Převede vstupní zadání na švédskou nebo číslovanou "
-            "šablonu. Bez vstupního zadání vygeneruje hustou nevyplněnou "
-            "šablonu z rozměru, aniž použije slovník."
+            "šablonu. Bez vstupního zadání vytvoří z rozměru prázdný "
+            "základ nebo pseudonáhodně rozvrženou nevyplněnou šablonu, "
+            "aniž použije slovník."
         ),
     )
     template.add_argument(
@@ -193,13 +195,31 @@ def _parser() -> argparse.ArgumentParser:
         help=f"počet řádků; výchozí je {DEFAULT_GRID_HEIGHT}",
     )
     _add_layout_argument(template)
+    template_creation = template.add_mutually_exclusive_group()
+    template_creation.add_argument(
+        "--empty",
+        action="store_true",
+        help=(
+            "vytvoří jednoduchý základ bez vnitřních předělů místo "
+            "automaticky rozvržené šablony"
+        ),
+    )
+    template_creation.add_argument(
+        "--randomize",
+        action="store_true",
+        help=(
+            "vybere automatické rozvržení pseudonáhodně; volba "
+            "--seed zachová opakovatelnost"
+        ),
+    )
     template.add_argument(
         "--seed",
         type=int,
         default=None,
         metavar="ČÍSLO",
         help=(
-            "počáteční hodnota výběru tajenkových slotů; "
+            "počáteční hodnota rozvržení s --randomize a výběru "
+            "tajenkových slotů; "
             f"výchozí je {DEFAULT_SEED}"
         ),
     )
@@ -585,6 +605,8 @@ def _template(arguments: argparse.Namespace) -> int:
             dense_options = (
                 arguments.width,
                 arguments.height,
+                arguments.empty or None,
+                arguments.randomize or None,
                 arguments.seed,
                 arguments.secret_length,
                 arguments.secret_parts,
@@ -597,7 +619,7 @@ def _template(arguments: argparse.Namespace) -> int:
             if any(value is not None for value in dense_options):
                 raise GenerationError(
                     "při převodu zadání nelze použít --width, --height, "
-                    "--seed ani volby tajenky"
+                    "--empty, --randomize, --seed ani volby tajenky"
                 )
             specification = load_crossword_specification(
                 _input_source(arguments.specification)
@@ -607,30 +629,55 @@ def _template(arguments: argparse.Namespace) -> int:
                 layout=arguments.layout,
             )
         else:
-            secret = _secret_requirement(arguments)
-            generate_template = (
-                generate_numbered_template
-                if arguments.layout == "numbered"
-                else generate_swedish_template
+            width = (
+                arguments.width
+                if arguments.width is not None
+                else DEFAULT_GRID_WIDTH
             )
-            template = generate_template(
-                width=(
-                    arguments.width
-                    if arguments.width is not None
-                    else DEFAULT_GRID_WIDTH
-                ),
-                height=(
-                    arguments.height
-                    if arguments.height is not None
-                    else DEFAULT_GRID_HEIGHT
-                ),
-                seed=(
-                    arguments.seed
-                    if arguments.seed is not None
-                    else DEFAULT_SEED
-                ),
-                secret=secret,
+            height = (
+                arguments.height
+                if arguments.height is not None
+                else DEFAULT_GRID_HEIGHT
             )
+            if arguments.empty:
+                incompatible_options = (
+                    arguments.seed,
+                    arguments.secret_length,
+                    arguments.secret_parts,
+                    arguments.secret,
+                    arguments.secret_part,
+                    arguments.secret_prompt,
+                    arguments.secret_prompt_placement,
+                    arguments.secret_prompt_alignment,
+                )
+                if any(value is not None for value in incompatible_options):
+                    raise GenerationError(
+                        "s volbou --empty nelze použít --seed ani volby "
+                        "tajenky"
+                    )
+                template = generate_empty_template(
+                    width=width,
+                    height=height,
+                    layout=arguments.layout,
+                )
+            else:
+                secret = _secret_requirement(arguments)
+                generate_template = (
+                    generate_numbered_template
+                    if arguments.layout == "numbered"
+                    else generate_swedish_template
+                )
+                template = generate_template(
+                    width=width,
+                    height=height,
+                    seed=(
+                        arguments.seed
+                        if arguments.seed is not None
+                        else DEFAULT_SEED
+                    ),
+                    secret=secret,
+                    randomize_layout=arguments.randomize,
+                )
         if arguments.output is None:
             dump_crossword_document(template, sys.stdout)
         else:
@@ -644,7 +691,7 @@ def _template(arguments: argparse.Namespace) -> int:
         return 2
 
     _print_success(
-        f"Šablona vygenerována: {_output_description(arguments.output)} "
+        f"Šablona vytvořena: {_output_description(arguments.output)} "
         f"({template.grid.width} × {template.grid.height}, "
         f"{_localized_count(len(template.slots), 'heslo', 'hesel')})",
         arguments.output,

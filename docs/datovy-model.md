@@ -122,9 +122,13 @@ pro každé slovo volnou legendovou buňku bezprostředně před jeho začátkem
 první volné buňky po řádcích. Tajenková slova se stanou pevnými sloty a
 tajenky z vybraných polí zůstanou samostatnými částmi `cells`.
 
-Bez pozičního vstupu vytváří `template` deterministickou hustou nevyplněnou
-šablonu bez slovníku. Švédské rozvržení používá legendové osy a písmenné bloky;
+Bez pozičního vstupu vytváří `template` hustou nevyplněnou šablonu
+bez slovníku. Švédské rozvržení používá legendové osy a písmenné bloky;
 číslované ponechá celou plochu písmennou a rozdělí ji silnými předěly.
+Bez další volby se vybere první deterministicky seřazená varianta;
+`--randomize` pořadí variant pseudonáhodně změní a `--seed` zachová
+opakovatelnost. `--empty` vytvoří místo husté masky jednoduchý platný základ
+bez vnitřních předělů. Nelze jej kombinovat se seedem ani volbami tajenky.
 Vodorovné sloty dostávají identifikátory `h1`, `h2`, … v pořadí shora dolů
 a zleva doprava; svislé obdobně `v1`, `v2`, … Volby tajenky mohou určit
 celkovou délku, pevné délky částí, konkrétní seznam slov s automatickým

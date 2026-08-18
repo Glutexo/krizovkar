@@ -17,10 +17,12 @@ from krizovkar.model import (
     DEFAULT_SECRET_PART_LEGEND,
     Coordinate,
     EmptyCell,
+    EmptyCellRole,
     ExternalClue,
     GridDimensions,
     HelpCell,
     LegendCell,
+    LegendCellRole,
     LetterCell,
     LetterCellRole,
     ModelError,
@@ -1426,6 +1428,19 @@ class CommandTest(unittest.TestCase):
 
                 self.assertRegex(stdout.getvalue().lower(), r"křížov|mřížk")
 
+    def test_template_help_describes_both_creation_modes(self) -> None:
+        stdout = io.StringIO()
+
+        with redirect_stdout(stdout), self.assertRaises(SystemExit):
+            main(["template", "--help"])
+
+        help_text = stdout.getvalue()
+        self.assertIn("--empty", help_text)
+        self.assertIn("--randomize", help_text)
+        self.assertIn("--seed", help_text)
+        self.assertIn("bez vnitřních předělů", help_text)
+        self.assertIn("pseudonáhodně", help_text)
+
     def test_argument_errors_are_in_czech(self) -> None:
         cases = (
             (["render"], "je nutné zadat: VSTUP.yaml"),
@@ -1438,6 +1453,10 @@ class CommandTest(unittest.TestCase):
             (
                 ["template", "--secret", "ABC", "--secret-part", "DEF"],
                 "nelze použít společně s argumentem --secret",
+            ),
+            (
+                ["template", "--empty", "--randomize"],
+                "nelze použít společně s argumentem --empty",
             ),
             (["template", "--neznamy"], "nerozpoznané argumenty: --neznamy"),
             (["crossword"], "argument příkaz: neplatná volba: 'crossword'"),
@@ -1517,14 +1536,151 @@ class CommandTest(unittest.TestCase):
         self.assertEqual(0, result)
         self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
         self.assertIn("kind: crossword\n", stdout.getvalue())
-        self.assertNotIn("Šablona vygenerována", stdout.getvalue())
-        self.assertIn("Šablona vygenerována: standardní výstup", stderr.getvalue())
+        self.assertNotIn("Šablona vytvořena", stdout.getvalue())
+        self.assertIn("Šablona vytvořena: standardní výstup", stderr.getvalue())
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "template.yaml"
             source.write_text(stdout.getvalue(), encoding="utf-8")
             template = load_crossword_document(source)
             self.assertEqual(5, template.grid.width)
             self.assertEqual(5, template.grid.height)
+
+    def test_template_creates_empty_swedish_structure(self) -> None:
+        stdout = io.StringIO()
+
+        with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+            result = main(
+                [
+                    "template",
+                    "--empty",
+                    "--width",
+                    "4",
+                    "--height",
+                    "3",
+                ]
+            )
+
+        self.assertEqual(0, result)
+        template = load_crossword_document(io.StringIO(stdout.getvalue()))
+        cells = tuple(cell for row in template.grid.cells for cell in row)
+        self.assertEqual(
+            6,
+            sum(isinstance(cell, LetterCellRole) for cell in cells),
+        )
+        self.assertEqual(
+            5,
+            sum(isinstance(cell, LegendCellRole) for cell in cells),
+        )
+        self.assertEqual(
+            1,
+            sum(isinstance(cell, EmptyCellRole) for cell in cells),
+        )
+        self.assertEqual(5, len(template.slots))
+        self.assertTrue(
+            all(slot.clue_placement == "inline" for slot in template.slots)
+        )
+
+    def test_template_creates_empty_numbered_structure(self) -> None:
+        stdout = io.StringIO()
+
+        with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+            result = main(
+                [
+                    "template",
+                    "--empty",
+                    "--layout",
+                    "numbered",
+                    "--width",
+                    "4",
+                    "--height",
+                    "3",
+                ]
+            )
+
+        self.assertEqual(0, result)
+        template = load_crossword_document(io.StringIO(stdout.getvalue()))
+        self.assertEqual(7, len(template.slots))
+        self.assertTrue(
+            all(
+                isinstance(cell, LetterCellRole)
+                for row in template.grid.cells
+                for cell in row
+            )
+        )
+        self.assertTrue(
+            all(slot.clue_placement == "external" for slot in template.slots)
+        )
+
+    def test_template_creates_one_dimensional_empty_swedish_structure(
+        self,
+    ) -> None:
+        cases = (
+            (1, 3, "vertical"),
+            (3, 1, "horizontal"),
+        )
+        for width, height, direction in cases:
+            with self.subTest(width=width, height=height):
+                stdout = io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                    result = main(
+                        [
+                            "template",
+                            "--empty",
+                            "--width",
+                            str(width),
+                            "--height",
+                            str(height),
+                        ]
+                    )
+
+                self.assertEqual(0, result)
+                template = load_crossword_document(
+                    io.StringIO(stdout.getvalue())
+                )
+                self.assertEqual(1, len(template.slots))
+                self.assertEqual(direction, template.slots[0].direction)
+                self.assertEqual(2, template.slots[0].length)
+
+    def test_template_randomizes_layout_repeatably_from_seed(self) -> None:
+        def generated(seed: int):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                result = main(
+                    [
+                        "template",
+                        "--randomize",
+                        "--seed",
+                        str(seed),
+                        "--width",
+                        "15",
+                        "--height",
+                        "10",
+                    ]
+                )
+            self.assertEqual(0, result)
+            return load_crossword_document(io.StringIO(stdout.getvalue()))
+
+        first = generated(1)
+        repeated = generated(1)
+        second = generated(2)
+
+        self.assertEqual(first, repeated)
+        self.assertNotEqual(first, second)
+
+    def test_template_rejects_generated_options_with_empty_structure(
+        self,
+    ) -> None:
+        for option in (("--seed", "1"), ("--secret-length", "4")):
+            with self.subTest(option=option):
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    result = main(["template", "--empty", *option])
+
+                self.assertEqual(2, result)
+                self.assertIn(
+                    "s volbou --empty nelze použít",
+                    stderr.getvalue(),
+                )
 
     def test_template_converts_swedish_specification(self) -> None:
         stdout = io.StringIO()
@@ -1571,23 +1727,24 @@ class CommandTest(unittest.TestCase):
         self.assertIn("standardní výstup", stderr.getvalue())
 
     def test_template_rejects_dense_options_with_specification(self) -> None:
-        stderr = io.StringIO()
+        for option in (("--width", "7"), ("--empty",), ("--randomize",)):
+            with self.subTest(option=option):
+                stderr = io.StringIO()
 
-        with redirect_stderr(stderr):
-            result = main(
-                [
-                    "template",
-                    str(SPECIFICATION_PLACED_WORDS_EXAMPLE),
-                    "--width",
-                    "7",
-                ]
-            )
+                with redirect_stderr(stderr):
+                    result = main(
+                        [
+                            "template",
+                            str(SPECIFICATION_PLACED_WORDS_EXAMPLE),
+                            *option,
+                        ]
+                    )
 
-        self.assertEqual(2, result)
-        self.assertIn(
-            "při převodu zadání nelze použít",
-            stderr.getvalue(),
-        )
+                self.assertEqual(2, result)
+                self.assertIn(
+                    "při převodu zadání nelze použít",
+                    stderr.getvalue(),
+                )
 
     def test_grid_writes_unfilled_yaml_to_stdout(self) -> None:
         stdout = io.StringIO()
@@ -1921,7 +2078,7 @@ class CommandTest(unittest.TestCase):
                 result = main(command)
 
             self.assertEqual(0, result)
-            self.assertIn("Šablona vygenerována:", stdout.getvalue())
+            self.assertIn("Šablona vytvořena:", stdout.getvalue())
             template = load_crossword_document(output)
             self.assertEqual(9, template.grid.width)
             self.assertEqual(9, template.grid.height)
