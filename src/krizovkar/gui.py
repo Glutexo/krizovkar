@@ -78,6 +78,10 @@ _DIRECTION_LABELS = {
     "horizontal": "→",
     "vertical": "↓",
 }
+_CELL_SLOT_LABELS: dict[WordDirection, str] = {
+    "horizontal": "Heslo →",
+    "vertical": "Heslo ↓",
+}
 _DIRECTION_STEPS: dict[WordDirection, tuple[int, int]] = {
     "horizontal": (0, 1),
     "vertical": (1, 0),
@@ -856,7 +860,269 @@ def set_crossword_cells_role(
     return changed
 
 
-def _cell_role_change_discards_content(
+def _secrets_after_slot_change(
+    crossword: CrosswordDocument,
+    affected_slots: set[str],
+) -> tuple[CrosswordSecret, ...]:
+    return tuple(
+        secret
+        for secret in crossword.secrets
+        if not any(
+            isinstance(part, CrosswordSecretSlotPart)
+            and part.slot_identifier in affected_slots
+            for part in secret.parts
+        )
+    )
+
+
+def _crossword_with_slots(
+    crossword: CrosswordDocument,
+    slots: tuple[WordSlot, ...],
+    affected_slots: set[str],
+) -> CrosswordDocument:
+    return replace(
+        crossword,
+        slots=slots,
+        secrets=_secrets_after_slot_change(crossword, affected_slots),
+    )
+
+
+def _slot_order_key(slot: WordSlot) -> tuple[int, int, int]:
+    return (
+        0 if slot.direction == "horizontal" else 1,
+        slot.start.row,
+        slot.start.column,
+    )
+
+
+def _new_external_slot_length(
+    crossword: CrosswordDocument,
+    coordinate: Coordinate,
+    direction: WordDirection,
+) -> int:
+    following_starts = {
+        slot.start
+        for slot in crossword.slots
+        if slot.direction == direction and slot.start != coordinate
+    }
+    current = coordinate
+    length = 0
+    while (
+        1 <= current.row <= crossword.grid.height
+        and 1 <= current.column <= crossword.grid.width
+        and isinstance(
+            crossword.grid.cells[current.row - 1][current.column - 1],
+            LetterCellRole,
+        )
+        and (length == 0 or current not in following_starts)
+    ):
+        length += 1
+        current = _shift_coordinate(current, direction, 1)
+    return length
+
+
+def _add_crossword_slot_start(
+    crossword: CrosswordDocument,
+    coordinate: Coordinate,
+    direction: WordDirection,
+) -> CrosswordDocument:
+    starting = next(
+        (
+            slot
+            for slot in crossword.slots
+            if slot.direction == direction and slot.start == coordinate
+        ),
+        None,
+    )
+    if starting is not None:
+        if starting.legend_position is None:
+            return crossword
+        raise GuiInputError(
+            "Pole už začíná heslo s vepsanou legendou."
+        )
+
+    covering = next(
+        (
+            slot
+            for slot in crossword.slots
+            if slot.direction == direction
+            and coordinate in slot_coordinates(slot)
+        ),
+        None,
+    )
+    identifiers = {slot.identifier for slot in crossword.slots}
+    if covering is not None:
+        if covering.in_help:
+            raise GuiInputError(
+                "Začátek nelze přidat do hesla uvedeného v pomůcce."
+            )
+        offset = slot_coordinates(covering).index(coordinate)
+        assert offset > 0
+        following = WordSlot(
+            identifier=_next_slot_identifier(identifiers, direction),
+            start=coordinate,
+            direction=direction,
+            length=covering.length - offset,
+        )
+        slots: list[WordSlot] = []
+        for slot in crossword.slots:
+            if slot.identifier == covering.identifier:
+                slots.extend(
+                    (
+                        _blank_changed_slot(covering, length=offset),
+                        following,
+                    )
+                )
+            else:
+                slots.append(slot)
+        return _crossword_with_slots(
+            crossword,
+            tuple(slots),
+            {covering.identifier},
+        )
+
+    slot = WordSlot(
+        identifier=_next_slot_identifier(identifiers, direction),
+        start=coordinate,
+        direction=direction,
+        length=_new_external_slot_length(crossword, coordinate, direction),
+    )
+    slots = list(crossword.slots)
+    slot_key = _slot_order_key(slot)
+    insertion = next(
+        (
+            index
+            for index, existing in enumerate(slots)
+            if slot_key < _slot_order_key(existing)
+        ),
+        len(slots),
+    )
+    slots.insert(insertion, slot)
+    return _crossword_with_slots(crossword, tuple(slots), set())
+
+
+def _remove_crossword_slot_start(
+    crossword: CrosswordDocument,
+    coordinate: Coordinate,
+    direction: WordDirection,
+) -> CrosswordDocument:
+    removed = next(
+        (
+            slot
+            for slot in crossword.slots
+            if slot.direction == direction
+            and slot.start == coordinate
+            and slot.legend_position is None
+        ),
+        None,
+    )
+    if removed is None:
+        return crossword
+    before_coordinate = _shift_coordinate(coordinate, direction, -1)
+    previous = next(
+        (
+            slot
+            for slot in crossword.slots
+            if slot.direction == direction
+            and slot_coordinates(slot)[-1] == before_coordinate
+        ),
+        None,
+    )
+    changed_slots = tuple(
+        slot for slot in (previous, removed) if slot is not None
+    )
+    if any(slot.in_help for slot in changed_slots):
+        raise GuiInputError(
+            "Začátek nelze odebrat z hesla uvedeného v pomůcce."
+        )
+
+    affected_slots = {slot.identifier for slot in changed_slots}
+    slots: list[WordSlot] = []
+    for slot in crossword.slots:
+        if slot.identifier == removed.identifier:
+            continue
+        if previous is not None and slot.identifier == previous.identifier:
+            slots.append(
+                _blank_changed_slot(
+                    previous,
+                    length=previous.length + removed.length,
+                )
+            )
+        else:
+            slots.append(slot)
+    return _crossword_with_slots(
+        crossword,
+        tuple(slots),
+        affected_slots,
+    )
+
+
+def set_crossword_cell_slot_start(
+    crossword: CrosswordDocument,
+    coordinate: Coordinate,
+    direction: WordDirection,
+    enabled: bool,
+) -> CrosswordDocument:
+    """Přidá nebo odebere virtuální začátek nelegendovaného slotu."""
+
+    if direction not in {"horizontal", "vertical"}:
+        raise GuiInputError(f"Nepodporovaný směr hesla {direction!r}.")
+    if not (
+        1 <= coordinate.row <= crossword.grid.height
+        and 1 <= coordinate.column <= crossword.grid.width
+        and isinstance(
+            crossword.grid.cells[coordinate.row - 1][coordinate.column - 1],
+            LetterCellRole,
+        )
+    ):
+        raise GuiInputError("Heslo lze založit pouze na písmenném poli.")
+
+    changed = (
+        _add_crossword_slot_start(crossword, coordinate, direction)
+        if enabled
+        else _remove_crossword_slot_start(crossword, coordinate, direction)
+    )
+    try:
+        dump_crossword_document(changed, StringIO())
+    except ModelError as error:
+        raise GuiInputError(
+            "Začátek hesla nelze změnit, aniž by vzniklo neplatné "
+            f"rozvržení: {error}"
+        ) from error
+    return changed
+
+
+def set_crossword_cells_slot_start(
+    crossword: CrosswordDocument,
+    coordinates: Sequence[Coordinate],
+    direction: WordDirection,
+    enabled: bool,
+) -> CrosswordDocument:
+    """Atomicky přepne virtuální začátek u všech vybraných buněk."""
+
+    ordered_coordinates = tuple(
+        sorted(set(coordinates), key=lambda item: (item.row, item.column))
+    )
+    changed = crossword
+    for coordinate in ordered_coordinates:
+        try:
+            changed = set_crossword_cell_slot_start(
+                changed,
+                coordinate,
+                direction,
+                enabled,
+            )
+        except GuiInputError as error:
+            if len(ordered_coordinates) == 1:
+                raise
+            raise GuiInputError(
+                f"Pole v řádku {coordinate.row}, sloupci "
+                f"{coordinate.column}: {error}"
+            ) from error
+    return changed
+
+
+def _crossword_change_discards_content(
     before: CrosswordDocument,
     after: CrosswordDocument,
 ) -> bool:
@@ -1072,6 +1338,12 @@ class CrosswordPreview(tk.Canvas):
         self._show_letters = True
         self._selected_coordinates: frozenset[Coordinate] = frozenset()
         self._role_selected_coordinates: frozenset[Coordinate] = frozenset()
+        self._slot_starts: frozenset[
+            tuple[Coordinate, WordDirection]
+        ] = frozenset()
+        self._external_slot_starts: frozenset[
+            tuple[Coordinate, WordDirection]
+        ] = frozenset()
         self._empty_message = "Vytvořte rozvržení mřížky."
         self._grid_geometry: tuple[float, float, float] | None = None
         self._cell_click_handler: Callable[[Coordinate], None] | None = None
@@ -1079,8 +1351,19 @@ class CrosswordPreview(tk.Canvas):
         self._cell_role_handler: (
             Callable[[tuple[Coordinate, ...], EditableCellRole], None] | None
         ) = None
+        self._cell_slot_handler: (
+            Callable[
+                [tuple[Coordinate, ...], WordDirection, bool],
+                None,
+            ]
+            | None
+        ) = None
         self._context_menu_coordinates: tuple[Coordinate, ...] = ()
         self._cell_role_variable = f"krizovkar_cell_role_{id(self)}"
+        self._cell_slot_variables = {
+            direction: f"krizovkar_cell_slot_{direction}_{id(self)}"
+            for direction in _CELL_SLOT_LABELS
+        }
         self._cell_role_menu = self._build_cell_role_menu()
         self._minimum_dimension = 1
         self._maximum_dimension = _MAX_CROSSWORD_DIMENSION
@@ -1118,6 +1401,17 @@ class CrosswordPreview(tk.Canvas):
             variable=self._cell_role_variable,
             command=lambda: self._choose_cell_role("empty"),
         )
+        menu.add_separator()
+        for direction, label in _CELL_SLOT_LABELS.items():
+            menu.add_checkbutton(
+                label=label,
+                variable=self._cell_slot_variables[direction],
+                onvalue=1,
+                offvalue=0,
+                command=lambda selected=direction: self._choose_cell_slot(
+                    selected
+                ),
+            )
         return menu
 
     def set_cell_click_handler(
@@ -1131,6 +1425,15 @@ class CrosswordPreview(tk.Canvas):
         handler: Callable[[tuple[Coordinate, ...], EditableCellRole], None],
     ) -> None:
         self._cell_role_handler = handler
+
+    def set_cell_slot_handler(
+        self,
+        handler: Callable[
+            [tuple[Coordinate, ...], WordDirection, bool],
+            None,
+        ],
+    ) -> None:
+        self._cell_slot_handler = handler
 
     def set_grid_resize_handler(
         self,
@@ -1151,12 +1454,18 @@ class CrosswordPreview(tk.Canvas):
         crossword: CrosswordGrid,
         *,
         selected_coordinates: tuple[Coordinate, ...] = (),
+        slot_starts: tuple[tuple[Coordinate, WordDirection], ...] = (),
+        external_slot_starts: tuple[
+            tuple[Coordinate, WordDirection], ...
+        ] = (),
         show_letters: bool = True,
     ) -> None:
         """Zobrazí role buněk, čísla, výběr a volitelně písmena."""
 
         self._crossword = crossword
         self._selected_coordinates = frozenset(selected_coordinates)
+        self._slot_starts = frozenset(slot_starts)
+        self._external_slot_starts = frozenset(external_slot_starts)
         self._role_selected_coordinates = frozenset(
             coordinate
             for coordinate in self._role_selected_coordinates
@@ -1169,6 +1478,8 @@ class CrosswordPreview(tk.Canvas):
         self._crossword = None
         self._selected_coordinates = frozenset()
         self._role_selected_coordinates = frozenset()
+        self._slot_starts = frozenset()
+        self._external_slot_starts = frozenset()
         self._context_menu_coordinates = ()
         self._empty_message = message
         self._grid_geometry = None
@@ -1674,6 +1985,24 @@ class CrosswordPreview(tk.Canvas):
         current_role = roles.pop() if len(roles) == 1 else ""
         self._context_menu_coordinates = coordinates
         self._cell_role_menu.setvar(self._cell_role_variable, current_role)
+        all_letters = all(
+            self._editable_cell_role_at(selected) == "letter"
+            for selected in coordinates
+        )
+        for direction, label in _CELL_SLOT_LABELS.items():
+            starts = {(selected, direction) for selected in coordinates}
+            all_external = starts <= self._external_slot_starts
+            has_inline = bool(
+                (starts & self._slot_starts) - self._external_slot_starts
+            )
+            self._cell_role_menu.setvar(
+                self._cell_slot_variables[direction],
+                int(all_external),
+            )
+            self._cell_role_menu.entryconfigure(
+                label,
+                state="normal" if all_letters and not has_inline else "disabled",
+            )
         try:
             self._cell_role_menu.tk_popup(event.x_root, event.y_root)
         finally:
@@ -1685,6 +2014,16 @@ class CrosswordPreview(tk.Canvas):
         handler = self._cell_role_handler
         if coordinates and handler is not None:
             handler(coordinates, role)
+
+    def _choose_cell_slot(self, direction: WordDirection) -> None:
+        coordinates = self._context_menu_coordinates
+        handler = self._cell_slot_handler
+        value = self._cell_role_menu.getvar(
+            self._cell_slot_variables[direction]
+        )
+        enabled = value in {True, "1", "true"}
+        if coordinates and handler is not None:
+            handler(coordinates, direction, enabled)
 
 
 def load_editable_document(
@@ -2343,6 +2682,9 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.crossword_preview.set_cell_role_handler(
             self._preview_cell_role_changed
         )
+        self.crossword_preview.set_cell_slot_handler(
+            self._preview_cell_slot_changed
+        )
         self.crossword_preview.set_grid_resize_handler(
             self._preview_grid_resized,
             minimum_dimension=_minimum_generated_dimension(
@@ -2945,11 +3287,59 @@ class CrosswordDocumentWindow(ttk.Frame):
             return
         if changed is crossword:
             return
-        if _cell_role_change_discards_content(crossword, changed) and not (
+        if _crossword_change_discards_content(crossword, changed) and not (
             messagebox.askyesno(
                 "Změnit role polí?"
                 if len(coordinates) > 1
                 else "Změnit roli pole?",
+                "Změna upraví navazující místa pro hesla a odstraní "
+                "jejich vyplněný obsah nebo nastavení tajenky. "
+                "Chcete pokračovat?",
+                parent=self.root,
+            )
+        ):
+            return
+
+        self._crossword = changed
+        self._template_layout = _template_generation_layout(changed)
+        self._selected_slot_identifier = None
+        self._set_dirty(True)
+        self._rebuild_slot_tree()
+        self._refresh_crossword_view()
+
+    def _preview_cell_slot_changed(
+        self,
+        coordinates: tuple[Coordinate, ...],
+        direction: WordDirection,
+        enabled: bool,
+    ) -> None:
+        if not self._save_inline_slot_edit():
+            return
+        crossword = self._crossword
+        if crossword is None:
+            return
+        try:
+            changed = set_crossword_cells_slot_start(
+                crossword,
+                coordinates,
+                direction,
+                enabled,
+            )
+        except GuiInputError as error:
+            title = (
+                "Hesla nelze změnit"
+                if len(coordinates) > 1
+                else "Heslo nelze změnit"
+            )
+            self._show_action_error(title, str(error))
+            return
+        if changed is crossword:
+            return
+        if _crossword_change_discards_content(crossword, changed) and not (
+            messagebox.askyesno(
+                "Změnit začátky hesel?"
+                if len(coordinates) > 1
+                else "Změnit začátek hesla?",
                 "Změna upraví navazující místa pro hesla a odstraní "
                 "jejich vyplněný obsah nebo nastavení tajenky. "
                 "Chcete pokračovat?",
@@ -3006,6 +3396,14 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.crossword_preview.show_crossword(
             self._grid,
             selected_coordinates=selected_coordinates,
+            slot_starts=tuple(
+                (item.start, item.direction) for item in crossword.slots
+            ),
+            external_slot_starts=tuple(
+                (item.start, item.direction)
+                for item in crossword.slots
+                if item.legend_position is None
+            ),
             show_letters=True,
         )
 

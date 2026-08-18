@@ -42,7 +42,9 @@ from krizovkar.gui import (
     main,
     parse_slot_content,
     set_crossword_cell_role,
+    set_crossword_cell_slot_start,
     set_crossword_cells_role,
+    set_crossword_cells_slot_start,
     slot_coordinates,
 )
 from krizovkar.model import (
@@ -910,6 +912,115 @@ class GuiTest(unittest.TestCase):
             )
         )
 
+    def test_virtual_slot_start_splits_and_rejoins_inline_slot(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=7, height=6),
+            "swedish",
+        )
+        original = next(
+            slot
+            for slot in crossword.slots
+            if slot.direction == "horizontal" and slot.length >= 3
+        )
+        coordinate = slot_coordinates(original)[2]
+
+        split = set_crossword_cell_slot_start(
+            crossword,
+            coordinate,
+            "horizontal",
+            True,
+        )
+
+        created = next(
+            slot
+            for slot in split.slots
+            if slot.direction == "horizontal" and slot.start == coordinate
+        )
+        shortened = next(
+            slot for slot in split.slots if slot.identifier == original.identifier
+        )
+        self.assertIsNone(created.legend_position)
+        self.assertEqual(2, shortened.length)
+        self.assertEqual(original.length - 2, created.length)
+        grid = create_grid_from_crossword(split)
+        start_cell = grid.grid.cells[coordinate.row - 1][coordinate.column - 1]
+        preceding_cell = grid.grid.cells[
+            coordinate.row - 1
+        ][coordinate.column - 2]
+        self.assertIsInstance(start_cell, LetterCell)
+        self.assertIsInstance(preceding_cell, LetterCell)
+        self.assertIsNotNone(start_cell.number)
+        self.assertIn("right", preceding_cell.bars)
+
+        restored = set_crossword_cell_slot_start(
+            split,
+            coordinate,
+            "horizontal",
+            False,
+        )
+
+        self.assertEqual(crossword, restored)
+
+    def test_virtual_slot_starts_end_before_following_start(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=12, height=10),
+            "swedish",
+        )
+        crossword = set_crossword_cell_role(
+            crossword,
+            Coordinate(2, 3),
+            "empty",
+        )
+
+        changed = set_crossword_cells_slot_start(
+            crossword,
+            (Coordinate(2, 4), Coordinate(2, 6)),
+            "horizontal",
+            True,
+        )
+
+        starts = {
+            slot.start: slot
+            for slot in changed.slots
+            if slot.direction == "horizontal"
+            and slot.start in {Coordinate(2, 4), Coordinate(2, 6)}
+        }
+        self.assertEqual(2, starts[Coordinate(2, 4)].length)
+        self.assertEqual(2, starts[Coordinate(2, 6)].length)
+
+    def test_virtual_slot_starts_support_both_directions(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+        coordinate = Coordinate(2, 2)
+
+        changed = set_crossword_cell_slot_start(
+            crossword,
+            coordinate,
+            "horizontal",
+            True,
+        )
+        changed = set_crossword_cell_slot_start(
+            changed,
+            coordinate,
+            "vertical",
+            True,
+        )
+
+        self.assertEqual(
+            {"horizontal", "vertical"},
+            {
+                slot.direction
+                for slot in changed.slots
+                if slot.start == coordinate and slot.legend_position is None
+            },
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "virtualni-zacatky.yaml"
+            write_crossword_document(changed, output)
+            self.assertEqual(changed, load_crossword_document(output))
+
     def test_changes_filled_legend_to_empty_and_back(self) -> None:
         crossword = create_blank_template(
             CrosswordSettings(width=7, height=6),
@@ -1324,6 +1435,7 @@ class GuiTest(unittest.TestCase):
         parent = Mock()
         window._preview_cell_clicked = Mock()
         window._preview_cell_role_changed = Mock()
+        window._preview_cell_slot_changed = Mock()
         window._template_layout = "swedish"
         window._crossword = create_blank_template(
             CrosswordSettings(7, 6),
@@ -1363,6 +1475,9 @@ class GuiTest(unittest.TestCase):
         preview.set_cell_role_handler.assert_called_once_with(
             window._preview_cell_role_changed
         )
+        preview.set_cell_slot_handler.assert_called_once_with(
+            window._preview_cell_slot_changed
+        )
         preview.set_grid_resize_handler.assert_called_once_with(
             window._preview_grid_resized,
             minimum_dimension=4,
@@ -1373,7 +1488,12 @@ class GuiTest(unittest.TestCase):
     def test_crossword_preview_cell_role_menu_offers_all_roles(self) -> None:
         preview = CrosswordPreview.__new__(CrosswordPreview)
         preview._cell_role_variable = "cell_role"
+        preview._cell_slot_variables = {
+            "horizontal": "slot_horizontal",
+            "vertical": "slot_vertical",
+        }
         preview._choose_cell_role = Mock()
+        preview._choose_cell_slot = Mock()
         menu = Mock()
 
         with patch("krizovkar.gui.tk.Menu", return_value=menu) as menu_type:
@@ -1395,6 +1515,36 @@ class GuiTest(unittest.TestCase):
         )
         items[2].kwargs["command"]()
         preview._choose_cell_role.assert_called_once_with("empty")
+        slot_items = menu.add_checkbutton.call_args_list
+        self.assertEqual(
+            ["Heslo →", "Heslo ↓"],
+            [item.kwargs["label"] for item in slot_items],
+        )
+        self.assertEqual(
+            ["slot_horizontal", "slot_vertical"],
+            [item.kwargs["variable"] for item in slot_items],
+        )
+        slot_items[0].kwargs["command"]()
+        preview._choose_cell_slot.assert_called_once_with("horizontal")
+
+    def test_crossword_preview_slot_choice_calls_handler(self) -> None:
+        preview = CrosswordPreview.__new__(CrosswordPreview)
+        preview._context_menu_coordinates = (Coordinate(2, 3),)
+        preview._cell_slot_variables = {
+            "horizontal": "slot_horizontal",
+            "vertical": "slot_vertical",
+        }
+        preview._cell_role_menu = Mock()
+        preview._cell_role_menu.getvar.return_value = 1
+        preview._cell_slot_handler = Mock()
+
+        preview._choose_cell_slot("horizontal")
+
+        preview._cell_slot_handler.assert_called_once_with(
+            (Coordinate(2, 3),),
+            "horizontal",
+            True,
+        )
 
     def test_crossword_preview_context_menu_targets_empty_cell(self) -> None:
         preview = CrosswordPreview.__new__(CrosswordPreview)
@@ -1403,8 +1553,14 @@ class GuiTest(unittest.TestCase):
         )
         preview._grid_geometry = (100.0, 50.0, 20.0)
         preview._cell_role_variable = "cell_role"
+        preview._cell_slot_variables = {
+            "horizontal": "slot_horizontal",
+            "vertical": "slot_vertical",
+        }
         preview._cell_role_menu = Mock()
         preview._role_selected_coordinates = frozenset()
+        preview._slot_starts = frozenset()
+        preview._external_slot_starts = frozenset()
         preview._context_menu_coordinates = ()
         preview._redraw = Mock()
         event = Mock(x=110, y=60, x_root=210, y_root=160)
@@ -1416,12 +1572,18 @@ class GuiTest(unittest.TestCase):
             (Coordinate(1, 1),),
             preview._context_menu_coordinates,
         )
-        preview._cell_role_menu.setvar.assert_called_once_with(
+        preview._cell_role_menu.setvar.assert_any_call(
             "cell_role",
             "empty",
         )
         preview._cell_role_menu.tk_popup.assert_called_once_with(210, 160)
         preview._cell_role_menu.grab_release.assert_called_once_with()
+        preview._cell_role_menu.entryconfigure.assert_has_calls(
+            [
+                call("Heslo →", state="disabled"),
+                call("Heslo ↓", state="disabled"),
+            ]
+        )
 
     def test_crossword_preview_context_menu_targets_clicked_cell(self) -> None:
         preview = CrosswordPreview.__new__(CrosswordPreview)
@@ -1430,8 +1592,15 @@ class GuiTest(unittest.TestCase):
         )
         preview._grid_geometry = (100.0, 50.0, 20.0)
         preview._cell_role_variable = "cell_role"
+        preview._cell_slot_variables = {
+            "horizontal": "slot_horizontal",
+            "vertical": "slot_vertical",
+        }
         preview._cell_role_menu = Mock()
         preview._role_selected_coordinates = frozenset()
+        slot_start = (Coordinate(2, 2), "horizontal")
+        preview._slot_starts = frozenset({slot_start})
+        preview._external_slot_starts = frozenset({slot_start})
         preview._context_menu_coordinates = ()
         preview._cell_role_handler = Mock()
         preview._redraw = Mock()
@@ -1445,10 +1614,12 @@ class GuiTest(unittest.TestCase):
             (Coordinate(2, 2),),
             preview._context_menu_coordinates,
         )
-        preview._cell_role_menu.setvar.assert_called_once_with(
+        preview._cell_role_menu.setvar.assert_any_call(
             "cell_role",
             "letter",
         )
+        preview._cell_role_menu.setvar.assert_any_call("slot_horizontal", 1)
+        preview._cell_role_menu.setvar.assert_any_call("slot_vertical", 0)
         preview._cell_role_menu.tk_popup.assert_called_once_with(230, 180)
         preview._cell_role_menu.grab_release.assert_called_once_with()
         preview._cell_role_handler.assert_called_once_with(
@@ -1463,9 +1634,15 @@ class GuiTest(unittest.TestCase):
         )
         preview._grid_geometry = (100.0, 50.0, 20.0)
         preview._cell_role_variable = "cell_role"
+        preview._cell_slot_variables = {
+            "horizontal": "slot_horizontal",
+            "vertical": "slot_vertical",
+        }
         preview._cell_role_menu = Mock()
         selected = frozenset({Coordinate(1, 1), Coordinate(2, 2)})
         preview._role_selected_coordinates = selected
+        preview._slot_starts = frozenset()
+        preview._external_slot_starts = frozenset()
         preview._context_menu_coordinates = ()
         preview._cell_role_handler = Mock()
         preview._redraw = Mock()
@@ -1479,7 +1656,7 @@ class GuiTest(unittest.TestCase):
             (Coordinate(1, 1), Coordinate(2, 2)),
             preview._context_menu_coordinates,
         )
-        preview._cell_role_menu.setvar.assert_called_once_with(
+        preview._cell_role_menu.setvar.assert_any_call(
             "cell_role",
             "letter",
         )
@@ -2352,6 +2529,93 @@ class GuiTest(unittest.TestCase):
         )
         self.assertIs(crossword, window._crossword)
         window._set_dirty.assert_not_called()
+
+    def test_preview_cell_slot_change_adds_directional_start(self) -> None:
+        window = Mock()
+        window._save_inline_slot_edit.return_value = True
+        crossword = create_blank_template(
+            CrosswordSettings(width=4, height=4),
+            "numbered",
+        )
+        window._crossword = crossword
+        coordinate = Coordinate(row=2, column=2)
+
+        CrosswordDocumentWindow._preview_cell_slot_changed(
+            window,
+            (coordinate,),
+            "horizontal",
+            True,
+        )
+
+        created = next(
+            slot
+            for slot in window._crossword.slots
+            if slot.start == coordinate and slot.direction == "horizontal"
+        )
+        self.assertIsNone(created.legend_position)
+        self.assertEqual("numbered", window._template_layout)
+        window._set_dirty.assert_called_once_with(True)
+        window._rebuild_slot_tree.assert_called_once_with()
+        window._refresh_crossword_view.assert_called_once_with()
+
+    def test_preview_cell_slot_change_confirms_discarding_content(self) -> None:
+        window = Mock()
+        window._save_inline_slot_edit.return_value = True
+        crossword = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+        crossword = fill_crossword_slot(
+            crossword,
+            "h2",
+            "DEF",
+            "Druhý řádek",
+        )
+        window._crossword = crossword
+
+        with patch(
+            "krizovkar.gui.messagebox.askyesno",
+            return_value=False,
+        ) as ask:
+            CrosswordDocumentWindow._preview_cell_slot_changed(
+                window,
+                (Coordinate(2, 2),),
+                "horizontal",
+                True,
+            )
+
+        ask.assert_called_once_with(
+            "Změnit začátek hesla?",
+            "Změna upraví navazující místa pro hesla a odstraní "
+            "jejich vyplněný obsah nebo nastavení tajenky. "
+            "Chcete pokračovat?",
+            parent=window.root,
+        )
+        self.assertIs(crossword, window._crossword)
+        window._set_dirty.assert_not_called()
+
+    def test_preview_receives_slot_start_states(self) -> None:
+        window = Mock()
+        crossword = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+        window._crossword = crossword
+        window._selected_slot.return_value = None
+
+        CrosswordDocumentWindow._refresh_crossword_preview(window)
+
+        window.crossword_preview.show_crossword.assert_called_once_with(
+            window._grid,
+            selected_coordinates=(),
+            slot_starts=tuple(
+                (slot.start, slot.direction) for slot in crossword.slots
+            ),
+            external_slot_starts=tuple(
+                (slot.start, slot.direction) for slot in crossword.slots
+            ),
+            show_letters=True,
+        )
 
     def test_application_creates_template_as_new_document(self) -> None:
         application = Mock()
