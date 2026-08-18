@@ -1371,11 +1371,12 @@ class GuiTest(unittest.TestCase):
         clue_editor.focus_set.assert_called_once_with()
         clue_editor.selection_range.assert_called_once_with(0, tk.END)
 
-    def test_slot_answer_editor_checks_crossings_while_typing(self) -> None:
+    def test_slot_answer_editor_validates_crossings_for_each_edit(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         window.slots_tree = Mock()
-        window.after_idle = Mock()
+        window._update_slot_answer_error = Mock(return_value=True)
         editor = Mock()
+        editor.register.return_value = "crossing-validation"
 
         with patch(
             "krizovkar.gui.ttk.Entry",
@@ -1392,13 +1393,18 @@ class GuiTest(unittest.TestCase):
             window.slots_tree,
             style="KrizovkarSlot.TEntry",
         )
-        for event in ("<KeyPress>", "<<Paste>>", "<<Cut>>"):
-            editor.bind.assert_any_call(event, window._slot_answer_changed)
+        editor.configure.assert_called_once_with(
+            validate="key",
+            validatecommand=("crossing-validation", "%P"),
+        )
 
-        window._slot_answer_changed()
+        validation_callback = editor.register.call_args.args[0]
+        accepted = validation_callback("NOVÁ HODNOTA")
 
-        window.after_idle.assert_called_once_with(
-            window._update_slot_answer_error
+        self.assertTrue(accepted)
+        window._update_slot_answer_error.assert_called_once_with(
+            editor,
+            "NOVÁ HODNOTA",
         )
 
     def test_inline_slot_edit_saves_both_values(self) -> None:
@@ -1447,12 +1453,19 @@ class GuiTest(unittest.TestCase):
         window._crossword = crossword
         window._slot_edit_identifier = "v1"
         answer_editor = Mock()
-        answer_editor.get.side_effect = ("Z", "A")
         window._slot_answer_editor = answer_editor
 
-        window._update_slot_answer_error()
-        window._update_slot_answer_error()
+        conflicting_edit_accepted = window._update_slot_answer_error(
+            answer_editor,
+            "Z",
+        )
+        matching_edit_accepted = window._update_slot_answer_error(
+            answer_editor,
+            "A",
+        )
 
+        self.assertTrue(conflicting_edit_accepted)
+        self.assertTrue(matching_edit_accepted)
         answer_editor.state.assert_has_calls(
             [call(("invalid",)), call(("!invalid",))]
         )

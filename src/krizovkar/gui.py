@@ -2116,32 +2116,34 @@ class CrosswordDocumentWindow(ttk.Frame):
         editor.bind("<Escape>", self._cancel_inline_slot_edit)
         editor.bind("<FocusOut>", self._inline_slot_editor_focus_out)
         if check_crossings:
-            editor.bind("<KeyPress>", self._slot_answer_changed)
-            editor.bind("<<Paste>>", self._slot_answer_changed)
-            editor.bind("<<Cut>>", self._slot_answer_changed)
+            validation_command = editor.register(
+                lambda answer: self._update_slot_answer_error(editor, answer)
+            )
+            editor.configure(
+                validate="key",
+                validatecommand=(validation_command, "%P"),
+            )
         return editor
 
-    def _slot_answer_changed(
+    def _update_slot_answer_error(
         self,
-        _event: tk.Event[tk.Misc] | None = None,
-    ) -> None:
-        self.after_idle(self._update_slot_answer_error)
-
-    def _update_slot_answer_error(self) -> None:
+        editor: ttk.Entry,
+        answer: str,
+    ) -> bool:
         crossword = self._crossword
         identifier = self._slot_edit_identifier
-        editor = self._slot_answer_editor
-        if crossword is None or identifier is None or editor is None:
-            return
+        if crossword is None or identifier is None:
+            return True
         try:
             conflicts = _answer_conflicts_with_crossing(
                 crossword,
                 identifier,
-                editor.get(),
+                answer,
             )
         except GuiInputError:
             conflicts = False
         editor.state(("invalid",) if conflicts else ("!invalid",))
+        return True
 
     def _inline_slot_editor_focus_out(
         self,
