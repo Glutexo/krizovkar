@@ -65,8 +65,8 @@ _SLOT_EDITOR_STYLE = "KrizovkarSlot.TEntry"
 _SLOT_EDITOR_ERROR_COLOR = "#c62828"
 _PROJECT_REPOSITORY_URL = "https://github.com/Glutexo/krizovkar"
 _DIRECTION_LABELS = {
-    "horizontal": "Vodorovně",
-    "vertical": "Svisle",
+    "horizontal": "→",
+    "vertical": "↓",
 }
 
 
@@ -1856,7 +1856,12 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.slots_tree.heading("length", text="Délka")
         self.slots_tree.heading("answer", text="Heslo")
         self.slots_tree.heading("clue", text="Nápověda")
-        self.slots_tree.column("slot", width=115, stretch=False)
+        self.slots_tree.column(
+            "slot",
+            width=60,
+            stretch=False,
+            anchor="center",
+        )
         self.slots_tree.column("length", width=60, stretch=False, anchor="center")
         self.slots_tree.column("answer", width=180)
         self.slots_tree.column("clue", width=360)

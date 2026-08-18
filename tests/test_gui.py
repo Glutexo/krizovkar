@@ -1159,6 +1159,24 @@ class GuiTest(unittest.TestCase):
             "KrizovkarSlots.Treeview",
             treeview_type.call_args.kwargs["style"],
         )
+        slots_tree.column.assert_any_call(
+            "slot",
+            width=60,
+            stretch=False,
+            anchor="center",
+        )
+
+    def test_slot_labels_use_compact_direction_arrows(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window._crossword = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        slots = {slot.identifier: slot for slot in window._crossword.slots}
+
+        self.assertEqual("→ 1", window._slot_label(slots["h1"]))
+        self.assertEqual("→ 2", window._slot_label(slots["h2"]))
+        self.assertEqual("↓ 1", window._slot_label(slots["v1"]))
 
     def test_slot_table_moves_to_separate_window_and_back(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
