@@ -51,9 +51,9 @@ hesla: písmena známá z křížení a odrážky `•` na neznámých pozicích
 například `V•••`; dokud není známé žádné písmeno, zůstává pomlčka. Dvojklik
 na sloupec **Heslo** nebo **Nápověda** upraví oba údaje přímo v příslušném
 řádku; Enter nebo opuštění řádku změnu uloží, Escape ji zahodí.
-Heslo odporující písmenu na křížení zůstane otevřené a jeho písmena se do
-začátku opravy zobrazí červeně. Vyprázdnění obou buněk nebo klávesa Delete
-heslo odstraní. Dokument může
+Písmena hesla odporujícího známému písmenu na křížení se už při psaní zobrazí
+červeně a po opravě se hned vrátí k běžné barvě. Vyprázdnění obou buněk nebo
+klávesa Delete heslo odstraní. Dokument může
 zůstat prázdný, být rozpracovaný nebo hotový a v každém z těchto stavů jej lze
 uložit a znovu použít jako základ další práce.
 

@@ -21,6 +21,7 @@ from krizovkar.gui import (
     CrosswordSettings,
     CrosswordSourceWindow,
     GuiInputError,
+    _answer_conflicts_with_crossing,
     _configure_tk_runtime,
     _create_help_menu,
     _create_view_menu,
@@ -770,6 +771,28 @@ class GuiTest(unittest.TestCase):
             crossword_slot_pattern(crossword, "v1"),
         )
 
+    def test_live_crossing_check_waits_for_complete_ch_cell(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        crossword = fill_crossword_slot(
+            crossword,
+            "h1",
+            "CHAB",
+            "Začíná českým CH",
+        )
+
+        self.assertFalse(
+            _answer_conflicts_with_crossing(crossword, "v1", "C")
+        )
+        self.assertFalse(
+            _answer_conflicts_with_crossing(crossword, "v1", "CH")
+        )
+        self.assertTrue(
+            _answer_conflicts_with_crossing(crossword, "v1", "CA")
+        )
+
     def test_rejects_conflicting_crossing(self) -> None:
         crossword = create_blank_template(CrosswordSettings(7, 6), "swedish")
         crossword = fill_crossword_slot(
@@ -1337,16 +1360,21 @@ class GuiTest(unittest.TestCase):
         self.assertIs(clue_editor, window._slot_clue_editor)
         window._create_slot_cell_editor.assert_has_calls(
             [
-                call((175, 24, 180, 22), ""),
+                call(
+                    (175, 24, 180, 22),
+                    "",
+                    check_crossings=True,
+                ),
                 call((355, 24, 360, 22), ""),
             ]
         )
         clue_editor.focus_set.assert_called_once_with()
         clue_editor.selection_range.assert_called_once_with(0, tk.END)
 
-    def test_slot_cell_editor_clears_crossing_error_when_typing(self) -> None:
+    def test_slot_answer_editor_checks_crossings_while_typing(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         window.slots_tree = Mock()
+        window.after_idle = Mock()
         editor = Mock()
 
         with patch(
@@ -1356,6 +1384,7 @@ class GuiTest(unittest.TestCase):
             created = window._create_slot_cell_editor(
                 (10, 20, 180, 30),
                 "KOZY",
+                check_crossings=True,
             )
 
         self.assertIs(editor, created)
@@ -1363,14 +1392,14 @@ class GuiTest(unittest.TestCase):
             window.slots_tree,
             style="KrizovkarSlot.TEntry",
         )
-        editor.bind.assert_any_call(
-            "<KeyPress>",
-            window._clear_slot_editor_error,
+        for event in ("<KeyPress>", "<<Paste>>", "<<Cut>>"):
+            editor.bind.assert_any_call(event, window._slot_answer_changed)
+
+        window._slot_answer_changed()
+
+        window.after_idle.assert_called_once_with(
+            window._update_slot_answer_error
         )
-
-        window._clear_slot_editor_error(Mock(widget=editor))
-
-        editor.state.assert_called_once_with(("!invalid",))
 
     def test_inline_slot_edit_saves_both_values(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
@@ -1402,6 +1431,31 @@ class GuiTest(unittest.TestCase):
         window._refresh_crossword_view.assert_called_once_with()
         window._show_action_error.assert_not_called()
         self.assertIsNone(window._slot_edit_identifier)
+
+    def test_partial_inline_answer_changes_color_while_typing(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        crossword = fill_crossword_slot(
+            crossword,
+            "h1",
+            "ABC",
+            "První řádek",
+        )
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window._crossword = crossword
+        window._slot_edit_identifier = "v1"
+        answer_editor = Mock()
+        answer_editor.get.side_effect = ("Z", "A")
+        window._slot_answer_editor = answer_editor
+
+        window._update_slot_answer_error()
+        window._update_slot_answer_error()
+
+        answer_editor.state.assert_has_calls(
+            [call(("invalid",)), call(("!invalid",))]
+        )
 
     def test_conflicting_inline_slot_edit_marks_answer_red(self) -> None:
         original = create_blank_template(

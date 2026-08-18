@@ -529,6 +529,29 @@ def crossword_slot_pattern(
     )
 
 
+def _answer_conflicts_with_crossing(
+    crossword: CrosswordDocument,
+    identifier: str,
+    answer: str,
+) -> bool:
+    normalized_answer = answer.strip().upper()
+    if not normalized_answer:
+        return False
+    try:
+        letters = split_answer_letters(normalized_answer)
+    except ValueError:
+        return False
+
+    pattern = crossword_slot_pattern(crossword, identifier)
+    for index, (letter, expected) in enumerate(zip(letters, pattern)):
+        if expected is None or letter == expected:
+            continue
+        if letter == "C" and expected == "CH" and index == len(letters) - 1:
+            continue
+        return True
+    return False
+
+
 def crossword_is_complete(crossword: CrosswordDocument) -> bool:
     """Určí, zda mají všechny sloty odpověď i nápovědu."""
 
@@ -2056,6 +2079,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._slot_answer_editor = self._create_slot_cell_editor(
             answer_box,
             slot.answer or "",
+            check_crossings=True,
         )
         self._slot_clue_editor = self._create_slot_cell_editor(
             clue_box,
@@ -2073,6 +2097,8 @@ class CrosswordDocumentWindow(ttk.Frame):
         self,
         bounding_box: tuple[int, int, int, int],
         value: str,
+        *,
+        check_crossings: bool = False,
     ) -> ttk.Entry:
         x, y, width, height = bounding_box
         editor = ttk.Entry(
@@ -2089,12 +2115,33 @@ class CrosswordDocumentWindow(ttk.Frame):
         editor.bind("<Return>", self._commit_inline_slot_edit)
         editor.bind("<Escape>", self._cancel_inline_slot_edit)
         editor.bind("<FocusOut>", self._inline_slot_editor_focus_out)
-        editor.bind("<KeyPress>", self._clear_slot_editor_error)
+        if check_crossings:
+            editor.bind("<KeyPress>", self._slot_answer_changed)
+            editor.bind("<<Paste>>", self._slot_answer_changed)
+            editor.bind("<<Cut>>", self._slot_answer_changed)
         return editor
 
-    def _clear_slot_editor_error(self, event: tk.Event[tk.Misc]) -> None:
-        editor = cast(ttk.Entry, event.widget)
-        editor.state(("!invalid",))
+    def _slot_answer_changed(
+        self,
+        _event: tk.Event[tk.Misc] | None = None,
+    ) -> None:
+        self.after_idle(self._update_slot_answer_error)
+
+    def _update_slot_answer_error(self) -> None:
+        crossword = self._crossword
+        identifier = self._slot_edit_identifier
+        editor = self._slot_answer_editor
+        if crossword is None or identifier is None or editor is None:
+            return
+        try:
+            conflicts = _answer_conflicts_with_crossing(
+                crossword,
+                identifier,
+                editor.get(),
+            )
+        except GuiInputError:
+            conflicts = False
+        editor.state(("invalid",) if conflicts else ("!invalid",))
 
     def _inline_slot_editor_focus_out(
         self,
