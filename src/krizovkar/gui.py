@@ -621,6 +621,39 @@ def parse_template_settings(width: str, height: str) -> CrosswordSettings:
     return settings
 
 
+def _template_cli_command(
+    settings: CrosswordSettings,
+    layout: SpecificationLayout,
+    creation_mode: TemplateCreationMode,
+    *,
+    seed: int,
+) -> str:
+    """Sestaví CLI příkaz pro stejnou novou šablonu jako dialog."""
+
+    arguments = ["uv", "run", "krizovkar", "template"]
+    if creation_mode == "empty":
+        arguments.append("--empty")
+    elif creation_mode == "generated":
+        arguments.extend(("--randomize", "--seed", str(seed)))
+    else:
+        raise GuiInputError(
+            f"Nepodporovaný počáteční obsah šablony {creation_mode!r}."
+        )
+    if layout not in {"swedish", "numbered"}:
+        raise GuiInputError(f"Nepodporované rozvržení křížovky {layout!r}.")
+    arguments.extend(
+        (
+            "--layout",
+            layout,
+            "--width",
+            str(settings.width),
+            "--height",
+            str(settings.height),
+        )
+    )
+    return " ".join(arguments)
+
+
 class TemplateGenerationDialog(simpledialog.Dialog):
     """Vybere podobu nové prázdné nebo generované šablony."""
 
@@ -639,7 +672,11 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._height_value: tk.StringVar
         self._layout_value: tk.StringVar
         self._creation_mode_value: tk.StringVar
+        self._cli_visible_value: tk.BooleanVar
+        self._cli_command_value: tk.StringVar
+        self._cli_command_frame: ttk.LabelFrame
         self._width_editor: ttk.Spinbox
+        self._generated_seed = random.randrange(2**63)
         self._new_template: NewTemplateResult | None = None
         super().__init__(parent, "Nová šablona")
 
@@ -729,10 +766,27 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             variable=self._creation_mode_value,
             value="generated",
         ).grid(row=7, column=0, sticky="w", pady=(4, 0))
+        self._cli_command_value = tk.StringVar(master=master)
+        for value in (
+            self._width_value,
+            self._height_value,
+            self._layout_value,
+            self._creation_mode_value,
+        ):
+            value.trace_add("write", self._refresh_cli_command)
+        self._refresh_cli_command()
         return self._width_editor
 
     def buttonbox(self) -> None:
         buttons = ttk.Frame(self, padding=(16, 0, 16, 16))
+        self._cli_visible_value = tk.BooleanVar(master=self, value=False)
+        ttk.Checkbutton(
+            buttons,
+            text="CLI",
+            variable=self._cli_visible_value,
+            command=self._toggle_cli_command,
+            style="Toolbutton",
+        ).pack(side="left")
         ttk.Button(
             buttons,
             text="Vytvořit",
@@ -745,28 +799,81 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             command=self.cancel,
         ).pack(side="right", padx=(0, 8))
         buttons.pack(fill="x")
+        self._cli_command_frame = ttk.LabelFrame(
+            self,
+            text="Příkaz CLI",
+            padding=10,
+        )
+        self._cli_command_frame.columnconfigure(0, weight=1)
+        ttk.Entry(
+            self._cli_command_frame,
+            textvariable=self._cli_command_value,
+            state="readonly",
+            width=72,
+        ).grid(row=0, column=0, sticky="ew")
         self.bind("<Return>", self.ok)
         self.bind("<Escape>", self.cancel)
 
+    def _selected_configuration(
+        self,
+    ) -> tuple[
+        CrosswordSettings,
+        SpecificationLayout,
+        TemplateCreationMode,
+    ]:
+        settings = parse_template_settings(
+            self._width_value.get(),
+            self._height_value.get(),
+        )
+        layout_value = self._layout_value.get()
+        if layout_value not in {"swedish", "numbered"}:
+            raise GuiInputError("Vyberte typ křížovky.")
+        creation_mode_value = self._creation_mode_value.get()
+        if creation_mode_value not in {"empty", "generated"}:
+            raise GuiInputError("Vyberte počáteční obsah šablony.")
+        return (
+            settings,
+            cast(SpecificationLayout, layout_value),
+            cast(TemplateCreationMode, creation_mode_value),
+        )
+
+    def _refresh_cli_command(self, *_trace_arguments: str) -> None:
+        try:
+            settings, layout, creation_mode = self._selected_configuration()
+            command = _template_cli_command(
+                settings,
+                layout,
+                creation_mode,
+                seed=self._generated_seed,
+            )
+        except GuiInputError:
+            command = "Příkaz bude dostupný po opravě nastavení."
+        self._cli_command_value.set(command)
+
+    def _toggle_cli_command(self) -> None:
+        if self._cli_visible_value.get():
+            self._refresh_cli_command()
+            self._cli_command_frame.pack(
+                fill="x",
+                padx=16,
+                pady=(0, 16),
+            )
+        else:
+            self._cli_command_frame.pack_forget()
+
     def validate(self) -> bool:
         try:
-            settings = parse_template_settings(
-                self._width_value.get(),
-                self._height_value.get(),
-            )
-            layout_value = self._layout_value.get()
-            if layout_value not in {"swedish", "numbered"}:
-                raise GuiInputError("Vyberte typ křížovky.")
-            layout = cast(SpecificationLayout, layout_value)
-            creation_mode_value = self._creation_mode_value.get()
-            if creation_mode_value not in {"empty", "generated"}:
-                raise GuiInputError("Vyberte počáteční obsah šablony.")
-            creation_mode = cast(TemplateCreationMode, creation_mode_value)
+            settings, layout, creation_mode = self._selected_configuration()
             self._new_template = NewTemplateResult(
                 document=create_new_template(
                     settings,
                     layout,
                     creation_mode,
+                    seed=(
+                        self._generated_seed
+                        if creation_mode == "generated"
+                        else None
+                    ),
                 ),
                 layout=layout,
                 creation_mode=creation_mode,

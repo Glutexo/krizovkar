@@ -40,7 +40,10 @@ počátečního obsahu. Prázdná varianta vytvoří jednoduchý základ bez
 vnitřních předělů; vygenerovaná varianta rozvrhne místa pro hesla
 pseudonáhodně. Tlačítko **Vytvořit** otevře výsledek jako nový samostatný
 dokument. Neplatný nebo nerozvrhnutelný rozměr dialog vysvětlí a ponechá
-otevřený k opravě.
+otevřený k opravě. Tlačítko-přepínač **CLI** vlevo dole rozbalí ve spodní
+části dialogu příkaz, který na příkazové řádce vytvoří totožnou šablonu.
+U vygenerované varianty obsahuje také konkrétní seed, takže zachová stejné
+pseudonáhodné rozvržení.
 
 Každé viditelné okno představuje právě jeden YAML soubor a v titulku ukazuje
 jeho název, případně **Nová šablona**. Hvězdička

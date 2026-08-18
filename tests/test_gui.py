@@ -39,6 +39,7 @@ from krizovkar.gui import (
     _recent_documents_storage_path,
     _RecentDocuments,
     _send_pdf_to_printer,
+    _template_cli_command,
     _template_creation_mode,
     _template_generation_layout,
     clear_crossword_slot,
@@ -1061,6 +1062,126 @@ class GuiTest(unittest.TestCase):
         with self.assertRaisesRegex(GuiInputError, "nejvýše 50"):
             parse_template_settings("51", "10")
 
+    def test_builds_cli_command_for_empty_template(self) -> None:
+        self.assertEqual(
+            "uv run krizovkar template --empty --layout swedish "
+            "--width 15 --height 10",
+            _template_cli_command(
+                CrosswordSettings(width=15, height=10),
+                "swedish",
+                "empty",
+                seed=123,
+            ),
+        )
+
+    def test_builds_repeatable_cli_command_for_generated_template(self) -> None:
+        self.assertEqual(
+            "uv run krizovkar template --randomize --seed 123 "
+            "--layout numbered --width 7 --height 6",
+            _template_cli_command(
+                CrosswordSettings(width=7, height=6),
+                "numbered",
+                "generated",
+                seed=123,
+            ),
+        )
+
+    def test_template_dialog_refreshes_cli_command_from_selection(self) -> None:
+        dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
+        dialog._width_value = Mock()
+        dialog._width_value.get.return_value = "7"
+        dialog._height_value = Mock()
+        dialog._height_value.get.return_value = "6"
+        dialog._layout_value = Mock()
+        dialog._layout_value.get.return_value = "numbered"
+        dialog._creation_mode_value = Mock()
+        dialog._creation_mode_value.get.return_value = "generated"
+        dialog._generated_seed = 123
+        dialog._cli_command_value = Mock()
+
+        TemplateGenerationDialog._refresh_cli_command(dialog)
+
+        dialog._cli_command_value.set.assert_called_once_with(
+            "uv run krizovkar template --randomize --seed 123 "
+            "--layout numbered --width 7 --height 6"
+        )
+
+    def test_template_dialog_explains_invalid_cli_selection(self) -> None:
+        dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
+        dialog._width_value = Mock()
+        dialog._width_value.get.return_value = "sedm"
+        dialog._height_value = Mock()
+        dialog._height_value.get.return_value = "6"
+        dialog._layout_value = Mock()
+        dialog._layout_value.get.return_value = "numbered"
+        dialog._creation_mode_value = Mock()
+        dialog._creation_mode_value.get.return_value = "empty"
+        dialog._generated_seed = 123
+        dialog._cli_command_value = Mock()
+
+        TemplateGenerationDialog._refresh_cli_command(dialog)
+
+        dialog._cli_command_value.set.assert_called_once_with(
+            "Příkaz bude dostupný po opravě nastavení."
+        )
+
+    def test_template_dialog_toggles_cli_command_frame(self) -> None:
+        dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
+        dialog._cli_visible_value = Mock()
+        dialog._cli_visible_value.get.side_effect = (True, False)
+        dialog._cli_command_frame = Mock()
+        dialog._refresh_cli_command = Mock()
+
+        TemplateGenerationDialog._toggle_cli_command(dialog)
+        TemplateGenerationDialog._toggle_cli_command(dialog)
+
+        dialog._refresh_cli_command.assert_called_once_with()
+        dialog._cli_command_frame.pack.assert_called_once_with(
+            fill="x",
+            padx=16,
+            pady=(0, 16),
+        )
+        dialog._cli_command_frame.pack_forget.assert_called_once_with()
+
+    def test_template_dialog_places_cli_toggle_at_bottom_left(self) -> None:
+        dialog = Mock()
+        buttons = Mock()
+        cli_frame = Mock()
+        cli_entry = Mock()
+        cli_toggle = Mock()
+        create_button = Mock()
+        cancel_button = Mock()
+        visible_value = Mock()
+
+        with (
+            patch("krizovkar.gui.ttk.Frame", return_value=buttons),
+            patch("krizovkar.gui.ttk.LabelFrame", return_value=cli_frame),
+            patch("krizovkar.gui.ttk.Entry", return_value=cli_entry),
+            patch(
+                "krizovkar.gui.ttk.Checkbutton",
+                return_value=cli_toggle,
+            ) as checkbutton,
+            patch(
+                "krizovkar.gui.ttk.Button",
+                side_effect=(create_button, cancel_button),
+            ),
+            patch(
+                "krizovkar.gui.tk.BooleanVar",
+                return_value=visible_value,
+            ),
+        ):
+            TemplateGenerationDialog.buttonbox(dialog)
+
+        checkbutton.assert_called_once_with(
+            buttons,
+            text="CLI",
+            variable=visible_value,
+            command=dialog._toggle_cli_command,
+            style="Toolbutton",
+        )
+        cli_toggle.pack.assert_called_once_with(side="left")
+        cli_entry.grid.assert_called_once_with(row=0, column=0, sticky="ew")
+
     def test_template_dialog_validates_selected_generated_layout(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
         dialog._width_value = Mock()
@@ -1071,6 +1192,7 @@ class GuiTest(unittest.TestCase):
         dialog._layout_value.get.return_value = "numbered"
         dialog._creation_mode_value = Mock()
         dialog._creation_mode_value.get.return_value = "generated"
+        dialog._generated_seed = 123
         dialog._width_editor = Mock()
         dialog._new_template = None
         template = create_blank_template(CrosswordSettings(3, 3), "numbered")
@@ -1087,6 +1209,7 @@ class GuiTest(unittest.TestCase):
             CrosswordSettings(width=7, height=6),
             "numbered",
             "generated",
+            seed=123,
         )
         self.assertEqual(
             NewTemplateResult(template, "numbered", "generated"),
@@ -1103,6 +1226,7 @@ class GuiTest(unittest.TestCase):
         dialog._layout_value.get.return_value = "swedish"
         dialog._creation_mode_value = Mock()
         dialog._creation_mode_value.get.return_value = "generated"
+        dialog._generated_seed = 123
         dialog._width_editor = Mock()
         dialog._new_template = Mock()
 
