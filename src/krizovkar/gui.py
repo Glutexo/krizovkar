@@ -1658,9 +1658,10 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _build_crossword_preview(self, parent: ttk.Frame) -> None:
         preview_frame = ttk.LabelFrame(
             parent,
-            text="Náhled křížovky",
+            text=self._crossword_preview_title(),
             padding=12,
         )
+        self.crossword_preview_frame = preview_frame
         preview_frame.grid(row=0, column=0, sticky="nsew")
         preview_frame.columnconfigure(0, weight=1)
         preview_frame.rowconfigure(0, weight=1)
@@ -1678,6 +1679,15 @@ class CrosswordDocumentWindow(ttk.Frame):
                 self._template_layout
             ),
             maximum_dimension=_MAX_CROSSWORD_DIMENSION,
+        )
+
+    def _crossword_preview_title(self) -> str:
+        crossword = self._crossword
+        if crossword is None:
+            return "Náhled křížovky"
+        return (
+            "Náhled křížovky "
+            f"({crossword.grid.width} × {crossword.grid.height})"
         )
 
     def _build_slot_list(self, parent: ttk.Frame) -> None:
@@ -2059,6 +2069,9 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._refresh_crossword_view()
 
     def _refresh_crossword_view(self) -> None:
+        self.crossword_preview_frame.configure(
+            text=self._crossword_preview_title()
+        )
         self._refresh_crossword_preview()
         crossword = self._crossword
         if crossword is None:

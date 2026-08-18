@@ -848,6 +848,10 @@ class GuiTest(unittest.TestCase):
         parent = Mock()
         window._preview_cell_clicked = Mock()
         window._template_layout = "swedish"
+        window._crossword = create_blank_template(
+            CrosswordSettings(7, 6),
+            "swedish",
+        )
         preview_frame = Mock()
         preview = Mock()
 
@@ -866,9 +870,10 @@ class GuiTest(unittest.TestCase):
 
         label_frame_type.assert_called_once_with(
             parent,
-            text="Náhled křížovky",
+            text="Náhled křížovky (7 × 6)",
             padding=12,
         )
+        self.assertIs(preview_frame, window.crossword_preview_frame)
         preview_type.assert_called_once_with(
             preview_frame,
             width=620,
@@ -884,6 +889,24 @@ class GuiTest(unittest.TestCase):
             maximum_dimension=50,
         )
         spinbox_type.assert_not_called()
+
+    def test_crossword_preview_heading_refreshes_current_dimensions(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window._crossword = create_blank_template(
+            CrosswordSettings(9, 8),
+            "numbered",
+        )
+        window.crossword_preview_frame = Mock()
+        window._refresh_crossword_preview = Mock()
+        window._refresh_file_menu = Mock()
+
+        window._refresh_crossword_view()
+
+        window.crossword_preview_frame.configure.assert_called_once_with(
+            text="Náhled křížovky (9 × 8)"
+        )
+        window._refresh_crossword_preview.assert_called_once_with()
+        window._refresh_file_menu.assert_called_once_with()
 
     def test_crossword_preview_detects_every_edge_and_corner(self) -> None:
         preview, _resize_handler = _resizable_preview()

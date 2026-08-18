@@ -54,7 +54,8 @@ z těchto stavů jej lze uložit a znovu použít jako základ další práce.
 
 Rozměr křížovky se mění tažením kteréhokoli okraje náhledu; levý a pravý
 okraj mění počet sloupců, horní a dolní počet řádků a rohy oba rozměry
-současně. Nový rozměr se použije po puštění tlačítka. Změna rozměru znovu
+současně. Nadpis náhledu uvádí aktuální rozměr jako počet sloupců × počet
+řádků. Nový rozměr se použije po puštění tlačítka. Změna rozměru znovu
 vytvoří rozvržení; obsahuje-li dokument doplněná hesla nebo tajenku, editor si
 nejprve vyžádá potvrzení. Prázdnou tiskovou křížovku lze exportovat do PDF
 kdykoli, samostatné řešení až po vyplnění všech hesel.
