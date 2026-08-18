@@ -79,6 +79,10 @@ dokumentem a při aktivaci jiného dokumentu se nepřepne; automaticky se
 aktualizuje pouze při změně svého dokumentu. Zavření příslušného dokumentu
 zavře také jeho okno zdroje.
 
+Podnabídka **Zobrazení → Místa pro hesla** přepíná tabulku mezi volbami
+**V hlavním okně** a **V samostatném okně**. Zavření samostatného okna vrátí
+tabulku zpět do hlavního okna téhož dokumentu.
+
 Nabídka **Okno** uvádí všechna otevřená dokumentová okna. Aktuální okno
 označí a výběrem jiné položky přenese příslušný dokument dopředu.
 

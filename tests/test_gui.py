@@ -192,8 +192,12 @@ class GuiTest(unittest.TestCase):
         recent_documents_menu = Mock()
         export_menu = Mock()
         view_menu = Mock()
+        slot_list_placement_menu = Mock()
         window_menu = Mock()
         help_menu = Mock()
+        window._slot_list_placement_variable = "slot_list_placement"
+        window._slot_list_placement = "main"
+        window._set_slot_list_placement = Mock()
 
         with (
             patch("krizovkar.gui.sys.platform", "darwin"),
@@ -205,6 +209,7 @@ class GuiTest(unittest.TestCase):
                     recent_documents_menu,
                     export_menu,
                     view_menu,
+                    slot_list_placement_menu,
                     window_menu,
                     help_menu,
                 ),
@@ -251,6 +256,32 @@ class GuiTest(unittest.TestCase):
         self.assertEqual("normal", source_item.kwargs["state"])
         source_item.kwargs["command"]()
         window.application.show_source_window.assert_called_once_with(window)
+        view_menu.add_separator.assert_called_once_with()
+        view_menu.add_cascade.assert_called_once_with(
+            label="Místa pro hesla",
+            menu=slot_list_placement_menu,
+        )
+        slot_list_placement_menu.setvar.assert_called_once_with(
+            "slot_list_placement",
+            "main",
+        )
+        placement_items = slot_list_placement_menu.add_radiobutton.call_args_list
+        self.assertEqual(
+            ["V hlavním okně", "V samostatném okně"],
+            [item.kwargs["label"] for item in placement_items],
+        )
+        self.assertEqual(
+            ["main", "window"],
+            [item.kwargs["value"] for item in placement_items],
+        )
+        self.assertTrue(
+            all(
+                item.kwargs["variable"] == "slot_list_placement"
+                for item in placement_items
+            )
+        )
+        placement_items[1].kwargs["command"]()
+        window._set_slot_list_placement.assert_called_once_with("window")
         menu.add_cascade.assert_has_calls(
             [
                 call(label="Soubor", menu=file_menu),
@@ -844,7 +875,7 @@ class GuiTest(unittest.TestCase):
             patch.object(CrosswordDocumentWindow, "_refresh_crossword_view"),
             patch.object(CrosswordDocumentWindow, "_update_title"),
         ):
-            CrosswordDocumentWindow(
+            window = CrosswordDocumentWindow(
                 root,
                 application=application,
                 document=document,
@@ -853,6 +884,13 @@ class GuiTest(unittest.TestCase):
             )
 
         frame_init.assert_called_once_with(root, padding=(12, 10))
+        self.assertEqual("main", window._slot_list_placement)
+        self.assertIsNone(window._slot_list_window)
+        self.assertTrue(
+            window._slot_list_placement_variable.startswith(
+                "krizovkar_slot_list_placement_"
+            )
+        )
 
     def test_document_window_opens_at_minimum_width(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
@@ -979,6 +1017,98 @@ class GuiTest(unittest.TestCase):
             (("v1", "answer"),),
         )
 
+    def test_slot_table_moves_to_separate_window_and_back(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window.root = Mock()
+        window._path = Path("krizovka.yaml")
+        window._dirty = False
+        window._slot_list_placement = "main"
+        window._slot_list_window = None
+        window._slot_list_placement_variable = "slot_list_placement"
+        window.slot_list_placement_menu = Mock()
+        window._save_inline_slot_edit = Mock(return_value=True)
+        window.slots_frame = Mock()
+        window.crossword_workspace = Mock()
+        window._selected_slot_identifier = "v1"
+        window._build_slot_list = Mock()
+        window._rebuild_slot_tree = Mock()
+        slot_list_window = Mock()
+
+        with patch(
+            "krizovkar.gui.tk.Toplevel",
+            return_value=slot_list_window,
+        ) as toplevel:
+            window._set_slot_list_placement("window")
+
+        window.slots_frame.destroy.assert_called_once_with()
+        toplevel.assert_called_once_with(window.root)
+        slot_list_window.title.assert_called_once_with(
+            "Místa pro hesla — krizovka.yaml"
+        )
+        slot_list_window.geometry.assert_called_once_with("780x340")
+        slot_list_window.minsize.assert_called_once_with(520, 220)
+        slot_list_window.columnconfigure.assert_called_once_with(0, weight=1)
+        slot_list_window.rowconfigure.assert_called_once_with(0, weight=1)
+        window._build_slot_list.assert_called_once_with(
+            slot_list_window,
+            standalone=True,
+        )
+        slot_list_window.lift.assert_called_once_with()
+        slot_list_window.focus_force.assert_called_once_with()
+        self.assertEqual("window", window._slot_list_placement)
+        self.assertIs(slot_list_window, window._slot_list_window)
+        self.assertEqual("v1", window._selected_slot_identifier)
+        window.slot_list_placement_menu.setvar.assert_called_once_with(
+            "slot_list_placement",
+            "window",
+        )
+        window._rebuild_slot_tree.assert_called_once_with()
+
+        detached_slots_frame = Mock()
+        window.slots_frame = detached_slots_frame
+        window._build_slot_list.reset_mock()
+        window._rebuild_slot_tree.reset_mock()
+        close_command = slot_list_window.protocol.call_args.args[1]
+        close_command()
+
+        detached_slots_frame.destroy.assert_called_once_with()
+        slot_list_window.destroy.assert_called_once_with()
+        window._build_slot_list.assert_called_once_with(
+            window.crossword_workspace
+        )
+        self.assertEqual("main", window._slot_list_placement)
+        self.assertIsNone(window._slot_list_window)
+        self.assertEqual("v1", window._selected_slot_identifier)
+        window.slot_list_placement_menu.setvar.assert_called_with(
+            "slot_list_placement",
+            "main",
+        )
+        window._rebuild_slot_tree.assert_called_once_with()
+        self.assertEqual(2, window._save_inline_slot_edit.call_count)
+
+    def test_invalid_inline_edit_prevents_moving_slot_table(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window._slot_list_placement = "main"
+        window._slot_list_window = None
+        window._slot_list_placement_variable = "slot_list_placement"
+        window.slot_list_placement_menu = Mock()
+        window._save_inline_slot_edit = Mock(return_value=False)
+        window.slots_frame = Mock()
+        window._build_slot_list = Mock()
+        window._rebuild_slot_tree = Mock()
+
+        with patch("krizovkar.gui.tk.Toplevel") as toplevel:
+            window._set_slot_list_placement("window")
+
+        window.slots_frame.destroy.assert_not_called()
+        toplevel.assert_not_called()
+        window._build_slot_list.assert_not_called()
+        window._rebuild_slot_tree.assert_not_called()
+        window.slot_list_placement_menu.setvar.assert_called_once_with(
+            "slot_list_placement",
+            "main",
+        )
+
     def test_crossword_preview_detects_every_edge_and_corner(self) -> None:
         preview, _resize_handler = _resizable_preview()
         positions = {
@@ -1099,6 +1229,7 @@ class GuiTest(unittest.TestCase):
             column=0,
             sticky="nsew",
         )
+        self.assertIs(workspace, window.crossword_workspace)
         window._build_crossword_preview.assert_called_once_with(workspace)
         window._build_slot_list.assert_called_once_with(workspace)
 
@@ -1644,6 +1775,7 @@ class GuiTest(unittest.TestCase):
         path = Path("krizovka.yaml")
         window._path = path
         window._dirty = True
+        window._slot_list_window = None
 
         with patch("krizovkar.gui.sys.platform", "darwin"):
             CrosswordDocumentWindow._update_title(window)
@@ -1660,6 +1792,7 @@ class GuiTest(unittest.TestCase):
         window = Mock()
         window._path = None
         window._dirty = True
+        window._slot_list_window = None
         window._crossword = create_blank_template(
             CrosswordSettings(3, 3),
             "numbered",
@@ -1675,11 +1808,29 @@ class GuiTest(unittest.TestCase):
         window = Mock()
         window._path = Path("krizovka.yaml")
         window._dirty = False
+        window._slot_list_window = None
 
         with patch("krizovkar.gui.sys.platform", "linux"):
             CrosswordDocumentWindow._update_title(window)
 
         window.root.attributes.assert_not_called()
+
+    def test_title_updates_separate_slot_list_window(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window.root = Mock()
+        window._path = Path("krizovka.yaml")
+        window._dirty = True
+        window._slot_list_window = Mock()
+
+        with patch("krizovkar.gui.sys.platform", "linux"):
+            window._update_title()
+
+        window.root.title.assert_called_once_with(
+            "*krizovka.yaml — Křížovkář"
+        )
+        window._slot_list_window.title.assert_called_once_with(
+            "Místa pro hesla — *krizovka.yaml"
+        )
 
     def test_closing_dirty_window_can_discard_document_changes(self) -> None:
         window = Mock()
