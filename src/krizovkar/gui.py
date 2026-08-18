@@ -78,7 +78,7 @@ _SLOT_TABLE_HORIZONTAL_INSET = 4
 _SLOT_EDITOR_STYLE = "KrizovkarSlot.TEntry"
 _SLOT_EDITOR_ERROR_COLOR = "#c62828"
 _PROJECT_REPOSITORY_URL = "https://github.com/Glutexo/krizovkar"
-_PRINT_FILE_RETENTION_MS = 5 * 60 * 1000
+_TEMPORARY_PDF_RETENTION_MS = 5 * 60 * 1000
 _DIRECTION_LABELS = {
     "horizontal": "→",
     "vertical": "↓",
@@ -101,6 +101,10 @@ class GuiInputError(ValueError):
 
 class _PrintError(RuntimeError):
     """PDF nelze předat systémovému tisku."""
+
+
+class _PreviewError(RuntimeError):
+    """PDF nelze otevřít v aplikaci Náhled."""
 
 
 class _CrossingConflictError(GuiInputError):
@@ -138,7 +142,7 @@ class _KeyboardShortcut:
 
 @dataclass(frozen=True, slots=True)
 class _ExportAction:
-    """Jedna položka nabídky exportu nebo tisku."""
+    """Jedna položka nabídky exportu, náhledu nebo tisku."""
 
     identifier: str
     label: str
@@ -208,6 +212,43 @@ def _send_pdf_to_printer(
     if result.returncode != 0:
         detail = result.stdout.strip() or "tiskový systém nevrátil podrobnosti"
         raise _PrintError(f"PDF nelze odeslat na tiskárnu: {detail}")
+
+
+def _open_pdf_in_preview(root: tk.Misc, source: Path) -> None:
+    """Otevře hotové PDF v macOS aplikaci Náhled."""
+
+    try:
+        windowing_system = root.tk.call("tk", "windowingsystem")
+    except tk.TclError as error:
+        raise _PreviewError(f"Grafické prostředí není dostupné: {error}") from error
+
+    if windowing_system != "aqua":
+        raise _PreviewError("Aplikace Náhled je dostupná pouze na macOS.")
+
+    try:
+        result = subprocess.run(
+            (
+                "/usr/bin/open",
+                "-b",
+                "com.apple.Preview",
+                str(source),
+            ),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except OSError as error:
+        raise _PreviewError(
+            f"Aplikaci Náhled nelze spustit: {system_error_message(error)}"
+        ) from error
+
+    if result.returncode != 0:
+        detail = result.stdout.strip() or "systém nevrátil podrobnosti"
+        raise _PreviewError(f"Aplikaci Náhled nelze spustit: {detail}")
 
 
 def _keyboard_shortcut(key: str, *, shift: bool = False) -> _KeyboardShortcut:
@@ -441,7 +482,7 @@ def _bind_text_entry_context_menu(editor: ttk.Entry) -> None:
 
 
 class PdfExportDialog(simpledialog.Dialog):
-    """Vybere formát PDF před jeho uložením nebo tiskem."""
+    """Vybere formát PDF před jeho uložením, otevřením nebo tiskem."""
 
     def __init__(
         self,
@@ -2827,6 +2868,14 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.export_menu = tk.Menu(self.file_menu)
         self._add_export_actions()
         self.file_menu.add_cascade(label="Exportovat", menu=self.export_menu)
+        self.preview_pdf_menu: tk.Menu | None = None
+        if sys.platform == "darwin":
+            self.preview_pdf_menu = tk.Menu(self.file_menu)
+            self._add_preview_pdf_actions()
+            self.file_menu.add_cascade(
+                label="Otevřít v Náhledu",
+                menu=self.preview_pdf_menu,
+            )
         self.print_menu = tk.Menu(self.file_menu)
         self._add_print_actions()
         self.file_menu.add_cascade(label="Tisknout", menu=self.print_menu)
@@ -2887,6 +2936,17 @@ class CrosswordDocumentWindow(ttk.Frame):
                 options["state"] = "disabled"
             self.print_menu.add_command(**options)
 
+    def _add_preview_pdf_actions(self) -> None:
+        assert self.preview_pdf_menu is not None
+        for action in self._preview_pdf_actions():
+            options: dict[str, object] = {
+                "label": action.label,
+                "command": action.command,
+            }
+            if action.identifier == "solution":
+                options["state"] = "disabled"
+            self.preview_pdf_menu.add_command(**options)
+
     def _export_actions(self) -> tuple[_ExportAction, ...]:
         return (
             _ExportAction(
@@ -2912,6 +2972,20 @@ class CrosswordDocumentWindow(ttk.Frame):
                 "solution",
                 "Řešení s písmeny…",
                 self.print_solution,
+            ),
+        )
+
+    def _preview_pdf_actions(self) -> tuple[_ExportAction, ...]:
+        return (
+            _ExportAction(
+                "blank-crossword",
+                "Křížovku bez písmen…",
+                self.open_crossword_in_preview,
+            ),
+            _ExportAction(
+                "solution",
+                "Řešení s písmeny…",
+                self.open_solution_in_preview,
             ),
         )
 
@@ -3255,6 +3329,15 @@ class CrosswordDocumentWindow(ttk.Frame):
             1,
             state="normal" if complete else "disabled",
         )
+        if self.preview_pdf_menu is not None:
+            self.preview_pdf_menu.entryconfigure(
+                0,
+                state="normal",
+            )
+            self.preview_pdf_menu.entryconfigure(
+                1,
+                state="normal" if complete else "disabled",
+            )
 
     def _slot_label(self, selected: WordSlot) -> str:
         assert self._crossword is not None
@@ -3843,6 +3926,36 @@ class CrosswordDocumentWindow(ttk.Frame):
             job_name="Křížovkář – řešení",
         )
 
+    def open_crossword_in_preview(self) -> None:
+        if not self._save_inline_slot_edit():
+            return
+        crossword = self._crossword
+        if crossword is None:
+            self._show_action_error(
+                "Křížovka není připravena",
+                "Dokument křížovky zatím není vytvořený.",
+            )
+            return
+        self._open_pdf_in_preview(
+            _grid_from_editable_document(crossword),
+            filled=False,
+            title="Otevřít v Náhledu – křížovka bez písmen",
+            filename="krizovka.pdf",
+        )
+
+    def open_solution_in_preview(self) -> None:
+        if not self._save_inline_slot_edit():
+            return
+        grid = self._complete_grid_or_error()
+        if grid is None:
+            return
+        self._open_pdf_in_preview(
+            grid,
+            filled=True,
+            title="Otevřít v Náhledu – řešení s písmeny",
+            filename="reseni.pdf",
+        )
+
     def _choose_page_format(
         self,
         *,
@@ -3913,16 +4026,87 @@ class CrosswordDocumentWindow(ttk.Frame):
         filename: str,
         job_name: str,
     ) -> None:
-        page_format = self._choose_page_format(
+        temporary_pdf = CrosswordDocumentWindow._render_temporary_pdf(
+            self,
+            crossword,
+            filled=filled,
             title=title,
             confirm_label="Pokračovat k tisku…",
+            filename=filename,
+        )
+        if temporary_pdf is None:
+            return
+        directory, output = temporary_pdf
+
+        try:
+            _send_pdf_to_printer(
+                self.root,
+                output,
+                job_name=job_name,
+            )
+        except _PrintError as error:
+            directory.cleanup()
+            self._show_action_error(
+                "PDF nelze vytisknout",
+                str(error),
+            )
+            return
+
+        # Windows předá soubor asociované aplikaci asynchronně.
+        self.root.after(_TEMPORARY_PDF_RETENTION_MS, directory.cleanup)
+
+    def _open_pdf_in_preview(
+        self,
+        crossword: CrosswordGrid,
+        *,
+        filled: bool,
+        title: str,
+        filename: str,
+    ) -> None:
+        temporary_pdf = CrosswordDocumentWindow._render_temporary_pdf(
+            self,
+            crossword,
+            filled=filled,
+            title=title,
+            confirm_label="Otevřít v Náhledu",
+            filename=filename,
+        )
+        if temporary_pdf is None:
+            return
+        directory, output = temporary_pdf
+
+        try:
+            _open_pdf_in_preview(self.root, output)
+        except _PreviewError as error:
+            directory.cleanup()
+            self._show_action_error(
+                "PDF nelze otevřít v Náhledu",
+                str(error),
+            )
+            return
+
+        # Příkaz open se vrátí dříve, než Náhled soubor skutečně načte.
+        self.root.after(_TEMPORARY_PDF_RETENTION_MS, directory.cleanup)
+
+    def _render_temporary_pdf(
+        self,
+        crossword: CrosswordGrid,
+        *,
+        filled: bool,
+        title: str,
+        confirm_label: str,
+        filename: str,
+    ) -> tuple[TemporaryDirectory[str], Path] | None:
+        page_format = self._choose_page_format(
+            title=title,
+            confirm_label=confirm_label,
         )
         if page_format is None:
-            return
+            return None
 
         try:
             directory = TemporaryDirectory(
-                prefix="krizovkar-print-",
+                prefix="krizovkar-pdf-",
                 ignore_cleanup_errors=True,
             )
         except OSError as error:
@@ -3931,7 +4115,7 @@ class CrosswordDocumentWindow(ttk.Frame):
                 "Dočasný soubor nelze vytvořit: "
                 f"{system_error_message(error)}",
             )
-            return
+            return None
         output = Path(directory.name) / filename
         self.root.configure(cursor="watch")
         self.root.update_idletasks()
@@ -3948,27 +4132,11 @@ class CrosswordDocumentWindow(ttk.Frame):
                 "PDF nelze vytvořit",
                 str(error),
             )
-            return
+            return None
         finally:
             self.root.configure(cursor="")
 
-        try:
-            _send_pdf_to_printer(
-                self.root,
-                output,
-                job_name=job_name,
-            )
-        except _PrintError as error:
-            directory.cleanup()
-            self._show_action_error(
-                "PDF nelze vytisknout",
-                str(error),
-            )
-            return
-
-        # Windows předá soubor asociované aplikaci asynchronně. Krátké
-        # ponechání dočasného PDF je bezpečné i pro ostatní platformy.
-        self.root.after(_PRINT_FILE_RETENTION_MS, directory.cleanup)
+        return directory, output
 
     def _document(self) -> CrosswordDocument:
         return self._crossword
