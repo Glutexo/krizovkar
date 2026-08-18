@@ -1016,6 +1016,13 @@ class GuiTest(unittest.TestCase):
                 if slot.start == coordinate and slot.legend_position is None
             },
         )
+        grid = create_grid_from_crossword(changed)
+        assert grid.grid.cells is not None
+        start_cell = grid.grid.cells[1][1]
+        self.assertIsInstance(start_cell, LetterCell)
+        assert isinstance(start_cell, LetterCell)
+        self.assertIsNone(start_cell.number)
+        self.assertEqual(2, len(start_cell.numbers))
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "virtualni-zacatky.yaml"
             write_crossword_document(changed, output)
@@ -1527,6 +1534,39 @@ class GuiTest(unittest.TestCase):
         slot_items[0].kwargs["command"]()
         preview._choose_cell_slot.assert_called_once_with("horizontal")
 
+    def test_crossword_preview_draws_both_directional_numbers(self) -> None:
+        preview = CrosswordPreview.__new__(CrosswordPreview)
+        preview.create_text = Mock()
+
+        preview._draw_cell_numbers(
+            (1, 2),
+            x1=10,
+            y1=20,
+            x2=40,
+            cell_size=30,
+        )
+
+        preview.create_text.assert_has_calls(
+            [
+                call(
+                    12,
+                    21,
+                    text="1→",
+                    anchor="nw",
+                    fill=preview._LETTER_COLOR,
+                    font=("TkDefaultFont", 5),
+                ),
+                call(
+                    38,
+                    21,
+                    text="2↓",
+                    anchor="ne",
+                    fill=preview._LETTER_COLOR,
+                    font=("TkDefaultFont", 5),
+                ),
+            ]
+        )
+
     def test_crossword_preview_slot_choice_calls_handler(self) -> None:
         preview = CrosswordPreview.__new__(CrosswordPreview)
         preview._context_menu_coordinates = (Coordinate(2, 3),)
@@ -1875,8 +1915,8 @@ class GuiTest(unittest.TestCase):
         slots = {slot.identifier: slot for slot in window._crossword.slots}
 
         self.assertEqual("→ 1", window._slot_label(slots["h1"]))
-        self.assertEqual("→ 2", window._slot_label(slots["h2"]))
-        self.assertEqual("↓ 1", window._slot_label(slots["v1"]))
+        self.assertEqual("→ 5", window._slot_label(slots["h2"]))
+        self.assertEqual("↓ 2", window._slot_label(slots["v1"]))
 
     def test_slot_table_moves_to_separate_window_and_back(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)

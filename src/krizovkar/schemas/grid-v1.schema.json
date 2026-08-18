@@ -154,9 +154,20 @@
           "pattern": "^(?:CH|[A-ZÁÄČĎÉĚÍŇÓÔÖŘŠŤÚŮÜÝŽ])$"
         },
         "number": {
-          "description": "Volitelné číslo začátku jednoho nebo dvou slov.",
+          "description": "Volitelné jediné číslo začátku slova.",
           "type": "integer",
           "minimum": 1
+        },
+        "numbers": {
+          "description": "Dvě samostatná čísla začátku vodorovného a svislého slova v tomto pořadí.",
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
         },
         "bars": {
           "description": "Silné mezislovní předěly na pravé nebo dolní hraně buňky.",
@@ -223,6 +234,14 @@
         ]
       },
       "allOf": [
+        {
+          "not": {
+            "required": [
+              "number",
+              "numbers"
+            ]
+          }
+        },
         {
           "if": {
             "required": [
@@ -314,6 +333,11 @@
                 },
                 {
                   "required": [
+                    "numbers"
+                  ]
+                },
+                {
+                  "required": [
                     "bars"
                   ]
                 }
@@ -367,6 +391,11 @@
                 },
                 {
                   "required": [
+                    "numbers"
+                  ]
+                },
+                {
+                  "required": [
                     "bars"
                   ]
                 }
@@ -414,6 +443,11 @@
                 {
                   "required": [
                     "number"
+                  ]
+                },
+                {
+                  "required": [
+                    "numbers"
                   ]
                 },
                 {

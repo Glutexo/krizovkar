@@ -42,6 +42,7 @@ class LetterCell:
     value: str | None = None
     number: int | None = None
     bars: tuple[CellBar, ...] = ()
+    numbers: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +53,17 @@ class SecretCell:
     arrow: SecretArrow | None = None
     number: int | None = None
     bars: tuple[CellBar, ...] = ()
+    numbers: tuple[int, ...] = ()
+
+
+def cell_numbers(cell: LetterCell | SecretCell) -> tuple[int, ...]:
+    """Vrátí jedno nebo dvě čísla z písmenné buňky."""
+
+    if cell.numbers:
+        return cell.numbers
+    if cell.number is not None:
+        return (cell.number,)
+    return ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -524,6 +536,7 @@ def _grid_cell(cell: dict[str, Any]) -> GridCell:
         return LetterCell(
             value=cell.get("value"),
             number=cell.get("number"),
+            numbers=tuple(cell.get("numbers", ())),
             bars=tuple(cell.get("bars", ())),
         )
     if cell["type"] == "secret":
@@ -531,6 +544,7 @@ def _grid_cell(cell: dict[str, Any]) -> GridCell:
             value=cell.get("value"),
             arrow=cell.get("arrow"),
             number=cell.get("number"),
+            numbers=tuple(cell.get("numbers", ())),
             bars=tuple(cell.get("bars", ())),
         )
     if cell["type"] == "legend":
@@ -1087,17 +1101,34 @@ def _validate_grid_annotations(
                 if not isinstance(cell, (LetterCell, SecretCell)):
                     continue
                 path = f"$.grid.cells[{row_index}][{column_index}]"
-                if cell.number is not None:
-                    previous = numbered_cells.get(cell.number)
+                if cell.number is not None and cell.numbers:
+                    raise ModelError(
+                        "neplatný datový model: "
+                        f"{path}: number a numbers nelze uvést současně"
+                    )
+                numbers = cell_numbers(cell)
+                if cell.numbers and len(cell.numbers) != 2:
+                    raise ModelError(
+                        "neplatný datový model: "
+                        f"{path}.numbers: pole se dvěma čísly musí uvést "
+                        "právě dvě hodnoty"
+                    )
+                for number_index, number in enumerate(numbers):
+                    number_path = (
+                        f"{path}.number"
+                        if cell.number is not None
+                        else f"{path}.numbers[{number_index}]"
+                    )
+                    previous = numbered_cells.get(number)
                     if previous is not None:
                         previous_path, _, _ = previous
                         raise ModelError(
                             "neplatný datový model: "
-                            f"{path}.number: číslo {cell.number} už používá "
-                            f"buňka {previous_path}"
+                            f"{number_path}: číslo {number} už používá "
+                            f"{previous_path}"
                         )
-                    numbered_cells[cell.number] = (
-                        path,
+                    numbered_cells[number] = (
+                        number_path,
                         row_index,
                         column_index,
                     )
@@ -1493,6 +1524,8 @@ def _grid_cell_data(cell: GridCell) -> dict[str, Any]:
             data["value"] = cell.value
         if cell.number is not None:
             data["number"] = cell.number
+        if cell.numbers:
+            data["numbers"] = list(cell.numbers)
         if cell.bars:
             data["bars"] = list(cell.bars)
         return data
@@ -1504,6 +1537,8 @@ def _grid_cell_data(cell: GridCell) -> dict[str, Any]:
             data["arrow"] = cell.arrow
         if cell.number is not None:
             data["number"] = cell.number
+        if cell.numbers:
+            data["numbers"] = list(cell.numbers)
         if cell.bars:
             data["bars"] = list(cell.bars)
         return data

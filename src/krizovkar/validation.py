@@ -12,6 +12,7 @@ from krizovkar.model import (
     LetterCell,
     ModelError,
     SecretCell,
+    cell_numbers,
     load_crossword_grid,
 )
 
@@ -134,7 +135,7 @@ def _word_start_warnings(crossword: CrosswordGrid) -> list[ValidationIssue]:
             if (
                 not continues_from_left
                 and not has_inline_horizontal_clue
-                and cell.number is None
+                and not cell_numbers(cell)
             ):
                 clue_column = (
                     column
@@ -158,7 +159,7 @@ def _word_start_warnings(crossword: CrosswordGrid) -> list[ValidationIssue]:
             if (
                 not continues_from_above
                 and not has_inline_vertical_clue
-                and cell.number is None
+                and not cell_numbers(cell)
             ):
                 clue_row = (
                     row

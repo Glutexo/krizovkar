@@ -19,6 +19,7 @@ from krizovkar.model import (
     SecretArrow,
     SecretCell,
     SecretPrompt,
+    cell_numbers,
 )
 from krizovkar.typography import mark_czech_hyphenation, protect_czech_prepositions
 
@@ -281,7 +282,7 @@ def _append_secret_cell(
         left,
         bottom,
         1.0,
-        numbered=cell.number is not None,
+        numbered=bool(cell_numbers(cell)),
     )
     lines.append(
         "\\fill " + " -- ".join(_point(*point) for point in points) + " -- cycle;"
@@ -329,11 +330,47 @@ def _append_number(
     number: int,
     left: float,
     bottom: float,
+    *,
+    anchor: str = "north west",
+    x_offset: float = 0.07,
+    suffix: str = "",
+    font_size: int = 7,
 ) -> None:
     lines.append(
-        rf"\node[anchor=north west,inner sep=0pt,font=\bfseries\fontsize{{7pt}}{{7pt}}"
-        rf"\selectfont] at {_point(left + 0.07, bottom + 0.93)} "
-        rf"{{{number}}};"
+        rf"\node[anchor={anchor},inner sep=0pt,font=\bfseries"
+        rf"\fontsize{{{font_size}pt}}{{{font_size}pt}}\selectfont] "
+        rf"at {_point(left + x_offset, bottom + 0.93)} "
+        rf"{{{number}{suffix}}};"
+    )
+
+
+def _append_cell_numbers(
+    lines: list[str],
+    cell: LetterCell | SecretCell,
+    left: float,
+    bottom: float,
+) -> None:
+    numbers = cell_numbers(cell)
+    if len(numbers) == 1:
+        _append_number(lines, numbers[0], left, bottom)
+        return
+    _append_number(
+        lines,
+        numbers[0],
+        left,
+        bottom,
+        suffix=r"\,$\rightarrow$",
+        font_size=6,
+    )
+    _append_number(
+        lines,
+        numbers[1],
+        left,
+        bottom,
+        anchor="north east",
+        x_offset=0.93,
+        suffix=r"\,$\downarrow$",
+        font_size=6,
     )
 
 
@@ -382,9 +419,9 @@ def _grid_commands(crossword: CrosswordGrid, *, filled: bool) -> list[str]:
                     _append_help_cell(lines, cell, left, bottom)
                 if (
                     isinstance(cell, (LetterCell, SecretCell))
-                    and cell.number is not None
+                    and cell_numbers(cell)
                 ):
-                    _append_number(lines, cell.number, left, bottom)
+                    _append_cell_numbers(lines, cell, left, bottom)
 
         if filled:
             for row_index, row in enumerate(grid.cells):

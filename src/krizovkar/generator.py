@@ -1170,20 +1170,44 @@ def _fill_crossword_slots(
     return result
 
 
-def _crossword_grid_annotations(
+def crossword_external_slot_numbers(
     crossword: CrosswordDocument,
-) -> tuple[dict[GridCoordinate, int], dict[GridCoordinate, set[str]]]:
-    external_starts = sorted(
-        {
-            (slot.start.row - 1, slot.start.column - 1)
+) -> dict[str, int]:
+    """Očísluje nelegendované sloty po polích a pak podle směru."""
+
+    direction_order = {"horizontal": 0, "vertical": 1}
+    external_slots = sorted(
+        (
+            slot
             for slot in crossword.slots
             if slot.legend_position is None
-        }
+        ),
+        key=lambda slot: (
+            slot.start.row,
+            slot.start.column,
+            direction_order[slot.direction],
+        ),
     )
-    numbers = {
-        coordinate: number
-        for number, coordinate in enumerate(external_starts, start=1)
+    return {
+        slot.identifier: number
+        for number, slot in enumerate(external_slots, start=1)
     }
+
+
+def _crossword_grid_annotations(
+    crossword: CrosswordDocument,
+) -> tuple[
+    dict[GridCoordinate, tuple[int, ...]],
+    dict[str, int],
+    dict[GridCoordinate, set[str]],
+]:
+    slot_numbers = crossword_external_slot_numbers(crossword)
+    numbers: dict[GridCoordinate, list[int]] = defaultdict(list)
+    for slot in crossword.slots:
+        if slot.identifier not in slot_numbers:
+            continue
+        coordinate = (slot.start.row - 1, slot.start.column - 1)
+        numbers[coordinate].append(slot_numbers[slot.identifier])
     horizontal_connections: set[tuple[GridCoordinate, GridCoordinate]] = set()
     vertical_connections: set[tuple[GridCoordinate, GridCoordinate]] = set()
     external_horizontal_cells: set[GridCoordinate] = set()
@@ -1240,7 +1264,14 @@ def _crossword_grid_annotations(
                 )
             ):
                 bars[coordinate].add("bottom")
-    return numbers, bars
+    return (
+        {
+            coordinate: tuple(sorted(coordinate_numbers))
+            for coordinate, coordinate_numbers in numbers.items()
+        },
+        slot_numbers,
+        bars,
+    )
 
 
 def _crossword_secret_metadata(
@@ -1291,7 +1322,7 @@ def _crossword_grid_from_assignments(
         defaultdict(list)
     )
     external_slots: list[WordSlot] = []
-    numbers, bars = _crossword_grid_annotations(crossword)
+    numbers, slot_numbers, bars = _crossword_grid_annotations(crossword)
     secret_coordinates, secret_arrows, secret_prompts = (
         _crossword_secret_metadata(crossword)
     )
@@ -1315,16 +1346,13 @@ def _crossword_grid_from_assignments(
     direction_order = {"horizontal": 0, "vertical": 1}
     clues = tuple(
         ExternalClue(
-            number=numbers[(slot.start.row - 1, slot.start.column - 1)],
+            number=slot_numbers[slot.identifier],
             direction=slot.direction,
             text=assignments[slot.identifier].clue,
         )
         for slot in sorted(
             external_slots,
-            key=lambda item: (
-                numbers[(item.start.row - 1, item.start.column - 1)],
-                direction_order[item.direction],
-            ),
+            key=lambda item: slot_numbers[item.identifier],
         )
         if slot.identifier in assignments
     )
@@ -1364,9 +1392,19 @@ def _crossword_grid_from_assignments(
                 )
             else:
                 cell_bars = bars.get(coordinate, set())
+                coordinate_numbers = numbers.get(coordinate, ())
                 common_arguments = {
                     "value": letters.get(coordinate),
-                    "number": numbers.get(coordinate),
+                    "number": (
+                        coordinate_numbers[0]
+                        if len(coordinate_numbers) == 1
+                        else None
+                    ),
+                    "numbers": (
+                        coordinate_numbers
+                        if len(coordinate_numbers) > 1
+                        else ()
+                    ),
                     "bars": tuple(
                         bar
                         for bar in ("right", "bottom")

@@ -43,6 +43,7 @@ from krizovkar.model import (
     SecretPrompt,
     WordPlacement,
     WordSlot,
+    cell_numbers,
     load_crossword_document,
     load_crossword_grid,
     load_crossword_specification,
@@ -695,6 +696,55 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
             write_crossword_grid(grid, output)
             self.assertEqual(grid, load_crossword_grid(output))
 
+    def test_shared_external_start_has_two_directional_numbers(self) -> None:
+        crossword = CrosswordDocument(
+            format_name="krizovkar",
+            kind="crossword",
+            version=1,
+            grid=CrosswordLayout(
+                width=3,
+                height=1,
+                cells=((LetterCellRole(),) * 3,),
+            ),
+            slots=(
+                WordSlot(
+                    identifier="v1",
+                    start=Coordinate(row=1, column=1),
+                    direction="vertical",
+                    length=1,
+                    answer="A",
+                    clue="Svislá legenda",
+                ),
+                WordSlot(
+                    identifier="h1",
+                    start=Coordinate(row=1, column=1),
+                    direction="horizontal",
+                    length=3,
+                    answer="ABC",
+                    clue="Vodorovná legenda",
+                ),
+            ),
+        )
+
+        grid = create_grid_from_crossword(crossword)
+
+        assert grid.grid.cells is not None
+        start = grid.grid.cells[0][0]
+        self.assertIsInstance(start, LetterCell)
+        assert isinstance(start, LetterCell)
+        self.assertIsNone(start.number)
+        self.assertEqual((1, 2), start.numbers)
+        self.assertEqual((1, 2), cell_numbers(start))
+        self.assertEqual((1, 2), tuple(clue.number for clue in grid.clues))
+        self.assertEqual(
+            ("horizontal", "vertical"),
+            tuple(clue.direction for clue in grid.clues),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "sdileny-zacatek.yaml"
+            write_crossword_grid(grid, output)
+            self.assertEqual(grid, load_crossword_grid(output))
+
     def test_fills_double_internal_legend_in_direction_order(self) -> None:
         crossword = CrosswordDocument(
             format_name="krizovkar",
@@ -916,8 +966,12 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         self.assertTrue(all(isinstance(cell, LetterCell) for cell in cells))
         self.assertTrue(all(cell.value is None for cell in cells))
         self.assertEqual(
-            tuple(range(1, 25)),
-            tuple(cell.number for cell in cells if cell.number is not None),
+            tuple(range(1, 29)),
+            tuple(
+                number
+                for cell in cells
+                for number in cell_numbers(cell)
+            ),
         )
         self.assertEqual(14, sum(len(cell.bars) for cell in cells))
         self.assertFalse(grid.clues)
@@ -1065,11 +1119,11 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         cells = tuple(cell for row in first.grid.cells for cell in row)
         self.assertTrue(all(isinstance(cell, LetterCell) for cell in cells))
         self.assertEqual(
-            tuple(range(1, 25)),
+            tuple(range(1, 29)),
             tuple(
-                cell.number
+                number
                 for cell in cells
-                if cell.number is not None
+                for number in cell_numbers(cell)
             ),
         )
         self.assertEqual(14, sum(len(cell.bars) for cell in cells))

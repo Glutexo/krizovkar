@@ -75,7 +75,9 @@ na macOS `⌘`, při kliknutí lze pole přidávat do vícenásobného výběru 
 z něj odebírat; pravé tlačítko nad kterýmkoli z nich použije vybranou roli na
 celou skupinu. Zaškrtávací volby **Heslo →** a **Heslo ↓** ponechají pole
 písmenné a založí na něm začátek nelegendovaného slotu v daném směru; obě lze
-na jednom poli kombinovat. Slot pokračuje do dalšího začátku stejného směru,
+na jednom poli kombinovat. Takové pole dostane dvě globálně jedinečná čísla;
+náhled i PDF je zobrazí například jako `1→` vlevo nahoře a `2↓` vpravo
+nahoře. Slot pokračuje do dalšího začátku stejného směru,
 k nejbližšímu nepísmennému poli nebo k okraji mřížky. Jeho začátek uvnitř
 souvislé řady oddělí silná čára. Zrušení volby sousední úseky znovu spojí.
 
@@ -301,7 +303,19 @@ určil seznam polí, nebo souvislé heslo. Zápis ukazuje [nevyplněná mřížk
 
 Cílový dokument ukládá texty k tajenkám v kořenovém seznamu `secret_prompts`. Každá položka má stejné `text`, `placement` a `alignment` jako `prompt` ve vstupním zadání; seznam dovoluje v jedné mřížce více tajenek. Renderer je sází nad nebo pod mřížku a zarovnává k její levé nebo pravé hraně. Spodní zadání se zobrazí mezi mřížkou a případnými číselnými legendami. Zápis ukazuje [cílová mřížka se zadáním tajenky](examples/grid-secret-prompt.yaml).
 
-Čárkované rozložení může písmenné buňce přidat počáteční `number` a silné mezislovní `bars` na její pravé či dolní hraně. Renderer vloží číslo do levého horního rohu, předěly vykreslí stejným silným tahem jako vnější rám a očíslované `clues` rozdělí pod mřížkou do sloupců „Vodorovně“ a „Svisle“. Číslo bez odpovídající legendy může označit například tajenku bez nápovědy. Tyto položky nijak nevylučují buňky `type: legend`: [smíšená mřížka](examples/grid-mixed-clues.yaml) používá vepsané i číselné legendy současně, zatímco [číslovaná mřížka](examples/grid-classic.yaml) ukazuje samotné vnější legendy.
+Čárkované rozložení může písmenné buňce přidat počáteční
+`number` a silné mezislovní `bars` na její pravé či dolní hraně. Pokud
+na jednom poli začíná vodorovné i svislé nelegendované heslo, použije se
+`numbers: [1, 2]`; první hodnota patří vodorovnému a druhá svislému heslu.
+Každé nelegendované heslo tak má vlastní globálně jedinečné číslo. Renderer
+vloží jediné číslo do levého horního rohu; dvojici zobrazí se směrovými
+šipkami v obou horních rozích. Předěly vykreslí stejným silným tahem jako
+vnější rám a očíslované `clues` rozdělí pod mřížkou do sloupců
+„Vodorovně“ a „Svisle“. Číslo bez odpovídající legendy může označit
+například tajenku bez nápovědy. Tyto položky nijak nevylučují buňky
+`type: legend`: [smíšená mřížka](examples/grid-mixed-clues.yaml) používá
+vepsané i číselné legendy současně, zatímco
+[číslovaná mřížka](examples/grid-classic.yaml) ukazuje samotné vnější legendy.
 
 Vyplněná legenda používá neprázdný seznam textů a může u nich výslovně uvést
 směrové šipky. V nevyplněné mřížce lze `texts` vynechat nebo pomocí `null`

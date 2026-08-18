@@ -21,6 +21,7 @@ from krizovkar.generator import (
     GenerationError,
     SpecificationLayout,
     create_grid_from_crossword,
+    crossword_external_slot_numbers,
     generate_numbered_template,
     generate_swedish_template,
 )
@@ -44,6 +45,7 @@ from krizovkar.model import (
     SecretCell,
     WordDirection,
     WordSlot,
+    cell_numbers,
     dump_crossword_document,
     load_crossword_document,
     write_crossword_document,
@@ -1530,7 +1532,7 @@ class CrosswordPreview(tk.Canvas):
                 fill = "#ffffff"
                 marker: str | None = None
                 letter: str | None = None
-                number: int | None = None
+                numbers: tuple[int, ...] = ()
                 bars: tuple[str, ...] = ()
                 if isinstance(cell, LegendCell):
                     fill = self._LEGEND_FILL
@@ -1542,7 +1544,7 @@ class CrosswordPreview(tk.Canvas):
                     marker = "P"
                 elif isinstance(cell, (LetterCell, SecretCell)):
                     letter = cell.value if self._show_letters else None
-                    number = cell.number
+                    numbers = cell_numbers(cell)
                     bars = cell.bars
                     if coordinate in self._selected_coordinates:
                         fill = self._SELECTED_FILL
@@ -1597,17 +1599,13 @@ class CrosswordPreview(tk.Canvas):
                             "bold",
                         ),
                     )
-                if number is not None and cell_size >= 18:
-                    self.create_text(
-                        x1 + 2,
-                        y1 + 1,
-                        text=str(number),
-                        anchor="nw",
-                        fill=self._LETTER_COLOR,
-                        font=(
-                            "TkDefaultFont",
-                            max(5, int(cell_size * 0.2)),
-                        ),
+                if numbers and cell_size >= 18:
+                    self._draw_cell_numbers(
+                        numbers,
+                        x1=x1,
+                        y1=y1,
+                        x2=x2,
+                        cell_size=cell_size,
                     )
                 if "right" in bars:
                     self.create_line(
@@ -1643,6 +1641,36 @@ class CrosswordPreview(tk.Canvas):
                 top,
                 left + grid_width,
                 top + grid_height,
+            )
+
+    def _draw_cell_numbers(
+        self,
+        numbers: tuple[int, ...],
+        *,
+        x1: float,
+        y1: float,
+        x2: float,
+        cell_size: float,
+    ) -> None:
+        font = (
+            "TkDefaultFont",
+            max(5, int(cell_size * (0.17 if len(numbers) > 1 else 0.2))),
+        )
+        if len(numbers) == 1:
+            labels = ((str(numbers[0]), x1 + 2, "nw"),)
+        else:
+            labels = (
+                (f"{numbers[0]}→", x1 + 2, "nw"),
+                (f"{numbers[1]}↓", x2 - 2, "ne"),
+            )
+        for label, x, anchor in labels:
+            self.create_text(
+                x,
+                y1 + 1,
+                text=label,
+                anchor=anchor,
+                fill=self._LETTER_COLOR,
+                font=font,
             )
 
     def _draw_resize_handles(
@@ -2936,6 +2964,11 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _slot_label(self, selected: WordSlot) -> str:
         assert self._crossword is not None
+        if selected.legend_position is None:
+            numbers = crossword_external_slot_numbers(self._crossword)
+            number = numbers.get(selected.identifier)
+            if number is not None:
+                return f"{_DIRECTION_LABELS[selected.direction]} {number}"
         number = 0
         for slot in self._crossword.slots:
             if slot.direction == selected.direction:

@@ -102,6 +102,33 @@ class LatexSourceTest(unittest.TestCase):
         self.assertEqual(12, source.count(r"line width=1.25pt] (") - 1)
         self.assertNotIn(r"\KrizovkarLetter{9.6mm}", source)
 
+    def test_shared_start_renders_two_numbers_with_direction_arrows(self) -> None:
+        crossword = CrosswordGrid(
+            format_name="krizovkar",
+            kind="grid",
+            version=1,
+            grid=Grid(
+                width=1,
+                height=1,
+                cells=((LetterCell(numbers=(1, 2)),),),
+            ),
+        )
+
+        source = create_latex_source(crossword, filled=False)
+
+        self.assertIn(
+            r"anchor=north west,inner sep=0pt,font=\bfseries"
+            r"\fontsize{6pt}{6pt}\selectfont] at (0.07,0.93) "
+            r"{1\,$\rightarrow$}",
+            source,
+        )
+        self.assertIn(
+            r"anchor=north east,inner sep=0pt,font=\bfseries"
+            r"\fontsize{6pt}{6pt}\selectfont] at (0.93,0.93) "
+            r"{2\,$\downarrow$}",
+            source,
+        )
+
     def test_inline_and_numbered_clues_can_share_one_source(self) -> None:
         crossword = load_crossword_grid(GRID_MIXED_CLUES_EXAMPLE)
 
