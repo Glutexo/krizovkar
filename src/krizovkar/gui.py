@@ -1738,11 +1738,14 @@ class CrosswordDocumentWindow(ttk.Frame):
         *,
         standalone: bool = False,
     ) -> None:
-        slots_frame = ttk.LabelFrame(
-            parent,
-            text="Místa pro hesla",
-            padding=12,
-        )
+        if standalone:
+            slots_frame = ttk.Frame(parent, padding=12)
+        else:
+            slots_frame = ttk.LabelFrame(
+                parent,
+                text="Místa pro hesla",
+                padding=12,
+            )
         self.slots_frame = slots_frame
         slots_frame.grid(
             row=0 if standalone else 1,

@@ -1017,6 +1017,43 @@ class GuiTest(unittest.TestCase):
             (("v1", "answer"),),
         )
 
+    def test_separate_slot_table_has_no_inner_heading(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        parent = Mock()
+        slots_frame = Mock()
+        container = Mock()
+        slots_tree = Mock()
+        scrollbar = Mock()
+
+        with (
+            patch(
+                "krizovkar.gui.ttk.Frame",
+                side_effect=(slots_frame, container),
+            ) as frame_type,
+            patch("krizovkar.gui.ttk.LabelFrame") as label_frame_type,
+            patch(
+                "krizovkar.gui.ttk.Treeview",
+                return_value=slots_tree,
+            ),
+            patch(
+                "krizovkar.gui.ttk.Scrollbar",
+                return_value=scrollbar,
+            ),
+        ):
+            window._build_slot_list(parent, standalone=True)
+
+        label_frame_type.assert_not_called()
+        self.assertEqual(
+            call(parent, padding=12),
+            frame_type.call_args_list[0],
+        )
+        slots_frame.grid.assert_called_once_with(
+            row=0,
+            column=0,
+            sticky="nsew",
+            pady=0,
+        )
+
     def test_slot_table_moves_to_separate_window_and_back(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         window.root = Mock()
