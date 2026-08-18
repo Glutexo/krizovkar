@@ -131,6 +131,12 @@ dokumentu. Formát stránky se volí přímo v dialogu vybraného exportu; poté
 naváže systémový dialog pro výběr umístění PDF. Tisková podoba bez písmen je
 dostupná vždy; řešení se zpřístupní po vyplnění všech hesel.
 
+Podnabídka **Soubor → Tisknout** nabízí stejné dvě podoby přímo k vytištění.
+Po volbě formátu stránky Křížovkář vytvoří dočasné PDF. Na macOS pro ně otevře
+systémový tiskový dialog; na Windows a systémech X11 je odešle na výchozí
+tiskárnu. Pokud tiskárna ani tiskový systém nejsou dostupné, zobrazí konkrétní
+chybu. Dočasný soubor se nikam neexportuje a aplikace jej sama odstraní.
+
 Hesla s vepsanou legendou mají místo pro nápovědu přímo v předem vytvořené
 mřížce. Hesla s vnější legendou dostanou číslo a nápovědu pod mřížkou. Ruční
 zadávání souřadnic ani směru proto není potřeba. Nesprávnou délku, opakované

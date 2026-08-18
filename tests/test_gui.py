@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import tempfile
 import tkinter as tk
 import unittest
@@ -29,10 +30,12 @@ from krizovkar.gui import (
     _create_window_menu,
     _keyboard_shortcut,
     _multiple_cell_selection_sequence,
+    _PrintError,
     _ReadOnlyText,
     _recent_document_label,
     _recent_documents_storage_path,
     _RecentDocuments,
+    _send_pdf_to_printer,
     _template_generation_layout,
     clear_crossword_slot,
     create_blank_template,
@@ -221,6 +224,7 @@ class GuiTest(unittest.TestCase):
         file_menu = Mock()
         recent_documents_menu = Mock()
         export_menu = Mock()
+        print_menu = Mock()
         view_menu = Mock()
         slot_list_placement_menu = Mock()
         window_menu = Mock()
@@ -238,6 +242,7 @@ class GuiTest(unittest.TestCase):
                     file_menu,
                     recent_documents_menu,
                     export_menu,
+                    print_menu,
                     view_menu,
                     slot_list_placement_menu,
                     window_menu,
@@ -273,6 +278,14 @@ class GuiTest(unittest.TestCase):
         file_menu.add_cascade.assert_any_call(
             label="Otevřít poslední",
             menu=recent_documents_menu,
+        )
+        file_menu.add_cascade.assert_any_call(
+            label="Exportovat",
+            menu=export_menu,
+        )
+        file_menu.add_cascade.assert_any_call(
+            label="Tisknout",
+            menu=print_menu,
         )
         menu_type.assert_any_call(menu, name="window")
         menu_type.assert_any_call(menu, name="help")
@@ -3265,6 +3278,40 @@ class GuiTest(unittest.TestCase):
         )
         create_grid.assert_called_once_with(application._crossword)
 
+    def test_print_actions_choose_puzzle_and_solution(self) -> None:
+        application = Mock()
+        application._crossword = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        solution = Mock()
+        application._complete_grid_or_error.return_value = solution
+
+        with patch("krizovkar.gui.create_grid_from_crossword") as create_grid:
+            CrosswordDocumentWindow.print_crossword(application)
+            CrosswordDocumentWindow.print_solution(application)
+
+        self.assertEqual(
+            [
+                call(
+                    create_grid.return_value,
+                    filled=False,
+                    title="Tisknout křížovku bez písmen",
+                    filename="krizovka.pdf",
+                    job_name="Křížovkář – křížovka",
+                ),
+                call(
+                    solution,
+                    filled=True,
+                    title="Tisknout řešení s písmeny",
+                    filename="reseni.pdf",
+                    job_name="Křížovkář – řešení",
+                ),
+            ],
+            application._print_pdf.call_args_list,
+        )
+        create_grid.assert_called_once_with(application._crossword)
+
     def test_export_actions_offer_crossword_and_solution(self) -> None:
         crossword_window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         crossword_window.export_menu = Mock()
@@ -3284,6 +3331,27 @@ class GuiTest(unittest.TestCase):
                 ),
             ],
             crossword_window.export_menu.add_command.call_args_list,
+        )
+
+    def test_print_actions_offer_crossword_and_solution(self) -> None:
+        crossword_window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        crossword_window.print_menu = Mock()
+
+        CrosswordDocumentWindow._add_print_actions(crossword_window)
+
+        self.assertEqual(
+            [
+                call(
+                    label="Křížovku bez písmen…",
+                    command=crossword_window.print_crossword,
+                ),
+                call(
+                    label="Řešení s písmeny…",
+                    command=crossword_window.print_solution,
+                    state="disabled",
+                ),
+            ],
+            crossword_window.print_menu.add_command.call_args_list,
         )
 
     def test_file_menu_enables_complete_crossword_outputs(self) -> None:
@@ -3308,6 +3376,14 @@ class GuiTest(unittest.TestCase):
             ],
             application.export_menu.entryconfigure.call_args_list,
         )
+        self.assertEqual(
+            [
+                call(0, state="normal"),
+                call(1, state="normal"),
+            ],
+            application.print_menu.entryconfigure.call_args_list,
+        )
+
     def test_file_menu_disables_incomplete_crossword_outputs(self) -> None:
         application = Mock()
         application._save_menu_index = 4
@@ -3330,6 +3406,11 @@ class GuiTest(unittest.TestCase):
             [call(0, state="normal"), call(1, state="disabled")],
             application.export_menu.entryconfigure.call_args_list,
         )
+        self.assertEqual(
+            [call(0, state="normal"), call(1, state="disabled")],
+            application.print_menu.entryconfigure.call_args_list,
+        )
+
     def test_page_format_is_chosen_in_export_dialog_and_remembered(self) -> None:
         window = Mock()
         window._page_format = "A4"
@@ -3339,6 +3420,7 @@ class GuiTest(unittest.TestCase):
             page_format = CrosswordDocumentWindow._choose_page_format(
                 window,
                 title="Exportovat křížovku bez písmen",
+                confirm_label="Vybrat umístění…",
             )
 
         self.assertEqual("A5", page_format)
@@ -3346,6 +3428,7 @@ class GuiTest(unittest.TestCase):
             window.root,
             title="Exportovat křížovku bez písmen",
             initial_page_format="A4",
+            confirm_label="Vybrat umístění…",
         )
         self.assertEqual("A5", window._page_format)
 
@@ -3358,6 +3441,7 @@ class GuiTest(unittest.TestCase):
             page_format = CrosswordDocumentWindow._choose_page_format(
                 window,
                 title="Exportovat křížovku bez písmen",
+                confirm_label="Vybrat umístění…",
             )
 
         self.assertIsNone(page_format)
@@ -3388,6 +3472,7 @@ class GuiTest(unittest.TestCase):
 
         application._choose_page_format.assert_called_once_with(
             title="Exportovat křížovku bez písmen",
+            confirm_label="Vybrat umístění…",
         )
         application._choose_output.assert_called_once_with(
             title="Exportovat křížovku bez písmen",
@@ -3416,6 +3501,242 @@ class GuiTest(unittest.TestCase):
         )
 
         application._choose_output.assert_not_called()
+
+    def test_prints_pdf_with_chosen_page_format(self) -> None:
+        crossword = _filled_numbered_crossword()
+        grid = create_grid_from_crossword(crossword)
+        application = Mock()
+        application._choose_page_format.return_value = "A5"
+
+        with (
+            patch(
+                "krizovkar.renderer._run_lualatex",
+                side_effect=_fake_lualatex,
+            ),
+            patch("krizovkar.gui._send_pdf_to_printer") as send_to_printer,
+        ):
+            CrosswordDocumentWindow._print_pdf(
+                application,
+                grid,
+                filled=False,
+                title="Tisknout křížovku bez písmen",
+                filename="krizovka.pdf",
+                job_name="Křížovkář – křížovka",
+            )
+
+        application._choose_page_format.assert_called_once_with(
+            title="Tisknout křížovku bez písmen",
+            confirm_label="Pokračovat k tisku…",
+        )
+        printed_pdf = send_to_printer.call_args.args[1]
+        self.assertEqual(PDF_BYTES, printed_pdf.read_bytes())
+        send_to_printer.assert_called_once_with(
+            application.root,
+            printed_pdf,
+            job_name="Křížovkář – křížovka",
+        )
+        self.assertEqual(
+            [call(cursor="watch"), call(cursor="")],
+            application.root.configure.call_args_list,
+        )
+        application.root.update_idletasks.assert_called_once_with()
+        application.root.after.assert_called_once()
+        delay, cleanup = application.root.after.call_args.args
+        self.assertEqual(5 * 60 * 1000, delay)
+        cleanup()
+        self.assertFalse(printed_pdf.exists())
+
+    def test_cancelled_print_dialog_does_not_create_pdf(self) -> None:
+        application = Mock()
+        application._choose_page_format.return_value = None
+
+        with patch("krizovkar.gui.render_pdf") as render:
+            CrosswordDocumentWindow._print_pdf(
+                application,
+                Mock(),
+                filled=False,
+                title="Tisknout křížovku bez písmen",
+                filename="krizovka.pdf",
+                job_name="Křížovkář – křížovka",
+            )
+
+        render.assert_not_called()
+        application.root.after.assert_not_called()
+
+    def test_print_render_error_removes_temporary_pdf(self) -> None:
+        application = Mock()
+        application._choose_page_format.return_value = "A4"
+        rendered_path: Path | None = None
+
+        def fail_render(
+            crossword,
+            output,
+            *,
+            page_format,
+            filled,
+        ) -> None:
+            nonlocal rendered_path
+            rendered_path = output
+            raise RenderError("nainstalujte TeX Live")
+
+        with patch("krizovkar.gui.render_pdf", side_effect=fail_render):
+            CrosswordDocumentWindow._print_pdf(
+                application,
+                Mock(),
+                filled=False,
+                title="Tisknout křížovku bez písmen",
+                filename="krizovka.pdf",
+                job_name="Křížovkář – křížovka",
+            )
+
+        self.assertIsNotNone(rendered_path)
+        assert rendered_path is not None
+        self.assertFalse(rendered_path.parent.exists())
+        application._show_action_error.assert_called_once_with(
+            "PDF nelze vytvořit",
+            "nainstalujte TeX Live",
+        )
+        application.root.after.assert_not_called()
+
+    def test_print_system_error_removes_temporary_pdf(self) -> None:
+        crossword = _filled_numbered_crossword()
+        grid = create_grid_from_crossword(crossword)
+        application = Mock()
+        application._choose_page_format.return_value = "A4"
+
+        with (
+            patch(
+                "krizovkar.renderer._run_lualatex",
+                side_effect=_fake_lualatex,
+            ),
+            patch(
+                "krizovkar.gui._send_pdf_to_printer",
+                side_effect=_PrintError("není nastavena tiskárna"),
+            ) as send_to_printer,
+        ):
+            CrosswordDocumentWindow._print_pdf(
+                application,
+                grid,
+                filled=False,
+                title="Tisknout křížovku bez písmen",
+                filename="krizovka.pdf",
+                job_name="Křížovkář – křížovka",
+            )
+
+        printed_pdf = send_to_printer.call_args.args[1]
+        self.assertFalse(printed_pdf.parent.exists())
+        application._show_action_error.assert_called_once_with(
+            "PDF nelze vytisknout",
+            "není nastavena tiskárna",
+        )
+        application.root.after.assert_not_called()
+
+    def test_temporary_print_file_error_is_shown(self) -> None:
+        application = Mock()
+        application._choose_page_format.return_value = "A4"
+
+        with patch(
+            "krizovkar.gui.TemporaryDirectory",
+            side_effect=PermissionError,
+        ):
+            CrosswordDocumentWindow._print_pdf(
+                application,
+                Mock(),
+                filled=False,
+                title="Tisknout křížovku bez písmen",
+                filename="krizovka.pdf",
+                job_name="Křížovkář – křížovka",
+            )
+
+        application._show_action_error.assert_called_once_with(
+            "PDF nelze vytvořit",
+            "Dočasný soubor nelze vytvořit: přístup byl odepřen",
+        )
+        application.root.configure.assert_not_called()
+        application.root.after.assert_not_called()
+
+    def test_macos_printing_uses_native_pdf_dialog(self) -> None:
+        root = Mock()
+        root.tk.call.side_effect = ("aqua", "")
+        source = Path("krizovka.pdf")
+
+        _send_pdf_to_printer(
+            root,
+            source,
+            job_name="Křížovkář – křížovka",
+        )
+
+        self.assertEqual(
+            [
+                call("tk", "windowingsystem"),
+                call("::tk::print::_print", str(source)),
+            ],
+            root.tk.call.call_args_list,
+        )
+
+    def test_windows_printing_uses_associated_pdf_application(self) -> None:
+        root = Mock()
+        root.tk.call.return_value = "win32"
+        source = Path("krizovka.pdf")
+
+        with patch("krizovkar.gui.os.startfile", create=True) as startfile:
+            _send_pdf_to_printer(
+                root,
+                source,
+                job_name="Křížovkář – křížovka",
+            )
+
+        startfile.assert_called_once_with(str(source), "print")
+
+    def test_x11_printing_submits_pdf_to_cups(self) -> None:
+        root = Mock()
+        root.tk.call.return_value = "x11"
+        source = Path("krizovka.pdf")
+        result = Mock(returncode=0, stdout="request id is tiskarna-1")
+
+        with patch("krizovkar.gui.subprocess.run", return_value=result) as run:
+            _send_pdf_to_printer(
+                root,
+                source,
+                job_name="Křížovkář – křížovka",
+            )
+
+        run.assert_called_once_with(
+            (
+                "lp",
+                "-t",
+                "Křížovkář – křížovka",
+                "--",
+                str(source),
+            ),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+
+    def test_x11_printing_reports_missing_cups_command(self) -> None:
+        root = Mock()
+        root.tk.call.return_value = "x11"
+
+        with (
+            patch(
+                "krizovkar.gui.subprocess.run",
+                side_effect=FileNotFoundError,
+            ),
+            self.assertRaisesRegex(
+                _PrintError,
+                "Tiskový příkaz lp nebyl nalezen",
+            ),
+        ):
+            _send_pdf_to_printer(
+                root,
+                Path("krizovka.pdf"),
+                job_name="Křížovkář – křížovka",
+            )
 
     def test_pdf_render_error_is_shown_and_restores_cursor(self) -> None:
         application = Mock()
