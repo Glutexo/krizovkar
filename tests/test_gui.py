@@ -21,9 +21,9 @@ from krizovkar.gui import (
     CrosswordSettings,
     CrosswordSourceWindow,
     GuiInputError,
-    _add_source_window_menu_item,
     _configure_tk_runtime,
     _create_help_menu,
+    _create_view_menu,
     _create_window_menu,
     _keyboard_shortcut,
     _ReadOnlyText,
@@ -191,6 +191,7 @@ class GuiTest(unittest.TestCase):
         file_menu = Mock()
         recent_documents_menu = Mock()
         export_menu = Mock()
+        view_menu = Mock()
         window_menu = Mock()
         help_menu = Mock()
 
@@ -203,6 +204,7 @@ class GuiTest(unittest.TestCase):
                     file_menu,
                     recent_documents_menu,
                     export_menu,
+                    view_menu,
                     window_menu,
                     help_menu,
                 ),
@@ -244,7 +246,7 @@ class GuiTest(unittest.TestCase):
             "Křížovkář na GitHubu",
             help_menu.add_command.call_args.kwargs["label"],
         )
-        source_item = window_menu.add_command.call_args
+        source_item = view_menu.add_command.call_args
         self.assertEqual("Zdroj YAML", source_item.kwargs["label"])
         self.assertEqual("normal", source_item.kwargs["state"])
         source_item.kwargs["command"]()
@@ -252,6 +254,7 @@ class GuiTest(unittest.TestCase):
         menu.add_cascade.assert_has_calls(
             [
                 call(label="Soubor", menu=file_menu),
+                call(label="Zobrazení", menu=view_menu),
                 call(label="Okno", menu=window_menu),
                 call(label="Nápověda", menu=help_menu),
             ]
@@ -264,6 +267,7 @@ class GuiTest(unittest.TestCase):
         menu = Mock()
         file_menu = Mock()
         recent_documents_menu = Mock()
+        view_menu = Mock()
         window_menu = Mock()
         help_menu = Mock()
 
@@ -275,6 +279,7 @@ class GuiTest(unittest.TestCase):
                     menu,
                     file_menu,
                     recent_documents_menu,
+                    view_menu,
                     window_menu,
                     help_menu,
                 ),
@@ -299,13 +304,14 @@ class GuiTest(unittest.TestCase):
         )
         menu_type.assert_any_call(menu, name="window")
         menu_type.assert_any_call(menu, name="help")
-        window_menu.add_command.assert_called_once_with(
+        view_menu.add_command.assert_called_once_with(
             label="Zdroj YAML",
             state="disabled",
         )
         menu.add_cascade.assert_has_calls(
             [
                 call(label="Soubor", menu=file_menu),
+                call(label="Zobrazení", menu=view_menu),
                 call(label="Okno", menu=window_menu),
                 call(label="Nápověda", menu=help_menu),
             ]
@@ -460,25 +466,21 @@ class GuiTest(unittest.TestCase):
         )
         self.assertIs(window_menu, created)
 
-    def test_macos_window_menu_separates_source_from_system_items(self) -> None:
+    def test_view_menu_contains_source_action(self) -> None:
+        parent = Mock()
         menu = Mock()
         command = Mock()
 
-        with patch("krizovkar.gui.sys.platform", "darwin"):
-            _add_source_window_menu_item(menu, command)
+        with patch("krizovkar.gui.tk.Menu", return_value=menu) as menu_type:
+            created = _create_view_menu(parent, command)
 
-        self.assertEqual(
-            [
-                call.add_separator(),
-                call.add_command(
-                    label="Zdroj YAML",
-                    state="normal",
-                    command=command,
-                ),
-                call.add_separator(),
-            ],
-            menu.method_calls,
+        menu_type.assert_called_once_with(parent)
+        menu.add_command.assert_called_once_with(
+            label="Zdroj YAML",
+            state="normal",
+            command=command,
         )
+        self.assertIs(menu, created)
 
     def test_window_menu_lists_open_windows_and_marks_current(self) -> None:
         application = CrosswordApplication.__new__(CrosswordApplication)
@@ -491,7 +493,6 @@ class GuiTest(unittest.TestCase):
         application._windows = [first, second]
         application._active_window = first
         application.activate_window = Mock()
-        application.show_source_window = Mock()
         window_menu = Mock()
 
         application._populate_window_menu(window_menu, current=second)
@@ -517,11 +518,7 @@ class GuiTest(unittest.TestCase):
             )
         )
 
-        source_item = window_menu.add_command.call_args
-        self.assertEqual("Zdroj YAML", source_item.kwargs["label"])
-        self.assertEqual("normal", source_item.kwargs["state"])
-        source_item.kwargs["command"]()
-        application.show_source_window.assert_called_once_with(second)
+        window_menu.add_command.assert_not_called()
 
         items[0].kwargs["command"]()
 
@@ -535,18 +532,9 @@ class GuiTest(unittest.TestCase):
 
         application._populate_window_menu(window_menu, current=None)
 
-        self.assertEqual(
-            ["Zdroj YAML", "Žádná otevřená okna"],
-            [
-                item.kwargs["label"]
-                for item in window_menu.add_command.call_args_list
-            ],
-        )
-        self.assertTrue(
-            all(
-                item.kwargs["state"] == "disabled"
-                for item in window_menu.add_command.call_args_list
-            )
+        window_menu.add_command.assert_called_once_with(
+            label="Žádná otevřená okna",
+            state="disabled",
         )
         window_menu.add_radiobutton.assert_not_called()
 

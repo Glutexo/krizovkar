@@ -239,12 +239,11 @@ def _create_window_menu(
     return tk.Menu(parent, name="window", postcommand=refresh)
 
 
-def _add_source_window_menu_item(
-    menu: tk.Menu,
+def _create_view_menu(
+    parent: tk.Menu,
     command: Callable[[], None] | None,
-) -> None:
-    if sys.platform == "darwin":
-        menu.add_separator()
+) -> tk.Menu:
+    menu = tk.Menu(parent)
     options: dict[str, object] = {
         "label": "Zdroj YAML",
         "state": "normal" if command is not None else "disabled",
@@ -252,7 +251,7 @@ def _add_source_window_menu_item(
     if command is not None:
         options["command"] = command
     menu.add_command(**options)
-    menu.add_separator()
+    return menu
 
 
 def _create_help_menu(parent: tk.Menu) -> tk.Menu:
@@ -1232,11 +1231,12 @@ class CrosswordApplication:
             menu=self.recent_documents_menu,
         )
         menu.add_cascade(label="Soubor", menu=self.file_menu)
+        self.view_menu = _create_view_menu(menu, None)
+        menu.add_cascade(label="Zobrazení", menu=self.view_menu)
         self.window_menu = _create_window_menu(
             menu,
             self._refresh_window_menu,
         )
-        _add_source_window_menu_item(self.window_menu, None)
         menu.add_cascade(label="Okno", menu=self.window_menu)
         self.help_menu = _create_help_menu(menu)
         menu.add_cascade(label="Nápověda", menu=self.help_menu)
@@ -1281,12 +1281,6 @@ class CrosswordApplication:
         active = current if current in windows else self._active_window
         if active not in windows:
             active = None
-        source_command = (
-            (lambda target=active: self.show_source_window(target))
-            if active is not None
-            else None
-        )
-        _add_source_window_menu_item(menu, source_command)
         selected = str(id(active)) if active is not None else ""
         menu.setvar(_WINDOW_MENU_SELECTION_VARIABLE, selected)
         if not windows:
@@ -1559,13 +1553,14 @@ class CrosswordDocumentWindow(ttk.Frame):
             command=self.request_close,
         )
         menu.add_cascade(label="Soubor", menu=self.file_menu)
+        self.view_menu = _create_view_menu(
+            menu,
+            lambda: self.application.show_source_window(self),
+        )
+        menu.add_cascade(label="Zobrazení", menu=self.view_menu)
         self.window_menu = _create_window_menu(
             menu,
             self._refresh_window_menu,
-        )
-        _add_source_window_menu_item(
-            self.window_menu,
-            lambda: self.application.show_source_window(self),
         )
         menu.add_cascade(label="Okno", menu=self.window_menu)
         self.help_menu = _create_help_menu(menu)

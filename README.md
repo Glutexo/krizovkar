@@ -68,13 +68,15 @@ uložení. Po zavření posledního okna zůstane aplikace spuštěná bez
 dokumentu. Každé otevřené okno je nezávislé; změna jednoho proto obsah
 druhého neovlivní.
 
+Nabídka **Zobrazení** obsahuje volbu **Zdroj YAML**, která pro zvolený dokument
+otevře vlastní běžné okno s jeho neupravitelnou YAML podobou. Zdroj lze
+posouvat a jeho text označovat a kopírovat. Okno zůstává svázané s původním
+dokumentem a při aktivaci jiného dokumentu se nepřepne; automaticky se
+aktualizuje pouze při změně svého dokumentu. Zavření příslušného dokumentu
+zavře také jeho okno zdroje.
+
 Nabídka **Okno** uvádí všechna otevřená dokumentová okna. Aktuální okno
-označí a výběrem jiné položky přenese příslušný dokument dopředu. Volba
-**Zdroj YAML** otevře pro zvolený dokument vlastní běžné okno s jeho
-neupravitelnou YAML podobou. Zdroj lze posouvat a jeho text označovat a
-kopírovat. Okno zůstává svázané s původním dokumentem a při aktivaci jiného
-dokumentu se nepřepne; automaticky se aktualizuje pouze při změně svého
-dokumentu. Zavření příslušného dokumentu zavře také jeho okno zdroje.
+označí a výběrem jiné položky přenese příslušný dokument dopředu.
 
 Nabídka **Nápověda** otevře [repozitář Křížovkáře na GitHubu](https://github.com/Glutexo/krizovkar)
 ve výchozím webovém prohlížeči.
