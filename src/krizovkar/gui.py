@@ -1381,6 +1381,7 @@ class CrosswordPreview(tk.Canvas):
         )
         self.bind("<Shift-Button-1>", self._select_cell_role_range)
         self.bind("<B1-Motion>", self._resize_dragged)
+        self.bind("<Shift-B1-Motion>", self._select_cell_role_range)
         self.bind("<ButtonRelease-1>", self._resize_released)
         self.bind("<Motion>", self._pointer_moved)
         self.bind("<Leave>", self._pointer_left)

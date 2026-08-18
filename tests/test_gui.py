@@ -1494,6 +1494,24 @@ class GuiTest(unittest.TestCase):
         )
         spinbox_type.assert_not_called()
 
+    def test_crossword_preview_binds_shift_click_and_drag_to_range_selection(
+        self,
+    ) -> None:
+        preview = CrosswordPreview.__new__(CrosswordPreview)
+        preview.bind = Mock()
+        preview._build_cell_role_menu = Mock()
+
+        with patch("krizovkar.gui.tk.Canvas.__init__", return_value=None):
+            CrosswordPreview.__init__(preview, Mock())
+
+        preview.bind.assert_has_calls(
+            [
+                call("<Shift-Button-1>", preview._select_cell_role_range),
+                call("<Shift-B1-Motion>", preview._select_cell_role_range),
+            ],
+            any_order=True,
+        )
+
     def test_crossword_preview_cell_role_menu_offers_all_roles(self) -> None:
         preview = CrosswordPreview.__new__(CrosswordPreview)
         preview._cell_role_variable = "cell_role"
