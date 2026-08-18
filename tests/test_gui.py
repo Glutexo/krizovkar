@@ -529,7 +529,7 @@ class GuiTest(unittest.TestCase):
 
         CrosswordSourceWindow._configure_window(source_window)
 
-        source_window.root.geometry.assert_called_once_with("480x680")
+        source_window.root.geometry.assert_called_once_with("400x680")
 
     def test_source_window_applies_user_changes_immediately(self) -> None:
         source_window = CrosswordSourceWindow.__new__(CrosswordSourceWindow)

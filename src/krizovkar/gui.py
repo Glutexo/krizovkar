@@ -2411,7 +2411,7 @@ class CrosswordSourceWindow(ttk.Frame):
 
     def _configure_window(self) -> None:
         self.root.title("Zdroj YAML")
-        self.root.geometry("480x680")
+        self.root.geometry("400x680")
         self.root.minsize(360, 240)
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
