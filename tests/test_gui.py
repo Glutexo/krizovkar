@@ -1017,13 +1017,14 @@ class GuiTest(unittest.TestCase):
             (("v1", "answer"),),
         )
 
-    def test_separate_slot_table_has_no_inner_heading(self) -> None:
+    def test_separate_slot_table_has_no_heading_and_fits_editors(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         parent = Mock()
         slots_frame = Mock()
         container = Mock()
         slots_tree = Mock()
         scrollbar = Mock()
+        slot_style = Mock()
 
         with (
             patch(
@@ -1034,10 +1035,14 @@ class GuiTest(unittest.TestCase):
             patch(
                 "krizovkar.gui.ttk.Treeview",
                 return_value=slots_tree,
-            ),
+            ) as treeview_type,
             patch(
                 "krizovkar.gui.ttk.Scrollbar",
                 return_value=scrollbar,
+            ),
+            patch(
+                "krizovkar.gui.ttk.Style",
+                return_value=slot_style,
             ),
         ):
             window._build_slot_list(parent, standalone=True)
@@ -1052,6 +1057,14 @@ class GuiTest(unittest.TestCase):
             column=0,
             sticky="nsew",
             pady=0,
+        )
+        slot_style.configure.assert_called_once_with(
+            "KrizovkarSlots.Treeview",
+            rowheight=30,
+        )
+        self.assertEqual(
+            "KrizovkarSlots.Treeview",
+            treeview_type.call_args.kwargs["style"],
         )
 
     def test_slot_table_moves_to_separate_window_and_back(self) -> None:

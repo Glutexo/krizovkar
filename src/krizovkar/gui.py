@@ -58,6 +58,9 @@ _WINDOW_MENU_SELECTION_VARIABLE = "krizovkar_active_window"
 _SHADOW_ANSWER_TAG = "shadow-answer"
 _SLOT_LIST_PLACEMENT_MAIN = "main"
 _SLOT_LIST_PLACEMENT_WINDOW = "window"
+_SLOT_TREE_STYLE = "KrizovkarSlots.Treeview"
+# Výchozí pole Aqua potřebuje 27 px plus okraj buňky.
+_SLOT_TREE_ROW_HEIGHT = 30
 _PROJECT_REPOSITORY_URL = "https://github.com/Glutexo/krizovkar"
 _DIRECTION_LABELS = {
     "horizontal": "Vodorovně",
@@ -1759,12 +1762,17 @@ class CrosswordDocumentWindow(ttk.Frame):
         container.grid(row=0, column=0, sticky="nsew")
         container.columnconfigure(0, weight=1)
         container.rowconfigure(0, weight=1)
+        ttk.Style(parent).configure(
+            _SLOT_TREE_STYLE,
+            rowheight=_SLOT_TREE_ROW_HEIGHT,
+        )
         self.slots_tree = ttk.Treeview(
             container,
             columns=("slot", "length", "answer", "clue"),
             show="headings",
             height=7,
             selectmode="browse",
+            style=_SLOT_TREE_STYLE,
         )
         self.slots_tree.heading("slot", text="Místo")
         self.slots_tree.heading("length", text="Délka")
