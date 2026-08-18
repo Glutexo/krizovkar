@@ -1471,7 +1471,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         path: Path | None,
         dirty: bool,
     ) -> None:
-        super().__init__(root, padding=(24, 18))
+        super().__init__(root, padding=(12, 10))
         self.root = root
         self.application = application
         self._path = path
@@ -1635,7 +1635,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.application.document_window_activated(self)
 
     def _build_content(self) -> None:
-        document_frame = ttk.Frame(self, padding=14)
+        document_frame = ttk.Frame(self)
         document_frame.grid(
             row=0,
             column=0,

@@ -824,6 +824,36 @@ class GuiTest(unittest.TestCase):
         self.assertIsInstance(filled, CrosswordDocument)
         self.assertEqual("crossword", filled.kind)
 
+    def test_document_window_uses_compact_outer_padding(self) -> None:
+        root = Mock()
+        application = Mock()
+        document = create_blank_template(
+            CrosswordSettings(7, 6),
+            "swedish",
+        )
+
+        with (
+            patch(
+                "krizovkar.gui.ttk.Frame.__init__",
+                return_value=None,
+            ) as frame_init,
+            patch.object(CrosswordDocumentWindow, "_configure_window"),
+            patch.object(CrosswordDocumentWindow, "_build_menu"),
+            patch.object(CrosswordDocumentWindow, "_build_content"),
+            patch.object(CrosswordDocumentWindow, "_rebuild_slot_tree"),
+            patch.object(CrosswordDocumentWindow, "_refresh_crossword_view"),
+            patch.object(CrosswordDocumentWindow, "_update_title"),
+        ):
+            CrosswordDocumentWindow(
+                root,
+                application=application,
+                document=document,
+                path=None,
+                dirty=True,
+            )
+
+        frame_init.assert_called_once_with(root, padding=(12, 10))
+
     def test_document_window_opens_at_minimum_width(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         window.root = Mock()
@@ -1071,6 +1101,26 @@ class GuiTest(unittest.TestCase):
         )
         window._build_crossword_preview.assert_called_once_with(workspace)
         window._build_slot_list.assert_called_once_with(workspace)
+
+    def test_document_content_does_not_add_another_outer_margin(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window._build_crossword_document = Mock()
+        document_frame = Mock()
+
+        with patch(
+            "krizovkar.gui.ttk.Frame",
+            return_value=document_frame,
+        ) as frame_type:
+            window._build_content()
+
+        frame_type.assert_called_once_with(window)
+        document_frame.grid.assert_called_once_with(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+        self.assertIs(document_frame, window.crossword_tab)
+        window._build_crossword_document.assert_called_once_with()
 
     def test_inline_slot_edit_opens_answer_and_clue_cells(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
