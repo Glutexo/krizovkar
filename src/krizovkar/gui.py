@@ -674,7 +674,8 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._creation_mode_value: tk.StringVar
         self._cli_visible_value: tk.BooleanVar
         self._cli_command_value: tk.StringVar
-        self._cli_command_frame: ttk.LabelFrame
+        self._cli_command_entry: ttk.Entry
+        self._cli_command_placeholder: ttk.Frame
         self._width_editor: ttk.Spinbox
         self._generated_seed = random.randrange(2**63)
         self._new_template: NewTemplateResult | None = None
@@ -798,19 +799,27 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             text="Zrušit",
             command=self.cancel,
         ).pack(side="right", padx=(0, 8))
-        buttons.pack(fill="x")
-        self._cli_command_frame = ttk.LabelFrame(
-            self,
-            text="Příkaz CLI",
-            padding=10,
-        )
-        self._cli_command_frame.columnconfigure(0, weight=1)
-        ttk.Entry(
-            self._cli_command_frame,
+        self._cli_command_entry = ttk.Entry(
+            buttons,
             textvariable=self._cli_command_value,
             state="readonly",
-            width=72,
-        ).grid(row=0, column=0, sticky="ew")
+            width=1,
+            font="TkFixedFont",
+        )
+        self.update_idletasks()
+        self._cli_command_placeholder = ttk.Frame(
+            buttons,
+            width=1,
+            height=self._cli_command_entry.winfo_reqheight(),
+        )
+        self._cli_command_placeholder.pack_propagate(False)
+        self._cli_command_placeholder.pack(
+            side="left",
+            fill="x",
+            expand=True,
+            padx=8,
+        )
+        buttons.pack(fill="x")
         self.bind("<Return>", self.ok)
         self.bind("<Escape>", self.cancel)
 
@@ -853,13 +862,21 @@ class TemplateGenerationDialog(simpledialog.Dialog):
     def _toggle_cli_command(self) -> None:
         if self._cli_visible_value.get():
             self._refresh_cli_command()
-            self._cli_command_frame.pack(
+            self._cli_command_placeholder.pack_forget()
+            self._cli_command_entry.pack(
+                side="left",
                 fill="x",
-                padx=16,
-                pady=(0, 16),
+                expand=True,
+                padx=8,
             )
         else:
-            self._cli_command_frame.pack_forget()
+            self._cli_command_entry.pack_forget()
+            self._cli_command_placeholder.pack(
+                side="left",
+                fill="x",
+                expand=True,
+                padx=8,
+            )
 
     def validate(self) -> bool:
         try:

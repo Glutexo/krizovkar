@@ -1129,34 +1129,51 @@ class GuiTest(unittest.TestCase):
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
         dialog._cli_visible_value = Mock()
         dialog._cli_visible_value.get.side_effect = (True, False)
-        dialog._cli_command_frame = Mock()
+        dialog._cli_command_entry = Mock()
+        dialog._cli_command_placeholder = Mock()
         dialog._refresh_cli_command = Mock()
 
         TemplateGenerationDialog._toggle_cli_command(dialog)
         TemplateGenerationDialog._toggle_cli_command(dialog)
 
         dialog._refresh_cli_command.assert_called_once_with()
-        dialog._cli_command_frame.pack.assert_called_once_with(
+        dialog._cli_command_entry.pack.assert_called_once_with(
+            side="left",
             fill="x",
-            padx=16,
-            pady=(0, 16),
+            expand=True,
+            padx=8,
         )
-        dialog._cli_command_frame.pack_forget.assert_called_once_with()
+        dialog._cli_command_entry.pack_forget.assert_called_once_with()
+        dialog._cli_command_placeholder.pack_forget.assert_called_once_with()
+        dialog._cli_command_placeholder.pack.assert_called_once_with(
+            side="left",
+            fill="x",
+            expand=True,
+            padx=8,
+        )
 
-    def test_template_dialog_places_cli_toggle_at_bottom_left(self) -> None:
+    def test_template_dialog_builds_fixed_size_cli_controls_in_bottom_bar(
+        self,
+    ) -> None:
         dialog = Mock()
         buttons = Mock()
-        cli_frame = Mock()
+        cli_placeholder = Mock()
         cli_entry = Mock()
+        cli_entry.winfo_reqheight.return_value = 24
         cli_toggle = Mock()
         create_button = Mock()
         cancel_button = Mock()
         visible_value = Mock()
 
         with (
-            patch("krizovkar.gui.ttk.Frame", return_value=buttons),
-            patch("krizovkar.gui.ttk.LabelFrame", return_value=cli_frame),
-            patch("krizovkar.gui.ttk.Entry", return_value=cli_entry),
+            patch(
+                "krizovkar.gui.ttk.Frame",
+                side_effect=(buttons, cli_placeholder),
+            ) as frame,
+            patch(
+                "krizovkar.gui.ttk.Entry",
+                return_value=cli_entry,
+            ) as entry,
             patch(
                 "krizovkar.gui.ttk.Checkbutton",
                 return_value=cli_toggle,
@@ -1180,7 +1197,27 @@ class GuiTest(unittest.TestCase):
             style="Toolbutton",
         )
         cli_toggle.pack.assert_called_once_with(side="left")
-        cli_entry.grid.assert_called_once_with(row=0, column=0, sticky="ew")
+        entry.assert_called_once_with(
+            buttons,
+            textvariable=dialog._cli_command_value,
+            state="readonly",
+            width=1,
+            font="TkFixedFont",
+        )
+        frame.assert_has_calls(
+            (
+                call(dialog, padding=(16, 0, 16, 16)),
+                call(buttons, width=1, height=24),
+            )
+        )
+        cli_placeholder.pack_propagate.assert_called_once_with(False)
+        cli_placeholder.pack.assert_called_once_with(
+            side="left",
+            fill="x",
+            expand=True,
+            padx=8,
+        )
+        cli_entry.pack.assert_not_called()
 
     def test_template_dialog_validates_selected_generated_layout(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
