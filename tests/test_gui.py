@@ -900,6 +900,8 @@ class GuiTest(unittest.TestCase):
         self.assertIsInstance(below, LetterCell)
         self.assertIsNone(right.number)
         self.assertIsNone(below.number)
+        self.assertEqual((), right.bars)
+        self.assertEqual((), below.bars)
         self.assertFalse(
             any(
                 slot.start in {Coordinate(2, 4), Coordinate(3, 3)}

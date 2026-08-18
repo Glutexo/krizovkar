@@ -76,9 +76,9 @@ z něj odebírat; pravé tlačítko nad kterýmkoli z nich použije vybranou rol
 celou skupinu. Editor podle změny rozdělí nebo spojí navazující místa pro
 hesla. Legendové pole, které tím ztratí poslední navazující místo, změní na
 prázdné. Část původně vepsaného hesla za novým prázdným polem bez vlastní
-legendy se nestane číslovaným heslem. Pokud by úprava odstranila vyplněný
-obsah hesel nebo nastavení tajenky, nejprve si vyžádá potvrzení; změnu vedoucí
-k neplatnému rozvržení odmítne.
+legendy se nestane číslovaným heslem ani nevytvoří silné předěly. Pokud by
+úprava odstranila vyplněný obsah hesel nebo nastavení tajenky, nejprve si
+vyžádá potvrzení; změnu vedoucí k neplatnému rozvržení odmítne.
 
 Nabídka **Soubor** otevírá existující `kind: crossword` v dalším okně.
 Na macOS používá zkratky `⌘N`, `⌘O`,

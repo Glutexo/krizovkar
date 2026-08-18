@@ -1186,6 +1186,11 @@ def _crossword_grid_annotations(
     }
     horizontal_connections: set[tuple[GridCoordinate, GridCoordinate]] = set()
     vertical_connections: set[tuple[GridCoordinate, GridCoordinate]] = set()
+    external_horizontal_cells: set[GridCoordinate] = set()
+    external_vertical_cells: set[GridCoordinate] = set()
+    has_inline_legends = any(
+        slot.legend_position is not None for slot in crossword.slots
+    )
     for slot in crossword.slots:
         coordinates = _slot_coordinates(slot)
         connections = (
@@ -1194,6 +1199,13 @@ def _crossword_grid_annotations(
             else vertical_connections
         )
         connections.update(pairwise(coordinates))
+        if slot.legend_position is None:
+            external_cells = (
+                external_horizontal_cells
+                if slot.direction == "horizontal"
+                else external_vertical_cells
+            )
+            external_cells.update(coordinates)
 
     bars: dict[GridCoordinate, set[str]] = defaultdict(set)
     for row, cell_row in enumerate(crossword.grid.cells):
@@ -1206,6 +1218,11 @@ def _crossword_grid_annotations(
                 column + 1 < crossword.grid.width
                 and isinstance(cell_row[column + 1], LetterCellRole)
                 and (coordinate, right) not in horizontal_connections
+                and (
+                    not has_inline_legends
+                    or coordinate in external_horizontal_cells
+                    or right in external_horizontal_cells
+                )
             ):
                 bars[coordinate].add("right")
             below = (row + 1, column)
@@ -1216,6 +1233,11 @@ def _crossword_grid_annotations(
                     LetterCellRole,
                 )
                 and (coordinate, below) not in vertical_connections
+                and (
+                    not has_inline_legends
+                    or coordinate in external_vertical_cells
+                    or below in external_vertical_cells
+                )
             ):
                 bars[coordinate].add("bottom")
     return numbers, bars
