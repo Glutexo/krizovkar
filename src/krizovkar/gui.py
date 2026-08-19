@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import shlex
 import subprocess
 import sys
 import tkinter as tk
@@ -23,12 +24,14 @@ from krizovkar.generator import (
     DEFAULT_GRID_WIDTH,
     DEFAULT_SEED,
     GenerationError,
+    SecretRequirement,
     SpecificationLayout,
     create_grid_from_crossword,
     crossword_external_slot_numbers,
     generate_empty_template,
     generate_numbered_template,
     generate_swedish_template,
+    normalize_secret_text,
 )
 from krizovkar.layout import MIN_SEGMENT_LENGTH
 from krizovkar.localization import ngettext, system_error_message
@@ -642,22 +645,39 @@ def parse_template_seed(value: str) -> int:
         raise GuiInputError("Sémě musí být celé číslo.") from error
 
 
+def parse_template_secret(value: str) -> SecretRequirement | None:
+    """Převede volitelný text tajenky na požadavek generátoru."""
+
+    if not value.strip():
+        return None
+    try:
+        words = normalize_secret_text(value)
+    except GenerationError as error:
+        raise GuiInputError(str(error)) from error
+    return SecretRequirement(words=words)
+
+
 def _template_cli_command(
     settings: CrosswordSettings,
     layout: SpecificationLayout,
     creation_mode: TemplateCreationMode,
     *,
     seed: int | None,
+    secret: SecretRequirement | None = None,
 ) -> str:
     """Sestaví CLI příkaz pro stejnou novou šablonu jako dialog."""
 
     arguments = ["uv", "run", "krizovkar", "template"]
     if creation_mode == "empty":
+        if secret is not None:
+            raise GuiInputError("Tajenku lze zadat jen vygenerované šabloně.")
         arguments.append("--empty")
     elif creation_mode == "generated":
         if seed is None:
             raise GuiInputError("Vygenerovaná šablona vyžaduje sémě.")
         arguments.extend(("--randomize", "--seed", str(seed)))
+        if secret is not None:
+            arguments.extend(("--secret", " ".join(secret.words)))
     else:
         raise GuiInputError(
             f"Nepodporovaný počáteční obsah šablony {creation_mode!r}."
@@ -674,7 +694,7 @@ def _template_cli_command(
             str(settings.height),
         )
     )
-    return " ".join(arguments)
+    return shlex.join(arguments)
 
 
 class TemplateGenerationDialog(simpledialog.Dialog):
@@ -696,8 +716,10 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._layout_value: tk.StringVar
         self._creation_mode_value: tk.StringVar
         self._seed_value: tk.StringVar
-        self._seed_controls: ttk.Frame
+        self._secret_value: tk.StringVar
+        self._generation_controls: ttk.Frame
         self._seed_editor: ttk.Entry
+        self._secret_editor: ttk.Entry
         self._cli_visible_value: tk.BooleanVar
         self._cli_command_value: tk.StringVar
         self._cli_command_frame: ttk.LabelFrame
@@ -793,25 +815,48 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             master=master,
             value=str(self._initial_seed),
         )
-        self._seed_controls = ttk.Frame(master)
-        self._seed_controls.grid(
+        self._secret_value = tk.StringVar(master=master)
+        self._generation_controls = ttk.Frame(master)
+        self._generation_controls.grid(
             row=7,
             column=0,
-            sticky="w",
+            sticky="ew",
             padx=(24, 0),
             pady=(7, 0),
         )
-        ttk.Label(self._seed_controls, text="Sémě").grid(
+        self._generation_controls.columnconfigure(1, weight=1)
+        ttk.Label(self._generation_controls, text="Sémě").grid(
             row=0,
             column=0,
             sticky="w",
         )
         self._seed_editor = ttk.Entry(
-            self._seed_controls,
+            self._generation_controls,
             width=22,
             textvariable=self._seed_value,
         )
         self._seed_editor.grid(row=0, column=1, sticky="w", padx=(8, 0))
+        ttk.Label(
+            self._generation_controls,
+            text="Tajenka (volitelná)",
+        ).grid(row=1, column=0, sticky="w", pady=(8, 0))
+        self._secret_editor = ttk.Entry(
+            self._generation_controls,
+            width=32,
+            textvariable=self._secret_value,
+        )
+        self._secret_editor.grid(
+            row=1,
+            column=1,
+            sticky="ew",
+            padx=(8, 0),
+            pady=(8, 0),
+        )
+        _bind_text_entry_context_menu(self._secret_editor)
+        ttk.Label(
+            self._generation_controls,
+            text="Dělení mezi slovy zvolí generátor.",
+        ).grid(row=2, column=1, sticky="w", padx=(8, 0), pady=(3, 0))
         self._cli_command_value = tk.StringVar(master=master)
         for value in (
             self._width_value,
@@ -819,13 +864,14 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             self._layout_value,
             self._creation_mode_value,
             self._seed_value,
+            self._secret_value,
         ):
             value.trace_add("write", self._refresh_cli_command)
         self._creation_mode_value.trace_add(
             "write",
-            self._update_seed_controls,
+            self._update_generation_controls,
         )
-        self._update_seed_controls()
+        self._update_generation_controls()
         self._refresh_cli_command()
         return self._width_editor
 
@@ -885,6 +931,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         SpecificationLayout,
         TemplateCreationMode,
         int | None,
+        SecretRequirement | None,
     ]:
         settings = parse_template_settings(
             self._width_value.get(),
@@ -901,16 +948,22 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             if creation_mode_value == "generated"
             else None
         )
+        secret = (
+            parse_template_secret(self._secret_value.get())
+            if creation_mode_value == "generated"
+            else None
+        )
         return (
             settings,
             cast(SpecificationLayout, layout_value),
             cast(TemplateCreationMode, creation_mode_value),
             seed,
+            secret,
         )
 
     def _refresh_cli_command(self, *_trace_arguments: str) -> None:
         try:
-            settings, layout, creation_mode, seed = (
+            settings, layout, creation_mode, seed, secret = (
                 self._selected_configuration()
             )
             command = _template_cli_command(
@@ -918,6 +971,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
                 layout,
                 creation_mode,
                 seed=seed,
+                secret=secret,
             )
         except GuiInputError:
             command = "Příkaz bude dostupný po opravě nastavení."
@@ -929,11 +983,11 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._cli_command_text.insert("1.0", self._cli_command_value.get())
         self._cli_command_text.configure(state="disabled")
 
-    def _update_seed_controls(self, *_trace_arguments: str) -> None:
+    def _update_generation_controls(self, *_trace_arguments: str) -> None:
         if self._creation_mode_value.get() == "generated":
-            self._seed_controls.grid()
+            self._generation_controls.grid()
         else:
-            self._seed_controls.grid_remove()
+            self._generation_controls.grid_remove()
 
     def _toggle_cli_command(self) -> None:
         if self._cli_visible_value.get():
@@ -948,7 +1002,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
 
     def validate(self) -> bool:
         try:
-            settings, layout, creation_mode, seed = (
+            settings, layout, creation_mode, seed, secret = (
                 self._selected_configuration()
             )
             self._new_template = NewTemplateResult(
@@ -957,6 +1011,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
                     layout,
                     creation_mode,
                     seed=seed,
+                    secret=secret,
                 ),
                 layout=layout,
                 creation_mode=creation_mode,
@@ -1013,6 +1068,7 @@ def create_blank_template(
     *,
     seed: int = DEFAULT_SEED,
     randomize_layout: bool = False,
+    secret: SecretRequirement | None = None,
 ) -> CrosswordDocument:
     """Vygeneruje hustou prázdnou šablonu z rozvržení a rozměru."""
 
@@ -1029,6 +1085,7 @@ def create_blank_template(
             height=settings.height,
             seed=seed,
             randomize_layout=randomize_layout,
+            secret=secret,
         )
     except GenerationError as error:
         raise GuiInputError(str(error)) from error
@@ -1040,10 +1097,13 @@ def create_new_template(
     creation_mode: TemplateCreationMode,
     *,
     seed: int | None = None,
+    secret: SecretRequirement | None = None,
 ) -> CrosswordDocument:
     """Vytvoří prázdnou nebo pseudonáhodně rozvrženou šablonu."""
 
     if creation_mode == "empty":
+        if secret is not None:
+            raise GuiInputError("Tajenku lze zadat jen vygenerované šabloně.")
         return create_empty_template(settings, layout)
     if creation_mode != "generated":
         raise GuiInputError(
@@ -1056,6 +1116,7 @@ def create_new_template(
         layout,
         seed=seed,
         randomize_layout=True,
+        secret=secret,
     )
 
 

@@ -10,8 +10,8 @@ automatický převod umístěného zadání na šablonu křížovky, převod
 výsledku do upravitelného LaTeXového dokumentu, jeho překlad do PDF a grafické
 rozhraní se samostatnými okny YAML křížovek z vlastních hesel, které lze
 uložit v libovolném stavu a znovu používat jako šablony.
-Další rozšíření editoru budou postupně zpřístupňovat například tajenky a
-automatické plnění.
+Další rozšíření editoru budou postupně zpřístupňovat například vlastní
+zadání tajenky a automatické plnění.
 
 ## Grafické rozhraní
 
@@ -40,14 +40,18 @@ počátečního obsahu. Prázdná varianta vytvoří jednoduchý základ bez
 vnitřních předělů; vygenerovaná varianta rozvrhne místa pro hesla
 pseudonáhodně. Po jejím zvolení se zobrazí pole **Sémě**, předvyplněné
 náhodným celým číslem, které lze pro opakování konkrétního rozvržení
-změnit. Tlačítko **Vytvořit** otevře výsledek jako nový samostatný dokument.
-Neplatný nebo nerozvrhnutelný rozměr dialog vysvětlí a ponechá otevřený
-k opravě. Tlačítko-přepínač **CLI** vlevo dole rozbalí ve spodní
+změnit, a volitelné pole **Tajenka**. Generátor rozvržení přizpůsobí tak,
+aby se do něj zadaná tajenka vešla. Může ji rozdělit pouze mezi celými
+slovy a nejvýše na tolik dílů, kolik obsahuje slov. Více po sobě jdoucích
+slov ve stejném dílu spojí bez mezer. Tlačítko **Vytvořit** otevře výsledek
+jako nový samostatný dokument. Neplatný nebo nerozvrhnutelný rozměr či
+tajenku dialog vysvětlí a ponechá otevřený k opravě. Tlačítko-přepínač
+**CLI** vlevo dole rozbalí ve spodní
 části dialogu kopírovatelný příkaz, který na příkazové řádce vytvoří
 totožnou šablonu. Text používá písmo s pevnou šířkou, podle
 dostupného místa se zalamuje a otevře se pod tlačítky, aniž změní šířku
-dialogu. U vygenerované varianty obsahuje také konkrétní seed, takže zachová
-stejné pseudonáhodné rozvržení.
+dialogu. U vygenerované varianty obsahuje také konkrétní seed a případnou
+tajenku, takže zachová stejné pseudonáhodné rozvržení.
 
 Každé viditelné okno představuje právě jeden YAML soubor a v titulku ukazuje
 jeho název, případně **Nová šablona**. Hvězdička

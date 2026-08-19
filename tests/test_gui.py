@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import Mock, call, patch
 
 from krizovkar.generator import (
+    SecretRequirement,
     create_grid_from_crossword,
 )
 from krizovkar.gui import (
@@ -52,6 +53,7 @@ from krizovkar.gui import (
     fill_crossword_slot,
     main,
     parse_slot_content,
+    parse_template_secret,
     parse_template_seed,
     parse_template_settings,
     set_crossword_cell_role,
@@ -1094,6 +1096,20 @@ class GuiTest(unittest.TestCase):
             ):
                 parse_template_seed(value)
 
+    def test_parses_optional_template_secret(self) -> None:
+        self.assertIsNone(parse_template_secret("  "))
+        self.assertEqual(
+            SecretRequirement(words=("KOMU", "SE", "NELENÍ")),
+            parse_template_secret(" Komu se nelení. "),
+        )
+
+    def test_rejects_unsupported_template_secret_character(self) -> None:
+        with self.assertRaisesRegex(
+            GuiInputError,
+            "nepodporovaný znak '1'",
+        ):
+            parse_template_secret("Tajenka 1")
+
     def test_builds_cli_command_for_empty_template(self) -> None:
         self.assertEqual(
             "uv run krizovkar template --empty --layout swedish "
@@ -1118,6 +1134,20 @@ class GuiTest(unittest.TestCase):
             ),
         )
 
+    def test_builds_cli_command_with_normalized_template_secret(self) -> None:
+        self.assertEqual(
+            "uv run krizovkar template --randomize --seed 123 "
+            "--secret 'KOMU SE NELENÍ' --layout numbered --width 15 "
+            "--height 15",
+            _template_cli_command(
+                CrosswordSettings(width=15, height=15),
+                "numbered",
+                "generated",
+                seed=123,
+                secret=SecretRequirement(words=("KOMU", "SE", "NELENÍ")),
+            ),
+        )
+
     def test_template_dialog_refreshes_cli_command_from_selection(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
         dialog._width_value = Mock()
@@ -1130,6 +1160,8 @@ class GuiTest(unittest.TestCase):
         dialog._creation_mode_value.get.return_value = "generated"
         dialog._seed_value = Mock()
         dialog._seed_value.get.return_value = "123"
+        dialog._secret_value = Mock()
+        dialog._secret_value.get.return_value = ""
         dialog._cli_command_value = Mock()
 
         TemplateGenerationDialog._refresh_cli_command(dialog)
@@ -1254,19 +1286,19 @@ class GuiTest(unittest.TestCase):
             "uv run krizovkar template",
         )
 
-    def test_template_dialog_shows_seed_only_for_generated_template(
+    def test_template_dialog_shows_generation_controls_only_when_generated(
         self,
     ) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
         dialog._creation_mode_value = Mock()
         dialog._creation_mode_value.get.side_effect = ("empty", "generated")
-        dialog._seed_controls = Mock()
+        dialog._generation_controls = Mock()
 
-        TemplateGenerationDialog._update_seed_controls(dialog)
-        TemplateGenerationDialog._update_seed_controls(dialog)
+        TemplateGenerationDialog._update_generation_controls(dialog)
+        TemplateGenerationDialog._update_generation_controls(dialog)
 
-        dialog._seed_controls.grid_remove.assert_called_once_with()
-        dialog._seed_controls.grid.assert_called_once_with()
+        dialog._generation_controls.grid_remove.assert_called_once_with()
+        dialog._generation_controls.grid.assert_called_once_with()
 
     def test_template_dialog_validates_selected_generated_layout(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
@@ -1280,6 +1312,8 @@ class GuiTest(unittest.TestCase):
         dialog._creation_mode_value.get.return_value = "generated"
         dialog._seed_value = Mock()
         dialog._seed_value.get.return_value = "123"
+        dialog._secret_value = Mock()
+        dialog._secret_value.get.return_value = "Komu se nelení"
         dialog._width_editor = Mock()
         dialog._new_template = None
         template = create_blank_template(CrosswordSettings(3, 3), "numbered")
@@ -1297,13 +1331,14 @@ class GuiTest(unittest.TestCase):
             "numbered",
             "generated",
             seed=123,
+            secret=SecretRequirement(words=("KOMU", "SE", "NELENÍ")),
         )
         self.assertEqual(
             NewTemplateResult(template, "numbered", "generated"),
             dialog.result,
         )
 
-    def test_template_dialog_ignores_hidden_invalid_seed_for_empty_template(
+    def test_template_dialog_ignores_hidden_generation_values_for_empty_template(
         self,
     ) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
@@ -1317,6 +1352,8 @@ class GuiTest(unittest.TestCase):
         dialog._creation_mode_value.get.return_value = "empty"
         dialog._seed_value = Mock()
         dialog._seed_value.get.return_value = "neplatné"
+        dialog._secret_value = Mock()
+        dialog._secret_value.get.return_value = "Tajenka 1"
         dialog._width_editor = Mock()
         dialog._new_template = None
         template = create_empty_template(CrosswordSettings(4, 3), "swedish")
@@ -1333,6 +1370,7 @@ class GuiTest(unittest.TestCase):
             "swedish",
             "empty",
             seed=None,
+            secret=None,
         )
 
     def test_template_dialog_keeps_invalid_settings_open(self) -> None:
@@ -1347,6 +1385,8 @@ class GuiTest(unittest.TestCase):
         dialog._creation_mode_value.get.return_value = "generated"
         dialog._seed_value = Mock()
         dialog._seed_value.get.return_value = "123"
+        dialog._secret_value = Mock()
+        dialog._secret_value.get.return_value = ""
         dialog._width_editor = Mock()
         dialog._new_template = Mock()
 
@@ -1438,6 +1478,31 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual(first, repeated)
         self.assertNotEqual(first, second)
+
+    def test_generated_template_places_multipart_secret_between_words(
+        self,
+    ) -> None:
+        secret = parse_template_secret("Komu se nelení")
+        assert secret is not None
+
+        crossword = create_new_template(
+            CrosswordSettings(width=15, height=15),
+            "swedish",
+            "generated",
+            seed=123,
+            secret=secret,
+        )
+
+        stored = crossword.secrets[0]
+        word_counts = tuple(part.word_count for part in stored.parts)
+        self.assertEqual(("KOMU", "SE", "NELENÍ"), stored.words)
+        self.assertLessEqual(len(stored.parts), len(stored.words))
+        self.assertTrue(all(count is not None for count in word_counts))
+        self.assertEqual(
+            len(stored.words),
+            sum(count or 0 for count in word_counts),
+        )
+        self.assertIn(2, word_counts)
 
     def test_recognizes_unchanged_empty_template_after_opening(self) -> None:
         empty = create_empty_template(CrosswordSettings(4, 3), "swedish")
