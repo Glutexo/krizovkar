@@ -1768,19 +1768,34 @@ class GuiTest(unittest.TestCase):
             pady=(8, 0),
         )
 
-    def test_template_dialog_reserves_only_generation_controls_width(
+    def test_template_dialog_fits_generation_controls_to_base_width(
         self,
     ) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
         dialog._generation_controls = Mock()
-        dialog._generation_controls.winfo_reqwidth.return_value = 420
+        dialog._generation_controls.winfo_reqheight.return_value = 96
+        shorter_child = Mock()
+        shorter_child.winfo_reqwidth.return_value = 239
+        longest_child = Mock()
+        longest_child.winfo_reqwidth.return_value = 337
         master = Mock()
+        master.winfo_children.return_value = (
+            shorter_child,
+            dialog._generation_controls,
+            longest_child,
+        )
 
-        dialog._reserve_generation_controls_width(master)
+        dialog._fit_generation_controls_width(master)
 
         master.update_idletasks.assert_called_once_with()
-        master.columnconfigure.assert_called_once_with(0, minsize=444)
-        master.rowconfigure.assert_not_called()
+        dialog._generation_controls.configure.assert_called_once_with(
+            width=313,
+            height=96,
+        )
+        dialog._generation_controls.grid_propagate.assert_called_once_with(
+            False
+        )
+        master.columnconfigure.assert_not_called()
 
     def test_template_dialog_validates_selected_generated_layout(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)

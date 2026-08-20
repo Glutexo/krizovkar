@@ -1175,7 +1175,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             dictionary_row,
             self._choose_dictionary,
         )
-        self._reserve_generation_controls_width(master)
+        self._fit_generation_controls_width(master)
         self._cli_command_value = tk.StringVar(master=master)
         for value in (
             self._width_value,
@@ -1198,15 +1198,18 @@ class TemplateGenerationDialog(simpledialog.Dialog):
     def _choose_dictionary(self) -> None:
         _browse_for_dictionary(self, self._dictionary_value)
 
-    def _reserve_generation_controls_width(self, master: tk.Frame) -> None:
+    def _fit_generation_controls_width(self, master: tk.Frame) -> None:
         master.update_idletasks()
-        master.columnconfigure(
-            0,
-            minsize=(
-                self._generation_controls.winfo_reqwidth()
-                + _GENERATION_CONTROLS_INDENT
-            ),
+        base_width = max(
+            child.winfo_reqwidth()
+            for child in master.winfo_children()
+            if child is not self._generation_controls
         )
+        self._generation_controls.configure(
+            width=max(base_width - _GENERATION_CONTROLS_INDENT, 1),
+            height=self._generation_controls.winfo_reqheight(),
+        )
+        self._generation_controls.grid_propagate(False)
 
     def buttonbox(self) -> None:
         buttons = ttk.Frame(self, padding=(16, 0, 16, 16))
