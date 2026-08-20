@@ -10,8 +10,9 @@ automatický převod umístěného zadání na editovatelnou křížovku, převo
 výsledku do upravitelného LaTeXového dokumentu, jeho překlad do PDF a grafické
 rozhraní se samostatnými okny YAML křížovek z vlastních hesel, které lze
 uložit v libovolném stavu a znovu používat jako základy dalších křížovek.
-Další rozšíření editoru budou postupně zpřístupňovat například vlastní
-text zadání tajenky a automatické plnění.
+Editor umí zbývající hesla také automaticky doplnit z vybraného slovníku.
+Další rozšíření budou postupně zpřístupňovat například vlastní text zadání
+tajenky.
 
 ## Grafické rozhraní
 
@@ -159,7 +160,16 @@ nejméně zvětší, nejvýše na 50 × 50 polí. Při novém rozvržení nahrad
 obsah bez potvrzení. Celé přidání je jeden krok historie, takže je lze
 vrátit jediným **Zpět**.
 
-Oba dialogy nabízejí slovníky nalezené v uživatelské datové složce
+Volba **Úpravy → Vygenerovat křížovku…** doplní ze slovníku všechna dosud
+prázdná hesla. Zachová tajenku i ručně zadaná hesla a jejich legendy; známou
+tajenku uloženou pouze v nastavení zároveň doplní do jejích připravených míst.
+Dialog vyžaduje slovník a nabízí předvyplněné náhodné **Sémě**, které lze
+změnit nebo si je poznamenat pro zopakování stejného výsledku. Pokud slovník
+neobsahuje potřebné délky hesel nebo z něj nelze sestavit všechna křížení,
+editor vysvětlí chybu a dokument nezmění. Celé automatické doplnění je jeden
+krok historie.
+
+Dialogy se slovníkem nabízejí soubory nalezené v uživatelské datové složce
 Křížovkáře. Na macOS je to
 `~/Library/Application Support/krizovkar/dictionaries`, ve Windows
 `%APPDATA%\krizovkar\dictionaries` a na Linuxu
@@ -219,8 +229,7 @@ Hesla s vepsanou legendou mají místo pro nápovědu přímo v předem vytvoře
 mřížce. Hesla s vnější legendou dostanou číslo a nápovědu pod mřížkou. Ruční
 zadávání souřadnic ani směru proto není potřeba. Nesprávnou délku, opakované
 heslo nebo rozporné písmeno aplikace odmítne konkrétní zprávou. Editor zatím
-nezadává vlastní text zadání tajenky, vlastní pomůcku ani automatické vyplnění
-ze slovníku.
+nezadává vlastní text zadání tajenky ani vlastní pomůcku.
 
 Export do PDF používá LuaLaTeX a vyžaduje stejnou instalaci TeX Live
 jako příkaz `render`.

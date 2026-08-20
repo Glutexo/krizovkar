@@ -28,12 +28,14 @@ from krizovkar.generator import (
     DEFAULT_GRID_HEIGHT,
     DEFAULT_GRID_WIDTH,
     DEFAULT_SEED,
+    FillingError,
     GenerationError,
     SecretGenerationResult,
     SecretRequirement,
     SpecificationLayout,
     create_grid_from_crossword,
     crossword_external_slot_numbers,
+    fill_crossword,
     generate_empty_template,
     generate_numbered_template,
     generate_secret_in_crossword,
@@ -180,6 +182,14 @@ class SecretGenerationInput:
 
     requirement: SecretRequirement
     dictionary: CrosswordDictionary | None
+
+
+@dataclass(frozen=True, slots=True)
+class CrosswordFillInput:
+    """Slovník a sémě pro automatické doplnění křížovky."""
+
+    dictionary: CrosswordDictionary
+    seed: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -1001,6 +1011,128 @@ class SecretGenerationDialog(simpledialog.Dialog):
         self._input = SecretGenerationInput(
             requirement=requirement,
             dictionary=dictionary,
+        )
+        return True
+
+    def apply(self) -> None:
+        self.result = self._input
+
+
+class CrosswordFillDialog(simpledialog.Dialog):
+    """Načte slovník a sémě pro automatické doplnění křížovky."""
+
+    def __init__(self, parent: tk.Misc) -> None:
+        self._dictionary_value: tk.StringVar
+        self._dictionary_editor: ttk.Combobox
+        self._seed_value: tk.StringVar
+        self._seed_editor: ttk.Entry
+        self._input: CrosswordFillInput | None = None
+        self._initial_seed = random.randrange(2**63)
+        super().__init__(parent, "Vygenerovat křížovku")
+
+    def body(self, master: tk.Frame) -> tk.Widget:
+        _inherit_macos_menu_bar(self)
+        master.configure(padx=16, pady=12)
+        master.columnconfigure(0, weight=1)
+        ttk.Label(master, text="Slovník").grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
+        dictionary_row = ttk.Frame(master)
+        dictionary_row.grid(row=1, column=0, sticky="ew", pady=(3, 0))
+        dictionary_row.columnconfigure(0, weight=1)
+        self._dictionary_value = tk.StringVar(master=master)
+        self._dictionary_editor = _create_dictionary_editor(
+            dictionary_row,
+            self._dictionary_value,
+        )
+        self._dictionary_editor.grid(row=0, column=0, sticky="ew")
+        _create_dictionary_browse_button(
+            dictionary_row,
+            self._choose_dictionary,
+        )
+
+        ttk.Label(master, text="Sémě").grid(
+            row=2,
+            column=0,
+            sticky="w",
+            pady=(10, 0),
+        )
+        self._seed_value = tk.StringVar(
+            master=master,
+            value=str(self._initial_seed),
+        )
+        self._seed_editor = ttk.Entry(
+            master,
+            width=36,
+            textvariable=self._seed_value,
+        )
+        self._seed_editor.grid(row=3, column=0, sticky="ew", pady=(3, 0))
+        _bind_text_entry_context_menu(self._seed_editor)
+        return self._dictionary_editor
+
+    def _choose_dictionary(self) -> None:
+        _browse_for_dictionary(self, self._dictionary_value)
+
+    def buttonbox(self) -> None:
+        buttons = ttk.Frame(self, padding=(16, 0, 16, 16))
+        ttk.Button(
+            buttons,
+            text="Vygenerovat",
+            command=self.ok,
+            default="active",
+        ).pack(side="right")
+        ttk.Button(
+            buttons,
+            text="Zrušit",
+            command=self.cancel,
+        ).pack(side="right", padx=(0, 8))
+        buttons.pack(fill="x")
+        self.bind("<Return>", self.ok)
+        self.bind("<Escape>", self.cancel)
+
+    def validate(self) -> bool:
+        dictionary_path = _optional_dictionary_path(
+            self._dictionary_value.get()
+        )
+        if dictionary_path is None:
+            self._input = None
+            messagebox.showerror(
+                "Křížovku nelze vygenerovat",
+                "Vyberte slovník.",
+                parent=self,
+            )
+            self._dictionary_editor.focus_set()
+            return False
+
+        try:
+            dictionary = load_dictionary(dictionary_path)
+        except DictionaryError as error:
+            self._input = None
+            messagebox.showerror(
+                "Křížovku nelze vygenerovat",
+                str(error),
+                parent=self,
+            )
+            self._dictionary_editor.focus_set()
+            return False
+
+        try:
+            seed = parse_template_seed(self._seed_value.get())
+        except GuiInputError as error:
+            self._input = None
+            messagebox.showerror(
+                "Křížovku nelze vygenerovat",
+                str(error),
+                parent=self,
+            )
+            self._seed_editor.focus_set()
+            return False
+
+        self._input = CrosswordFillInput(
+            dictionary=dictionary,
+            seed=seed,
         )
         return True
 
@@ -3520,6 +3652,10 @@ class CrosswordApplication:
             label="Přidat tajenku…",
             state="disabled",
         )
+        self.edit_menu.add_command(
+            label="Vygenerovat křížovku…",
+            state="disabled",
+        )
         menu.add_cascade(label="Úpravy", menu=self.edit_menu)
         self.view_menu = _create_view_menu(menu, None)
         self.view_menu.add_separator()
@@ -3935,6 +4071,14 @@ class CrosswordDocumentWindow(ttk.Frame):
             int,
             self.edit_menu.index("end"),
         )
+        self.edit_menu.add_command(
+            label="Vygenerovat křížovku…",
+            command=self.generate_complete_crossword,
+        )
+        self._fill_crossword_menu_index = cast(
+            int,
+            self.edit_menu.index("end"),
+        )
         menu.add_cascade(label="Úpravy", menu=self.edit_menu)
         self.view_menu = _create_view_menu(
             menu,
@@ -4095,6 +4239,15 @@ class CrosswordDocumentWindow(ttk.Frame):
                 else "Přidat tajenku…"
             ),
             state="normal" if crossword is not None else "disabled",
+        )
+        self.edit_menu.entryconfigure(
+            self._fill_crossword_menu_index,
+            state=(
+                "normal"
+                if crossword is not None
+                and any(slot.answer is None for slot in crossword.slots)
+                else "disabled"
+            ),
         )
 
     def _bind_history_shortcuts(self, widget: tk.Misc) -> None:
@@ -4428,6 +4581,44 @@ class CrosswordDocumentWindow(ttk.Frame):
             ),
             None,
         )
+        self._set_dirty(True)
+        self._rebuild_slot_tree()
+        self._refresh_crossword_view()
+
+    def generate_complete_crossword(self) -> None:
+        """Doplní všechna prázdná místa otevřené křížovky ze slovníku."""
+
+        if not self._save_inline_slot_edit():
+            return
+        crossword = self._crossword
+        if crossword is None:
+            return
+
+        dialog = CrosswordFillDialog(self.root)
+        filling_input = cast(CrosswordFillInput | None, dialog.result)
+        if filling_input is None:
+            return
+
+        self.root.configure(cursor="watch")
+        self.root.update_idletasks()
+        try:
+            filled = fill_crossword(
+                crossword,
+                filling_input.dictionary,
+                seed=filling_input.seed,
+            )
+        except FillingError as error:
+            self._show_action_error(
+                "Křížovku nelze vygenerovat",
+                str(error),
+            )
+            return
+        finally:
+            self.root.configure(cursor="")
+
+        if filled == crossword:
+            return
+        self._crossword = filled
         self._set_dirty(True)
         self._rebuild_slot_tree()
         self._refresh_crossword_view()

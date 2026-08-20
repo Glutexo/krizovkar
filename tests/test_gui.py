@@ -18,6 +18,7 @@ from krizovkar.dictionary import (
     DictionaryError,
 )
 from krizovkar.generator import (
+    FillingError,
     GenerationError,
     SecretGenerationResult,
     SecretRequirement,
@@ -26,6 +27,8 @@ from krizovkar.generator import (
 from krizovkar.gui import (
     CrosswordApplication,
     CrosswordDocumentWindow,
+    CrosswordFillDialog,
+    CrosswordFillInput,
     CrosswordPreview,
     CrosswordSettings,
     CrosswordSourceWindow,
@@ -425,14 +428,18 @@ class GuiTest(unittest.TestCase):
             widget.bind.call_args_list,
         )
 
-    def test_edit_menu_reflects_history_and_secret_state(self) -> None:
+    def test_edit_menu_reflects_history_secret_and_fill_state(self) -> None:
         window = Mock()
         window._undo_menu_index = 0
         window._redo_menu_index = 1
         window._generate_secret_menu_index = 3
+        window._fill_crossword_menu_index = 4
         window._history = [object(), object()]
         window._history_index = 0
-        window._crossword = Mock(secrets=())
+        window._crossword = Mock(
+            secrets=(),
+            slots=(Mock(answer=None),),
+        )
 
         CrosswordDocumentWindow._refresh_edit_menu(window)
 
@@ -441,13 +448,17 @@ class GuiTest(unittest.TestCase):
                 call(0, state="disabled"),
                 call(1, state="normal"),
                 call(3, label="Přidat tajenku…", state="normal"),
+                call(4, state="normal"),
             ],
             window.edit_menu.entryconfigure.call_args_list,
         )
 
         window.edit_menu.reset_mock()
         window._history_index = 1
-        window._crossword = Mock(secrets=(object(),))
+        window._crossword = Mock(
+            secrets=(object(),),
+            slots=(Mock(answer=None),),
+        )
         CrosswordDocumentWindow._refresh_edit_menu(window)
 
         self.assertEqual(
@@ -455,6 +466,7 @@ class GuiTest(unittest.TestCase):
                 call(0, state="normal"),
                 call(1, state="disabled"),
                 call(3, label="Změnit tajenku…", state="normal"),
+                call(4, state="normal"),
             ],
             window.edit_menu.entryconfigure.call_args_list,
         )
@@ -468,6 +480,24 @@ class GuiTest(unittest.TestCase):
                 call(0, state="normal"),
                 call(1, state="disabled"),
                 call(3, label="Přidat tajenku…", state="disabled"),
+                call(4, state="disabled"),
+            ],
+            window.edit_menu.entryconfigure.call_args_list,
+        )
+
+        window.edit_menu.reset_mock()
+        window._crossword = Mock(
+            secrets=(),
+            slots=(Mock(answer="HOTOVO"),),
+        )
+        CrosswordDocumentWindow._refresh_edit_menu(window)
+
+        self.assertEqual(
+            [
+                call(0, state="normal"),
+                call(1, state="disabled"),
+                call(3, label="Přidat tajenku…", state="normal"),
+                call(4, state="disabled"),
             ],
             window.edit_menu.entryconfigure.call_args_list,
         )
@@ -575,7 +605,12 @@ class GuiTest(unittest.TestCase):
             menu=print_menu,
         )
         self.assertEqual(
-            ["Zpět", "Vpřed", "Přidat tajenku…"],
+            [
+                "Zpět",
+                "Vpřed",
+                "Přidat tajenku…",
+                "Vygenerovat křížovku…",
+            ],
             [
                 item.kwargs["label"]
                 for item in edit_menu.add_command.call_args_list
@@ -592,6 +627,10 @@ class GuiTest(unittest.TestCase):
         self.assertIs(
             window.generate_crossword_secret,
             edit_menu.add_command.call_args_list[2].kwargs["command"],
+        )
+        self.assertIs(
+            window.generate_complete_crossword,
+            edit_menu.add_command.call_args_list[3].kwargs["command"],
         )
         window._bind_history_shortcuts.assert_called_once_with(window.root)
         menu_type.assert_any_call(menu, name="window")
@@ -769,7 +808,12 @@ class GuiTest(unittest.TestCase):
             )
         self.assertEqual(2, export_menu.add_separator.call_count)
         self.assertEqual(
-            ["Zpět", "Vpřed", "Přidat tajenku…"],
+            [
+                "Zpět",
+                "Vpřed",
+                "Přidat tajenku…",
+                "Vygenerovat křížovku…",
+            ],
             [
                 item.kwargs["label"]
                 for item in edit_menu.add_command.call_args_list
@@ -1658,6 +1702,219 @@ class GuiTest(unittest.TestCase):
         )
         dialog._secret_editor.focus_set.assert_not_called()
         dialog._dictionary_editor.focus_set.assert_called_once_with()
+
+    def test_crossword_fill_dialog_uses_generation_title_and_random_seed(
+        self,
+    ) -> None:
+        parent = Mock()
+
+        with (
+            patch(
+                "krizovkar.gui.random.randrange",
+                return_value=123,
+            ) as random_seed,
+            patch(
+                "krizovkar.gui.simpledialog.Dialog.__init__"
+            ) as initialize,
+        ):
+            dialog = CrosswordFillDialog(parent)
+
+        random_seed.assert_called_once_with(2**63)
+        initialize.assert_called_once_with(parent, "Vygenerovat křížovku")
+        self.assertEqual(123, dialog._initial_seed)
+        self.assertIsNone(dialog._input)
+
+    def test_crossword_fill_dialog_offers_dictionary_and_seed(self) -> None:
+        dialog = CrosswordFillDialog.__new__(CrosswordFillDialog)
+        dialog._initial_seed = 123
+        master = Mock()
+        label = Mock()
+        dictionary_row = Mock()
+        dictionary_value = Mock()
+        dictionary_editor = Mock()
+        seed_value = Mock()
+        seed_editor = Mock()
+
+        with (
+            patch("krizovkar.gui._inherit_macos_menu_bar"),
+            patch(
+                "krizovkar.gui.ttk.Label",
+                return_value=label,
+            ) as label_type,
+            patch(
+                "krizovkar.gui.ttk.Frame",
+                return_value=dictionary_row,
+            ),
+            patch(
+                "krizovkar.gui.tk.StringVar",
+                side_effect=(dictionary_value, seed_value),
+            ) as variable_type,
+            patch(
+                "krizovkar.gui._create_dictionary_editor",
+                return_value=dictionary_editor,
+            ) as create_dictionary,
+            patch(
+                "krizovkar.gui._create_dictionary_browse_button"
+            ) as create_browse_button,
+            patch(
+                "krizovkar.gui.ttk.Entry",
+                return_value=seed_editor,
+            ) as entry_type,
+            patch("krizovkar.gui._bind_text_entry_context_menu") as bind,
+        ):
+            initial_focus = CrosswordFillDialog.body(dialog, master)
+
+        self.assertIs(dictionary_editor, initial_focus)
+        self.assertEqual(
+            [call(master, text="Slovník"), call(master, text="Sémě")],
+            label_type.call_args_list,
+        )
+        self.assertEqual(
+            [
+                call(master=master),
+                call(master=master, value="123"),
+            ],
+            variable_type.call_args_list,
+        )
+        create_dictionary.assert_called_once_with(
+            dictionary_row,
+            dictionary_value,
+        )
+        create_browse_button.assert_called_once_with(
+            dictionary_row,
+            dialog._choose_dictionary,
+        )
+        entry_type.assert_called_once_with(
+            master,
+            width=36,
+            textvariable=seed_value,
+        )
+        bind.assert_called_once_with(seed_editor)
+
+    def test_crossword_fill_dialog_uses_generate_button(self) -> None:
+        dialog = CrosswordFillDialog.__new__(CrosswordFillDialog)
+        dialog.ok = Mock()
+        dialog.cancel = Mock()
+        dialog.bind = Mock()
+        buttons = Mock()
+
+        with (
+            patch("krizovkar.gui.ttk.Frame", return_value=buttons),
+            patch(
+                "krizovkar.gui.ttk.Button",
+                return_value=Mock(),
+            ) as button_type,
+        ):
+            CrosswordFillDialog.buttonbox(dialog)
+
+        self.assertEqual(
+            call(
+                buttons,
+                text="Vygenerovat",
+                command=dialog.ok,
+                default="active",
+            ),
+            button_type.call_args_list[0],
+        )
+
+    def test_crossword_fill_dialog_returns_dictionary_and_seed(self) -> None:
+        dialog = CrosswordFillDialog.__new__(CrosswordFillDialog)
+        dialog._dictionary_value = Mock()
+        dialog._dictionary_value.get.return_value = "slovnik.json"
+        dialog._dictionary_editor = Mock()
+        dialog._seed_value = Mock()
+        dialog._seed_value.get.return_value = "42"
+        dialog._seed_editor = Mock()
+        dialog._input = None
+
+        with patch(
+            "krizovkar.gui.load_dictionary",
+            return_value=TEST_DICTIONARY,
+        ) as load:
+            valid = CrosswordFillDialog.validate(dialog)
+        CrosswordFillDialog.apply(dialog)
+
+        self.assertTrue(valid)
+        self.assertEqual(
+            CrosswordFillInput(dictionary=TEST_DICTIONARY, seed=42),
+            dialog.result,
+        )
+        load.assert_called_once_with(Path("slovnik.json"))
+        dialog._dictionary_editor.focus_set.assert_not_called()
+        dialog._seed_editor.focus_set.assert_not_called()
+
+    def test_crossword_fill_dialog_requires_dictionary(self) -> None:
+        dialog = CrosswordFillDialog.__new__(CrosswordFillDialog)
+        dialog._dictionary_value = Mock()
+        dialog._dictionary_value.get.return_value = "  "
+        dialog._dictionary_editor = Mock()
+        dialog._input = Mock()
+
+        with patch("krizovkar.gui.messagebox.showerror") as show_error:
+            valid = CrosswordFillDialog.validate(dialog)
+
+        self.assertFalse(valid)
+        self.assertIsNone(dialog._input)
+        show_error.assert_called_once_with(
+            "Křížovku nelze vygenerovat",
+            "Vyberte slovník.",
+            parent=dialog,
+        )
+        dialog._dictionary_editor.focus_set.assert_called_once_with()
+
+    def test_crossword_fill_dialog_rejects_invalid_dictionary(self) -> None:
+        dialog = CrosswordFillDialog.__new__(CrosswordFillDialog)
+        dialog._dictionary_value = Mock()
+        dialog._dictionary_value.get.return_value = "poškozený.json"
+        dialog._dictionary_editor = Mock()
+        dialog._input = Mock()
+
+        with (
+            patch(
+                "krizovkar.gui.load_dictionary",
+                side_effect=DictionaryError("slovník není platný"),
+            ),
+            patch("krizovkar.gui.messagebox.showerror") as show_error,
+        ):
+            valid = CrosswordFillDialog.validate(dialog)
+
+        self.assertFalse(valid)
+        self.assertIsNone(dialog._input)
+        show_error.assert_called_once_with(
+            "Křížovku nelze vygenerovat",
+            "slovník není platný",
+            parent=dialog,
+        )
+        dialog._dictionary_editor.focus_set.assert_called_once_with()
+
+    def test_crossword_fill_dialog_rejects_invalid_seed(self) -> None:
+        dialog = CrosswordFillDialog.__new__(CrosswordFillDialog)
+        dialog._dictionary_value = Mock()
+        dialog._dictionary_value.get.return_value = "slovnik.json"
+        dialog._dictionary_editor = Mock()
+        dialog._seed_value = Mock()
+        dialog._seed_value.get.return_value = "neplatné"
+        dialog._seed_editor = Mock()
+        dialog._input = Mock()
+
+        with (
+            patch(
+                "krizovkar.gui.load_dictionary",
+                return_value=TEST_DICTIONARY,
+            ),
+            patch("krizovkar.gui.messagebox.showerror") as show_error,
+        ):
+            valid = CrosswordFillDialog.validate(dialog)
+
+        self.assertFalse(valid)
+        self.assertIsNone(dialog._input)
+        show_error.assert_called_once_with(
+            "Křížovku nelze vygenerovat",
+            "Sémě musí být celé číslo.",
+            parent=dialog,
+        )
+        dialog._dictionary_editor.focus_set.assert_not_called()
+        dialog._seed_editor.focus_set.assert_called_once_with()
 
     def test_builds_cli_command_for_empty_template(self) -> None:
         self.assertEqual(
@@ -4262,6 +4519,107 @@ class GuiTest(unittest.TestCase):
         window._show_action_error.assert_called_once_with(
             "Tajenku nelze přidat",
             "tajenku nelze umístit",
+        )
+        window.root.configure.assert_has_calls(
+            [call(cursor="watch"), call(cursor="")]
+        )
+        window._set_dirty.assert_not_called()
+        window._rebuild_slot_tree.assert_not_called()
+        window._refresh_crossword_view.assert_not_called()
+
+    def test_menu_action_fills_crossword_as_one_undoable_change(self) -> None:
+        original = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        filled = _filled_numbered_crossword()
+        filling_input = CrosswordFillInput(
+            dictionary=TEST_DICTIONARY,
+            seed=42,
+        )
+        window = _document_history_window(original)
+        window.root = Mock()
+
+        with (
+            patch("krizovkar.gui.CrosswordFillDialog") as dialog_type,
+            patch(
+                "krizovkar.gui.fill_crossword",
+                return_value=filled,
+            ) as fill,
+            patch.object(
+                window,
+                "_set_dirty",
+                wraps=window._set_dirty,
+            ) as set_dirty,
+        ):
+            dialog_type.return_value.result = filling_input
+            CrosswordDocumentWindow.generate_complete_crossword(window)
+
+        dialog_type.assert_called_once_with(window.root)
+        fill.assert_called_once_with(
+            original,
+            TEST_DICTIONARY,
+            seed=42,
+        )
+        self.assertEqual(filled, window._crossword)
+        set_dirty.assert_called_once_with(True)
+        self.assertEqual(2, len(window._history))
+        window._rebuild_slot_tree.assert_called_once_with()
+        window._refresh_crossword_view.assert_called_once_with()
+        window.root.configure.assert_has_calls(
+            [call(cursor="watch"), call(cursor="")]
+        )
+
+        self.assertTrue(window.undo_document())
+        self.assertEqual(original, window._crossword)
+
+    def test_menu_action_stops_after_cancelled_crossword_fill_dialog(
+        self,
+    ) -> None:
+        window = Mock()
+        window._save_inline_slot_edit.return_value = True
+        window._crossword = create_empty_template(
+            CrosswordSettings(4, 4),
+            "numbered",
+        )
+
+        with (
+            patch("krizovkar.gui.CrosswordFillDialog") as dialog_type,
+            patch("krizovkar.gui.fill_crossword") as fill,
+        ):
+            dialog_type.return_value.result = None
+            CrosswordDocumentWindow.generate_complete_crossword(window)
+
+        dialog_type.assert_called_once_with(window.root)
+        fill.assert_not_called()
+        window._set_dirty.assert_not_called()
+
+    def test_menu_action_reports_crossword_filling_failure(self) -> None:
+        original = create_empty_template(
+            CrosswordSettings(4, 4),
+            "numbered",
+        )
+        window = Mock()
+        window._save_inline_slot_edit.return_value = True
+        window._crossword = original
+
+        with (
+            patch("krizovkar.gui.CrosswordFillDialog") as dialog_type,
+            patch(
+                "krizovkar.gui.fill_crossword",
+                side_effect=FillingError("křížovku nelze vyplnit"),
+            ),
+        ):
+            dialog_type.return_value.result = CrosswordFillInput(
+                dictionary=TEST_DICTIONARY,
+                seed=42,
+            )
+            CrosswordDocumentWindow.generate_complete_crossword(window)
+
+        self.assertIs(original, window._crossword)
+        window._show_action_error.assert_called_once_with(
+            "Křížovku nelze vygenerovat",
+            "křížovku nelze vyplnit",
         )
         window.root.configure.assert_has_calls(
             [call(cursor="watch"), call(cursor="")]
