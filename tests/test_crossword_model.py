@@ -75,6 +75,33 @@ class CrosswordModelTest(unittest.TestCase):
             write_crossword_document(template, output)
             self.assertEqual(template, load_crossword_document(output))
 
+    def test_defaults_missing_clue_to_answer(self) -> None:
+        crossword = self._load(
+            "format: krizovkar\n"
+            "kind: crossword\n"
+            "version: 1\n"
+            "grid:\n"
+            "  width: 3\n"
+            "  height: 1\n"
+            "  cells:\n"
+            "    - [{type: letter}, {type: letter}, {type: letter}]\n"
+            "slots:\n"
+            "  - id: h1\n"
+            "    start: {row: 1, column: 1}\n"
+            "    direction: horizontal\n"
+            "    length: 3\n"
+            "    answer: LES\n"
+        )
+
+        self.assertEqual("LES", crossword.slots[0].clue)
+        output = StringIO()
+        dump_crossword_document(crossword, output)
+        self.assertNotIn("    clue:", output.getvalue())
+        self.assertEqual(
+            crossword,
+            load_crossword_document(StringIO(output.getvalue())),
+        )
+
     def test_loads_cell_based_secret_part(self) -> None:
         crossword = self._load(
             "format: krizovkar\n"

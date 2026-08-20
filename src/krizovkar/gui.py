@@ -1490,7 +1490,7 @@ def parse_slot_content(
     clue: str,
     expected_length: int,
 ) -> tuple[str, str]:
-    """Ověří odpověď a nápovědu zadávanou do jednoho slotu."""
+    """Ověří odpověď a doplní výchozí nápovědu slotu."""
 
     normalized_answer = answer.strip().upper()
     if not normalized_answer:
@@ -1505,9 +1505,7 @@ def parse_slot_content(
             f"má {_cell_count_text(len(letters))}."
         )
 
-    normalized_clue = clue.strip()
-    if not normalized_clue:
-        raise GuiInputError("Vyplňte nápovědu hesla.")
+    normalized_clue = clue.strip() or normalized_answer
     return normalized_answer, normalized_clue
 
 
@@ -4612,7 +4610,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         self._slot_clue_editor = self._create_slot_cell_editor(
             clue_box,
-            slot.clue or "",
+            "" if slot.clue == slot.answer else slot.clue or "",
         )
         focused_editor = (
             self._slot_clue_editor if column == "#4" else self._slot_answer_editor
@@ -4730,12 +4728,7 @@ class CrosswordDocumentWindow(ttk.Frame):
                 "Heslo nelze uložit",
                 str(error),
             )
-            if not answer.strip():
-                answer_editor.focus_set()
-            elif not clue.strip():
-                clue_editor.focus_set()
-            else:
-                answer_editor.focus_set()
+            answer_editor.focus_set()
             return False
 
         changed = updated != crossword

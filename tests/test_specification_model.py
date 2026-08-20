@@ -74,6 +74,29 @@ class SpecificationModelTest(unittest.TestCase):
 
             self.assertEqual(specification, load_crossword_specification(output))
 
+    def test_defaults_missing_legend_to_answer(self) -> None:
+        specification = load_crossword_specification(
+            StringIO(
+                "format: krizovkar\n"
+                "kind: specification\n"
+                "version: 1\n"
+                "grid: {width: 3, height: 1}\n"
+                "words:\n"
+                "  - answer: LES\n"
+                "    start: {row: 1, column: 1}\n"
+                "    direction: horizontal\n"
+            )
+        )
+
+        self.assertEqual("LES", specification.words[0].legend)
+        output = StringIO()
+        dump_crossword_specification(specification, output)
+        self.assertNotIn("    legend:", output.getvalue())
+        self.assertEqual(
+            specification,
+            load_crossword_specification(StringIO(output.getvalue())),
+        )
+
     def test_refuses_grid_without_content(self) -> None:
         specification = CrosswordSpecification(
             format_name="krizovkar",

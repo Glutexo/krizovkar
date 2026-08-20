@@ -154,7 +154,7 @@
           "pattern": "^[A-ZÁÄČĎÉĚÍŇÓÔÖŘŠŤÚŮÜÝŽ]+$"
         },
         "clue": {
-          "description": "Legenda doplněné odpovědi.",
+          "description": "Volitelná legenda doplněné odpovědi; při vynechání se použije samotná odpověď.",
           "type": "string",
           "minLength": 1,
           "pattern": "\\S"
@@ -166,9 +166,6 @@
         }
       },
       "dependentRequired": {
-        "answer": [
-          "clue"
-        ],
         "clue": [
           "answer"
         ]
@@ -185,8 +182,7 @@
       },
       "then": {
         "required": [
-          "answer",
-          "clue"
+          "answer"
         ]
       }
     },

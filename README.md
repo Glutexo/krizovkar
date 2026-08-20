@@ -79,6 +79,8 @@ pozicích,
 například `V•••`; dokud není známé žádné písmeno, zůstává pomlčka. Dvojklik
 na sloupec **Heslo** nebo **Nápověda** upraví oba údaje přímo v příslušném
 řádku; Enter nebo opuštění řádku změnu uloží, Escape ji zahodí.
+Nápověda je nepovinná; zůstane-li prázdná, použije se jako legenda
+samotné heslo.
 Písmena hesla odporujícího známému písmenu na křížení se už při psaní zobrazí
 červeně a po opravě se hned vrátí k běžné barvě. Pravé tlačítko myši
 v obou polích otevře nabídku pro vyjmutí, kopírování, vložení a výběr celého
@@ -284,6 +286,8 @@ obsah míst. Ukazuje to [křížovka ze zadání](examples/template-from-specifi
 Volitelné `clue_placement: inline` u hesla použije bezprostředně předcházející
 legendovou buňku; její souřadnice se odvodí ze začátku a směru. Vynechané
 `clue_placement` znamená vnější číslovanou legendu.
+Vyplněný slot obsahuje `answer` a může obsahovat `clue`; chybějící
+`clue` se automaticky nahradí hodnotou `answer`.
 
 Křížovka může navíc rezervovat jedno nebo více míst pro části tajenky.
 Známá tajenka se ukládá jako seznam slov bez mezer a interpunkce, aby se
@@ -317,7 +321,7 @@ words:
     in_help: true
 ```
 
-Souřadnice se počítají od 1 z levého horního rohu a `start` označuje první písmeno. Směr je `horizontal` nebo `vertical`; vynechané `in_help` znamená `false`. Pokud je alespoň jedno slovo v pomůcce, generátor pro ni použije první volnou buňku, není-li zadané vlastní `help.position`. Ucelenou podobu ukazuje [zadání s umístěnými slovy](examples/specification-placed-words.yaml).
+Souřadnice se počítají od 1 z levého horního rohu a `start` označuje první písmeno. Směr je `horizontal` nebo `vertical`; vynechané `legend` použije jako legendu samotné `answer` a vynechané `in_help` znamená `false`. Pokud je alespoň jedno slovo v pomůcce, generátor pro ni použije první volnou buňku, není-li zadané vlastní `help.position`. Ucelenou podobu ukazuje [zadání s umístěnými slovy](examples/specification-placed-words.yaml).
 
 Zadání rozlišuje tajenku složenou z vybraných polí a tajenku, která je souvislým heslem označeným textem „Tajenka“:
 

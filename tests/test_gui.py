@@ -1388,9 +1388,11 @@ class GuiTest(unittest.TestCase):
         ):
             parse_slot_content("CHATA", "Stavení", 5)
 
-    def test_rejects_empty_clue(self) -> None:
-        with self.assertRaisesRegex(GuiInputError, "Vyplňte nápovědu"):
-            parse_slot_content("CHATA", "  ", 4)
+    def test_uses_answer_as_missing_clue(self) -> None:
+        self.assertEqual(
+            ("CHATA", "CHATA"),
+            parse_slot_content("CHATA", "  ", 4),
+        )
 
     def test_template_generation_dialog_uses_crossword_title(self) -> None:
         parent = Mock()
@@ -3736,9 +3738,14 @@ class GuiTest(unittest.TestCase):
 
     def test_inline_slot_edit_opens_answer_and_clue_cells(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
-        window._crossword = create_blank_template(
-            CrosswordSettings(3, 3),
-            "numbered",
+        window._crossword = fill_crossword_slot(
+            create_blank_template(
+                CrosswordSettings(3, 3),
+                "numbered",
+            ),
+            "h1",
+            "ABC",
+            "",
         )
         window._selected_slot_identifier = None
         window._slot_edit_identifier = None
@@ -3766,7 +3773,7 @@ class GuiTest(unittest.TestCase):
             [
                 call(
                     (175, 24, 180, 22),
-                    "",
+                    "ABC",
                     check_crossings=True,
                 ),
                 call((355, 24, 360, 22), ""),
@@ -3817,7 +3824,7 @@ class GuiTest(unittest.TestCase):
         )
         bind_context_menu.assert_called_once_with(editor)
 
-    def test_inline_slot_edit_saves_both_values(self) -> None:
+    def test_inline_slot_edit_defaults_missing_clue_to_answer(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         original = create_blank_template(
             CrosswordSettings(3, 3),
@@ -3828,7 +3835,7 @@ class GuiTest(unittest.TestCase):
         window._slot_answer_editor = Mock()
         window._slot_clue_editor = Mock()
         window._slot_answer_editor.get.return_value = "abc"
-        window._slot_clue_editor.get.return_value = "První řádek"
+        window._slot_clue_editor.get.return_value = ""
         window._set_dirty = Mock()
         window._rebuild_slot_tree = Mock()
         window._refresh_crossword_view = Mock()
@@ -3841,7 +3848,7 @@ class GuiTest(unittest.TestCase):
             slot for slot in window._crossword.slots if slot.identifier == "h1"
         )
         self.assertEqual("ABC", slot.answer)
-        self.assertEqual("První řádek", slot.clue)
+        self.assertEqual("ABC", slot.clue)
         window._set_dirty.assert_called_once_with(True)
         window._rebuild_slot_tree.assert_called_once_with()
         window._refresh_crossword_view.assert_called_once_with()
@@ -3931,7 +3938,7 @@ class GuiTest(unittest.TestCase):
         answer_editor = Mock()
         clue_editor = Mock()
         answer_editor.get.return_value = "AB"
-        clue_editor.get.return_value = "Příliš krátké heslo"
+        clue_editor.get.return_value = ""
         window._slot_answer_editor = answer_editor
         window._slot_clue_editor = clue_editor
         window._set_dirty = Mock()

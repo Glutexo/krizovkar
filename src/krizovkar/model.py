@@ -736,7 +736,7 @@ def _crossword_document_from_data(data: dict[str, Any]) -> CrosswordDocument:
                 length=slot["length"],
                 clue_placement=slot.get("clue_placement", "external"),
                 answer=slot.get("answer"),
-                clue=slot.get("clue"),
+                clue=slot.get("clue", slot.get("answer")),
                 in_help=slot.get("in_help", False),
             )
             for slot in data["slots"]
@@ -1211,7 +1211,7 @@ def load_crossword_specification(
                 column=word["start"]["column"],
             ),
             direction=word["direction"],
-            legend=word["legend"],
+            legend=word.get("legend", word["answer"]),
             in_help=word.get("in_help", False),
         )
         for word in data.get("words", ())
@@ -1492,8 +1492,9 @@ def _crossword_specification_data(
                 "answer": word.answer,
                 "start": _coordinate_data(word.start),
                 "direction": word.direction,
-                "legend": word.legend,
             }
+            if word.legend != word.answer:
+                word_data["legend"] = word.legend
             if word.in_help:
                 word_data["in_help"] = True
             data["words"].append(word_data)
@@ -1627,7 +1628,8 @@ def _crossword_document_data(
             data["clue_placement"] = slot.clue_placement
         if slot.answer is not None:
             data["answer"] = slot.answer
-            data["clue"] = slot.clue
+            if slot.clue != slot.answer:
+                data["clue"] = slot.clue
         if slot.in_help:
             data["in_help"] = True
         slots.append(data)

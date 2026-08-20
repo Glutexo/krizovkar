@@ -67,9 +67,11 @@ slotem; její souřadnice se vždy odvodí ze `start` a `direction`. Hodnota
 lze vynechat. Stejný model tím podporuje švédské, klasické i smíšené
 rozložení bez opakování odvoditelné souřadnice.
 
-Křížovka převedená ze zadání může slotu přidat společně položky
-`answer` a `clue`. Jde o doplněnou odpověď a její legendu; musí být uvedené obě
-nebo ani jedna a počet písmenných polí `answer` musí odpovídat `length`.
+Křížovka převedená ze zadání může slotu přidat položku `answer`
+s doplněnou odpovědí a volitelnou položku `clue` s její legendou.
+Vynechané `clue` použije jako legendu samotnou hodnotu `answer`. Samostatné
+`clue` bez `answer` není platné a počet písmenných polí `answer` musí
+odpovídat `length`.
 Volitelné `in_help: true` zařadí odpověď do jediné buňky `type: help`.
 Křížící se odpovědi musí mít na společném poli stejné písmeno. Ucelený
 zápis ukazuje [šablona ze zadání](../examples/template-from-specification.yaml).
@@ -357,7 +359,8 @@ Každá položka `words` obsahuje:
 - `answer`: neprázdnou posloupnost podporovaných velkých písmen včetně diakritiky; české `CH` představuje jednu budoucí buňku,
 - `start`: souřadnici prvního písmene,
 - `direction`: hodnotu `horizontal` pro postup doprava nebo `vertical` pro postup dolů,
-- `legend`: neprázdný text legendy,
+- volitelné `legend`: neprázdný text legendy; při vynechání se použije
+  samotné `answer`,
 - volitelné `in_help`: zda se odpověď vypíše v pomůcce; výchozí hodnota je `false`.
 
 Tento popis hesla je společný pro švédské i čárkované rozložení.

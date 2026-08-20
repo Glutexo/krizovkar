@@ -131,8 +131,7 @@
       "required": [
         "answer",
         "start",
-        "direction",
-        "legend"
+        "direction"
       ],
       "properties": {
         "answer": {
@@ -152,7 +151,7 @@
           ]
         },
         "legend": {
-          "description": "Neprázdný text legendy slova.",
+          "description": "Volitelný text legendy; při vynechání se použije samotné slovo.",
           "type": "string",
           "minLength": 1,
           "pattern": "\\S"
