@@ -672,6 +672,22 @@ def _create_dictionary_editor(
     return editor
 
 
+def _create_dictionary_browse_button(
+    parent: ttk.Frame,
+    command: Callable[[], None],
+) -> ttk.Button:
+    """Vytvoří kompaktní tlačítko pro systémový výběr slovníku."""
+
+    button = ttk.Button(
+        parent,
+        text="…",
+        width=3,
+        command=command,
+    )
+    button.grid(row=0, column=1, padx=(8, 0))
+    return button
+
+
 def _browse_for_dictionary(
     parent: tk.Misc,
     variable: tk.StringVar,
@@ -921,11 +937,10 @@ class SecretGenerationDialog(simpledialog.Dialog):
             self._dictionary_value,
         )
         self._dictionary_editor.grid(row=0, column=0, sticky="ew")
-        ttk.Button(
+        _create_dictionary_browse_button(
             dictionary_row,
-            text="Vybrat…",
-            command=self._choose_dictionary,
-        ).grid(row=0, column=1, padx=(8, 0))
+            self._choose_dictionary,
+        )
         return self._secret_editor
 
     def _choose_dictionary(self) -> None:
@@ -1156,11 +1171,10 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             self._dictionary_value,
         )
         self._dictionary_editor.grid(row=0, column=0, sticky="ew")
-        ttk.Button(
+        _create_dictionary_browse_button(
             dictionary_row,
-            text="Vybrat…",
-            command=self._choose_dictionary,
-        ).grid(row=0, column=1, padx=(8, 0))
+            self._choose_dictionary,
+        )
         self._reserve_generation_controls_width(master)
         self._cli_command_value = tk.StringVar(master=master)
         for value in (

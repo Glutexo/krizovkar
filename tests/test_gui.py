@@ -39,6 +39,7 @@ from krizovkar.gui import (
     _bind_text_entry_context_menu,
     _browse_for_dictionary,
     _configure_tk_runtime,
+    _create_dictionary_browse_button,
     _create_dictionary_editor,
     _create_generation_entry,
     _create_help_menu,
@@ -279,6 +280,30 @@ class GuiTest(unittest.TestCase):
             textvariable=variable,
         )
         bind.assert_called_once_with(editor)
+
+    def test_dictionary_browser_button_is_compact(self) -> None:
+        parent = Mock()
+        command = Mock()
+        button = Mock()
+
+        with patch(
+            "krizovkar.gui.ttk.Button",
+            return_value=button,
+        ) as button_type:
+            result = _create_dictionary_browse_button(parent, command)
+
+        self.assertIs(button, result)
+        button_type.assert_called_once_with(
+            parent,
+            text="…",
+            width=3,
+            command=command,
+        )
+        button.grid.assert_called_once_with(
+            row=0,
+            column=1,
+            padx=(8, 0),
+        )
 
     def test_dictionary_browser_starts_in_expected_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

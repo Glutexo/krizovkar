@@ -161,7 +161,7 @@ Křížovkáře. Na macOS je to
 `%APPDATA%\krizovkar\dictionaries` a na Linuxu
 `$XDG_DATA_HOME/krizovkar/dictionaries`, případně
 `~/.local/share/krizovkar/dictionaries`. Tato složka se otevře i jako výchozí
-umístění tlačítka **Vybrat…**. Pole je editovatelné, takže do něj lze zadat také
+umístění tlačítka **…**. Pole je editovatelné, takže do něj lze zadat také
 libovolnou jinou cestu k JSON slovníku.
 
 Nabídka **Zobrazení** obsahuje volbu **Zdroj YAML**, která pro zvolený dokument
