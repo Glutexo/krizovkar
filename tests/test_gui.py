@@ -546,7 +546,7 @@ class GuiTest(unittest.TestCase):
             menu=print_menu,
         )
         self.assertEqual(
-            ["Zpět", "Vpřed", "Dogenerovat tajenku…"],
+            ["Zpět", "Vpřed", "Přidat tajenku…"],
             [
                 item.kwargs["label"]
                 for item in edit_menu.add_command.call_args_list
@@ -735,7 +735,7 @@ class GuiTest(unittest.TestCase):
                 )
             )
         self.assertEqual(
-            ["Zpět", "Vpřed", "Dogenerovat tajenku…"],
+            ["Zpět", "Vpřed", "Přidat tajenku…"],
             [
                 item.kwargs["label"]
                 for item in edit_menu.add_command.call_args_list
@@ -1414,6 +1414,89 @@ class GuiTest(unittest.TestCase):
         ):
             parse_template_secret("Tajenka 1")
 
+    def test_secret_generation_dialog_uses_add_title(self) -> None:
+        parent = Mock()
+
+        with patch(
+            "krizovkar.gui.simpledialog.Dialog.__init__"
+        ) as initialize:
+            dialog = SecretGenerationDialog(parent)
+
+        initialize.assert_called_once_with(parent, "Přidat tajenku")
+        self.assertIsNone(dialog._input)
+
+    def test_secret_generation_dialog_starts_with_secret_field(self) -> None:
+        dialog = SecretGenerationDialog.__new__(SecretGenerationDialog)
+        master = Mock()
+        label = Mock()
+        secret_editor = Mock()
+        dictionary_row = Mock()
+
+        with (
+            patch("krizovkar.gui._inherit_macos_menu_bar"),
+            patch(
+                "krizovkar.gui.ttk.Label",
+                return_value=label,
+            ) as label_type,
+            patch(
+                "krizovkar.gui.tk.StringVar",
+                side_effect=(Mock(), Mock()),
+            ),
+            patch(
+                "krizovkar.gui.ttk.Entry",
+                return_value=secret_editor,
+            ),
+            patch(
+                "krizovkar.gui.ttk.Frame",
+                return_value=dictionary_row,
+            ),
+            patch("krizovkar.gui._bind_text_entry_context_menu"),
+            patch(
+                "krizovkar.gui._create_dictionary_editor",
+                return_value=Mock(),
+            ),
+            patch("krizovkar.gui._create_dictionary_browse_button"),
+        ):
+            SecretGenerationDialog.body(dialog, master)
+
+        self.assertEqual(
+            [
+                call(master, text="Tajenka"),
+                call(master, text="Slovník (volitelný)"),
+            ],
+            label_type.call_args_list,
+        )
+        self.assertEqual(
+            call(row=0, column=0, sticky="w"),
+            label.grid.call_args_list[0],
+        )
+
+    def test_secret_generation_dialog_uses_add_button(self) -> None:
+        dialog = SecretGenerationDialog.__new__(SecretGenerationDialog)
+        dialog.ok = Mock()
+        dialog.cancel = Mock()
+        dialog.bind = Mock()
+        buttons = Mock()
+
+        with (
+            patch("krizovkar.gui.ttk.Frame", return_value=buttons),
+            patch(
+                "krizovkar.gui.ttk.Button",
+                return_value=Mock(),
+            ) as button_type,
+        ):
+            SecretGenerationDialog.buttonbox(dialog)
+
+        self.assertEqual(
+            call(
+                buttons,
+                text="Přidat",
+                command=dialog.ok,
+                default="active",
+            ),
+            button_type.call_args_list[0],
+        )
+
     def test_secret_generation_dialog_returns_normalized_requirement(
         self,
     ) -> None:
@@ -1460,7 +1543,7 @@ class GuiTest(unittest.TestCase):
         self.assertFalse(valid)
         self.assertIsNone(dialog._input)
         show_error.assert_called_once_with(
-            "Tajenku nelze dogenerovat",
+            "Tajenku nelze přidat",
             "Vyplňte tajenku.",
             parent=dialog,
         )
@@ -1517,7 +1600,7 @@ class GuiTest(unittest.TestCase):
         self.assertFalse(valid)
         self.assertIsNone(dialog._input)
         show_error.assert_called_once_with(
-            "Tajenku nelze dogenerovat",
+            "Tajenku nelze přidat",
             "slovník není platný",
             parent=dialog,
         )
@@ -4128,7 +4211,7 @@ class GuiTest(unittest.TestCase):
 
         self.assertIs(original, window._crossword)
         window._show_action_error.assert_called_once_with(
-            "Tajenku nelze dogenerovat",
+            "Tajenku nelze přidat",
             "tajenku nelze umístit",
         )
         window.root.configure.assert_has_calls(

@@ -138,7 +138,7 @@ samostatná pro každý dokument a zahrnuje doplnění hesel, změny rozměru, r
 a začátků hesel i úpravy YAML zdroje včetně dočasně neplatného zápisu. Nová
 změna po návratu do staršího stavu zahodí dosavadní kroky **Vpřed**.
 
-Volba **Úpravy → Dogenerovat tajenku…** doplní konkrétní text tajenky do
+Volba **Úpravy → Přidat tajenku…** doplní konkrétní text tajenky do
 otevřené křížovky. Ve stejném dialogu lze volitelně vybrat slovník, protože
 zdrojový slovník není součástí projektu. Tajenku může rozdělit pouze mezi
 celými slovy a zachová
@@ -152,7 +152,7 @@ použitelné heslo odpovídající celému vzniklému vzoru. Bez slovníku se ta
 kontrola nepoužije. Když tajenka nepasuje do současných míst, vytvoří nové
 rozvržení se stejným rozměrem; teprve pokud nestačí ani to, křížovku co
 nejméně zvětší, nejvýše na 50 × 50 polí. Při novém rozvržení nahradí dosavadní
-obsah bez potvrzení. Celé dogenerování je jeden krok historie, takže je lze
+obsah bez potvrzení. Celé přidání je jeden krok historie, takže je lze
 vrátit jediným **Zpět**.
 
 Oba dialogy nabízejí slovníky nalezené v uživatelské datové složce

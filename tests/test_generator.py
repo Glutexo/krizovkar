@@ -578,7 +578,7 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
 
         with self.assertRaisesRegex(
             GenerationError,
-            "ani po změně rozvržení a zvětšení",
+            "tajenku nelze přidat ani po změně rozvržení a zvětšení",
         ):
             generate_secret_in_crossword(
                 crossword,

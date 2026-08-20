@@ -96,7 +96,7 @@ class SecretRequirement:
 
 @dataclass(frozen=True, slots=True)
 class SecretGenerationResult:
-    """Křížovka s tajenkou a způsob jejího dogenerování."""
+    """Křížovka s tajenkou a způsob jejího přidání."""
 
     document: CrosswordDocument
     strategy: Literal[
@@ -1494,11 +1494,11 @@ def generate_secret_in_crossword(
     maximum_width: int = 50,
     maximum_height: int = 50,
 ) -> SecretGenerationResult:
-    """Dogeneruje známou tajenku s postupně invazivnějšími fallbacky."""
+    """Přidá známou tajenku s postupně invazivnějšími fallbacky."""
 
     _validate_secret_requirement(requirement)
     if not requirement.words:
-        raise GenerationError("dogenerování vyžaduje konkrétní text tajenky")
+        raise GenerationError("přidání vyžaduje konkrétní text tajenky")
     if layout not in {"swedish", "numbered"}:
         raise GenerationError(f"nepodporované rozvržení {layout!r}")
     entries_by_length = (
@@ -1590,7 +1590,7 @@ def generate_secret_in_crossword(
         )
 
     raise GenerationError(
-        "tajenku nelze dogenerovat ani po změně rozvržení a zvětšení "
+        "tajenku nelze přidat ani po změně rozvržení a zvětšení "
         f"křížovky nejvýše na {maximum_width} × {maximum_height}"
     )
 

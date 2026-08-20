@@ -163,7 +163,7 @@ class NewTemplateResult:
 
 @dataclass(frozen=True, slots=True)
 class SecretGenerationInput:
-    """Tajenka a případný slovník pro její bezpečné dogenerování."""
+    """Tajenka a případný slovník pro její bezpečné přidání."""
 
     requirement: SecretRequirement
     dictionary: CrosswordDictionary | None
@@ -893,25 +893,16 @@ class SecretGenerationDialog(simpledialog.Dialog):
         self._dictionary_value: tk.StringVar
         self._dictionary_editor: ttk.Combobox
         self._input: SecretGenerationInput | None = None
-        super().__init__(parent, "Dogenerovat tajenku")
+        super().__init__(parent, "Přidat tajenku")
 
     def body(self, master: tk.Frame) -> tk.Widget:
         _inherit_macos_menu_bar(self)
         master.configure(padx=16, pady=12)
         master.columnconfigure(0, weight=1)
-        ttk.Label(
-            master,
-            text=(
-                "Zadejte text tajenky. Tajenku lze rozdělit pouze mezi "
-                "celými slovy; volitelný slovník ověří budoucí křížení."
-            ),
-            wraplength=360,
-        ).grid(row=0, column=0, sticky="w")
         ttk.Label(master, text="Tajenka").grid(
-            row=1,
+            row=0,
             column=0,
             sticky="w",
-            pady=(10, 0),
         )
         self._secret_value = tk.StringVar(master=master)
         self._secret_editor = ttk.Entry(
@@ -919,17 +910,17 @@ class SecretGenerationDialog(simpledialog.Dialog):
             width=36,
             textvariable=self._secret_value,
         )
-        self._secret_editor.grid(row=2, column=0, sticky="ew", pady=(3, 0))
+        self._secret_editor.grid(row=1, column=0, sticky="ew", pady=(3, 0))
         _bind_text_entry_context_menu(self._secret_editor)
 
         ttk.Label(master, text="Slovník (volitelný)").grid(
-            row=3,
+            row=2,
             column=0,
             sticky="w",
             pady=(10, 0),
         )
         dictionary_row = ttk.Frame(master)
-        dictionary_row.grid(row=4, column=0, sticky="ew", pady=(3, 0))
+        dictionary_row.grid(row=3, column=0, sticky="ew", pady=(3, 0))
         dictionary_row.columnconfigure(0, weight=1)
         self._dictionary_value = tk.StringVar(master=master)
         self._dictionary_editor = _create_dictionary_editor(
@@ -950,7 +941,7 @@ class SecretGenerationDialog(simpledialog.Dialog):
         buttons = ttk.Frame(self, padding=(16, 0, 16, 16))
         ttk.Button(
             buttons,
-            text="Dogenerovat",
+            text="Přidat",
             command=self.ok,
             default="active",
         ).pack(side="right")
@@ -971,7 +962,7 @@ class SecretGenerationDialog(simpledialog.Dialog):
         except GuiInputError as error:
             self._input = None
             messagebox.showerror(
-                "Tajenku nelze dogenerovat",
+                "Tajenku nelze přidat",
                 str(error),
                 parent=self,
             )
@@ -985,7 +976,7 @@ class SecretGenerationDialog(simpledialog.Dialog):
         except DictionaryError as error:
             self._input = None
             messagebox.showerror(
-                "Tajenku nelze dogenerovat",
+                "Tajenku nelze přidat",
                 str(error),
                 parent=self,
             )
@@ -3505,7 +3496,7 @@ class CrosswordApplication:
         )
         self.edit_menu.add_separator()
         self.edit_menu.add_command(
-            label="Dogenerovat tajenku…",
+            label="Přidat tajenku…",
             state="disabled",
         )
         menu.add_cascade(label="Úpravy", menu=self.edit_menu)
@@ -3916,7 +3907,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._redo_menu_index = cast(int, self.edit_menu.index("end"))
         self.edit_menu.add_separator()
         self.edit_menu.add_command(
-            label="Dogenerovat tajenku…",
+            label="Přidat tajenku…",
             command=self.generate_crossword_secret,
         )
         self._generate_secret_menu_index = cast(
@@ -4359,7 +4350,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._refresh_crossword_view()
 
     def generate_crossword_secret(self) -> None:
-        """Dogeneruje konkrétní tajenku do otevřeného dokumentu."""
+        """Přidá konkrétní tajenku do otevřeného dokumentu."""
 
         if not self._save_inline_slot_edit():
             return
@@ -4388,7 +4379,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             )
         except GenerationError as error:
             self._show_action_error(
-                "Tajenku nelze dogenerovat",
+                "Tajenku nelze přidat",
                 str(error),
             )
             return
