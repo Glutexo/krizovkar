@@ -91,8 +91,10 @@ okraj mění počet sloupců, horní a dolní počet řádků a rohy oba rozměr
 současně. Nadpis náhledu uvádí aktuální rozměr jako počet sloupců × počet
 řádků. Nový rozměr se použije po puštění tlačítka. Změna rozměru znovu
 vytvoří rozvržení a případný doplněný obsah lze po změně obnovit pomocí
-**Zpět**. Prázdnou tiskovou křížovku i řešení lze exportovat do PDF kdykoli.
-Řešení ukáže právě doplněná písmena a ostatní pole ponechá prázdná.
+**Zpět**. Současný stav lze kdykoli exportovat jako mřížkový YAML,
+upravitelný LaTeX, prázdnou tiskovou křížovku v PDF nebo PDF řešení.
+Výstupy s písmeny ukážou právě doplněná písmena a ostatní pole
+ponechají prázdná.
 
 Pravé tlačítko nad písmenným, tajenkovým, legendovým nebo prázdným polem
 náhledu otevře nabídku jeho role **Písmeno** / **Tajenka** / **Legenda** /
@@ -189,10 +191,12 @@ při pokusu o otevření ze seznamu odstraní; celý seznam smaže volba **Vymaz
 nabídku**.
 
 Podnabídka **Soubor → Exportovat** nabízí výstupy podle právě otevřeného
-dokumentu. Formát stránky se volí přímo v dialogu vybraného exportu; poté
-naváže systémový dialog pro výběr umístění PDF. Tisková podoba bez písmen
-i řešení jsou dostupné v libovolném stavu dokumentu. Řešení zobrazí všechna
-právě doplněná písmena; dosud nevyplněná pole zůstanou prázdná.
+dokumentu. Mřížkový YAML zachytí aktuální cílovou mřížku `kind: grid`
+včetně právě doplněných písmen. Upravitelný LaTeX zachytí stejný stav
+v podobě připravené k další sazbě. U LaTeXu a PDF se nejprve volí formát
+stránky a poté umístění souboru. Tisková podoba PDF bez písmen i všechny
+výstupy se současnými písmeny jsou dostupné v libovolném stavu dokumentu;
+dosud nevyplněná pole zůstanou prázdná.
 
 Podnabídka **Soubor → Tisknout** nabízí stejné dvě podoby přímo k vytištění.
 Po volbě formátu stránky Křížovkář vytvoří dočasné PDF. Na macOS pro ně otevře

@@ -64,11 +64,13 @@ from krizovkar.model import (
     dump_crossword_document,
     load_crossword_document,
     write_crossword_document,
+    write_crossword_grid,
 )
 from krizovkar.renderer import (
     DEFAULT_PAGE_FORMAT,
     SUPPORTED_PAGE_FORMATS,
     RenderError,
+    render_latex,
     render_pdf,
 )
 
@@ -95,6 +97,8 @@ _NO_DOCUMENT_SLOT_LIST_PLACEMENT_VARIABLE = (
 _EXPORT_ACTION_LABELS = (
     "Křížovku bez písmen (PDF)…",
     "Řešení s písmeny (PDF)…",
+    "Mřížkový YAML…",
+    "LaTeX…",
 )
 _OPEN_PDF_ACTION_LABELS = (
     "Křížovku bez písmen…",
@@ -3985,6 +3989,16 @@ class CrosswordDocumentWindow(ttk.Frame):
                 _EXPORT_ACTION_LABELS[1],
                 self.save_solution_pdf,
             ),
+            _ExportAction(
+                "grid-yaml",
+                _EXPORT_ACTION_LABELS[2],
+                self.save_grid_yaml,
+            ),
+            _ExportAction(
+                "latex",
+                _EXPORT_ACTION_LABELS[3],
+                self.save_latex,
+            ),
         )
 
     def _print_actions(self) -> tuple[_ExportAction, ...]:
@@ -4413,14 +4427,11 @@ class CrosswordDocumentWindow(ttk.Frame):
             label="Uložit jako…",
             state=document_state,
         )
-        self.export_menu.entryconfigure(
-            0,
-            state=document_state,
-        )
-        self.export_menu.entryconfigure(
-            1,
-            state=document_state,
-        )
+        for index in range(len(_EXPORT_ACTION_LABELS)):
+            self.export_menu.entryconfigure(
+                index,
+                state=document_state,
+            )
         self.print_menu.entryconfigure(
             0,
             state=document_state,
@@ -4974,6 +4985,30 @@ class CrosswordDocumentWindow(ttk.Frame):
             initialfile="reseni.pdf",
         )
 
+    def save_grid_yaml(self) -> None:
+        if not self._save_inline_slot_edit():
+            return
+        crossword = self._crossword
+        if crossword is None:
+            self._show_action_error(
+                "Křížovka není připravena",
+                "Dokument křížovky zatím není vytvořený.",
+            )
+            return
+        self._save_grid_yaml(_grid_from_editable_document(crossword))
+
+    def save_latex(self) -> None:
+        if not self._save_inline_slot_edit():
+            return
+        crossword = self._crossword
+        if crossword is None:
+            self._show_action_error(
+                "Křížovka není připravena",
+                "Dokument křížovky zatím není vytvořený.",
+            )
+            return
+        self._save_latex(_grid_from_editable_document(crossword))
+
     def print_crossword(self) -> None:
         if not self._save_inline_slot_edit():
             return
@@ -5052,6 +5087,67 @@ class CrosswordDocumentWindow(ttk.Frame):
         if page_format is not None:
             self._page_format = page_format
         return page_format
+
+    def _save_grid_yaml(self, crossword: CrosswordGrid) -> None:
+        selected = self._choose_output(
+            title="Exportovat mřížkový YAML",
+            initialfile="mrizka.yaml",
+            extension=".yaml",
+            filetypes=(
+                ("YAML soubory", "*.yaml *.yml"),
+                ("Všechny soubory", "*"),
+            ),
+            overwrite_title="Přepsat mřížkový YAML?",
+        )
+        if selected is None:
+            return
+        output, overwrite = selected
+        try:
+            write_crossword_grid(
+                crossword,
+                output,
+                overwrite=overwrite,
+            )
+        except ModelError as error:
+            self._show_action_error(
+                "Mřížkový YAML nelze vytvořit",
+                str(error),
+            )
+
+    def _save_latex(self, crossword: CrosswordGrid) -> None:
+        title = "Exportovat LaTeX"
+        page_format = self._choose_page_format(
+            title=title,
+            confirm_label="Vybrat umístění…",
+        )
+        if page_format is None:
+            return
+        selected = self._choose_output(
+            title=title,
+            initialfile="krizovka.tex",
+            extension=".tex",
+            filetypes=(
+                ("LaTeXové soubory", "*.tex"),
+                ("Všechny soubory", "*"),
+            ),
+            overwrite_title="Přepsat LaTeX?",
+        )
+        if selected is None:
+            return
+        output, overwrite = selected
+        try:
+            render_latex(
+                crossword,
+                output,
+                overwrite=overwrite,
+                page_format=page_format,
+                filled=True,
+            )
+        except RenderError as error:
+            self._show_action_error(
+                "LaTeX nelze vytvořit",
+                str(error),
+            )
 
     def _save_pdf(
         self,
