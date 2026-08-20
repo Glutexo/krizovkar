@@ -681,8 +681,8 @@ def _create_dictionary_browse_button(
     button = ttk.Button(
         parent,
         text="…",
-        width=3,
         command=command,
+        style="Toolbutton",
     )
     button.grid(row=0, column=1, padx=(8, 0))
     return button

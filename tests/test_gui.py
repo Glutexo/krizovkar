@@ -281,7 +281,7 @@ class GuiTest(unittest.TestCase):
         )
         bind.assert_called_once_with(editor)
 
-    def test_dictionary_browser_button_is_compact(self) -> None:
+    def test_dictionary_browser_button_uses_cli_toolbutton_style(self) -> None:
         parent = Mock()
         command = Mock()
         button = Mock()
@@ -296,8 +296,8 @@ class GuiTest(unittest.TestCase):
         button_type.assert_called_once_with(
             parent,
             text="…",
-            width=3,
             command=command,
+            style="Toolbutton",
         )
         button.grid.assert_called_once_with(
             row=0,
