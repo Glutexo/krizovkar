@@ -25,6 +25,10 @@ from krizovkar.typography import mark_czech_hyphenation, protect_czech_prepositi
 
 CELL_SIZE_MM = 12.0
 CELL_PADDING_MM = 0.6
+CELL_TEXT_FONT_SIZE_PT = 6.0
+CELL_TEXT_LINE_HEIGHT_PT = 6.3
+LEGEND_TEXT_FONT_SIZE_PT = 8.0
+LEGEND_TEXT_LINE_HEIGHT_PT = 8.4
 MINIMUM_CLUE_AREA_WIDTH_MM = 100.0
 CLUE_COLUMN_GAP_MM = 6.0
 CLUE_GRID_GAP_MM = 7.0
@@ -136,6 +140,8 @@ def _cell_text_command(
     height_mm: float,
     *,
     prefix: str | None = None,
+    font_size_pt: float = CELL_TEXT_FONT_SIZE_PT,
+    line_height_pt: float = CELL_TEXT_LINE_HEIGHT_PT,
 ) -> str:
     content = _escape_latex(text, typography=True)
     if prefix is not None:
@@ -143,7 +149,10 @@ def _cell_text_command(
     return (
         rf"\node[inner sep=0pt] at {_point(center_x, center_y)} "
         rf"{{\KrizovkarCellText{{{_millimetres(width_mm)}}}"
-        rf"{{{_millimetres(height_mm)}}}{{{content}}}}};"
+        rf"{{{_millimetres(height_mm)}}}"
+        rf"{{{_format_number(font_size_pt)}pt}}"
+        rf"{{{_format_number(line_height_pt)}pt}}"
+        rf"{{{content}}}}};"
     )
 
 
@@ -254,6 +263,8 @@ def _append_legend_cell(
                     section_bottom + section_height / 2,
                     text_width_mm,
                     text_height_mm,
+                    font_size_pt=LEGEND_TEXT_FONT_SIZE_PT,
+                    line_height_pt=LEGEND_TEXT_LINE_HEIGHT_PT,
                 )
             )
         if section_index < len(cell.arrows):
@@ -599,11 +610,11 @@ def create_latex_source(
         r"\renewcommand{\familydefault}{\sfdefault}",
         r"\pagestyle{empty}",
         r"\setlength{\parindent}{0pt}",
-        r"\newcommand{\KrizovkarCellText}[3]{%",
+        r"\newcommand{\KrizovkarCellText}[5]{%",
         r"  \adjustbox{max width=#1,max totalheight=#2}{%",
         (
-            r"    \parbox{#1}{\centering\fontsize{6pt}{6.3pt}\selectfont"
-            r"\sloppy\hspace{0pt}#3}%"
+            r"    \parbox{#1}{\centering\fontsize{#3}{#4}\selectfont"
+            r"\sloppy\hspace{0pt}#5}%"
         ),
         r"  }%",
         r"}",

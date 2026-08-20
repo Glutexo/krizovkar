@@ -87,7 +87,15 @@ class LatexSourceTest(unittest.TestCase):
 
         self.assertIn(r"\fill[black!7]", legend)
         self.assertIn(r"\KrizovkarCellText", legend)
+        self.assertIn(
+            r"\KrizovkarCellText{10.8mm}{4.8mm}{8pt}{8.4pt}{Sa\-vec}",
+            legend,
+        )
         self.assertIn(r"\textbf{Pomůcka:}", help_source)
+        self.assertIn(
+            r"{10.8mm}{10.8mm}{6pt}{6.3pt}{\textbf{Pomůcka:}",
+            help_source,
+        )
         self.assertEqual(20, empty.count(r"\draw[gray!70,line width=0.65pt]"))
 
     def test_numbered_source_keeps_numbers_bars_and_both_clue_columns(self) -> None:
