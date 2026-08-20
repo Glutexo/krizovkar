@@ -1286,24 +1286,33 @@ class GuiTest(unittest.TestCase):
             "uv run krizovkar template",
         )
 
-    def test_template_dialog_swaps_generation_controls_without_resizing(
+    def test_template_dialog_shows_generation_controls_only_when_generated(
         self,
     ) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
         dialog._creation_mode_value = Mock()
         dialog._creation_mode_value.get.side_effect = ("empty", "generated")
         dialog._generation_controls = Mock()
-        dialog._generation_controls_placeholder = Mock()
 
         TemplateGenerationDialog._update_generation_controls(dialog)
         TemplateGenerationDialog._update_generation_controls(dialog)
 
         dialog._generation_controls.grid_remove.assert_called_once_with()
         dialog._generation_controls.grid.assert_called_once_with()
-        dialog._generation_controls_placeholder.grid.assert_called_once_with()
-        (
-            dialog._generation_controls_placeholder.grid_remove
-        ).assert_called_once_with()
+
+    def test_template_dialog_reserves_only_generation_controls_width(
+        self,
+    ) -> None:
+        dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
+        dialog._generation_controls = Mock()
+        dialog._generation_controls.winfo_reqwidth.return_value = 420
+        master = Mock()
+
+        dialog._reserve_generation_controls_width(master)
+
+        master.update_idletasks.assert_called_once_with()
+        master.columnconfigure.assert_called_once_with(0, minsize=444)
+        master.rowconfigure.assert_not_called()
 
     def test_template_dialog_validates_selected_generated_layout(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
