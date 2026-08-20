@@ -446,6 +446,50 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
             tuple(slot.clue for slot in prepared.slots),
         )
 
+    def test_secret_split_keeps_czech_preposition_with_following_word(
+        self,
+    ) -> None:
+        template = generate_empty_template(
+            width=4,
+            height=2,
+            layout="numbered",
+        )
+
+        with self.assertRaisesRegex(
+            GenerationError,
+            "nelze pro požadovanou tajenku najít",
+        ):
+            place_secret_in_template(
+                template,
+                SecretRequirement(words=("JDU", "V", "LESE")),
+            )
+
+        allowed = place_secret_in_template(
+            template,
+            SecretRequirement(words=("JDU", "A", "LESE")),
+        )
+        slots = {slot.identifier: slot for slot in allowed.slots}
+        self.assertEqual(
+            ("JDUA", "LESE"),
+            tuple(
+                slots[part.slot_identifier].answer
+                for part in allowed.secrets[0].parts
+                if isinstance(part, CrosswordSecretSlotPart)
+            ),
+        )
+
+        with self.assertRaisesRegex(
+            GenerationError,
+            "jednopísmennou souhláskovou předložkou",
+        ):
+            place_secret_in_template(
+                template,
+                SecretRequirement(
+                    words=("JDU", "V", "LESE"),
+                    part_word_counts=(2, 1),
+                ),
+            )
+
     def test_generates_secret_in_empty_slots_before_replacing_answers(
         self,
     ) -> None:
@@ -488,6 +532,35 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         self.assertEqual(
             "right" if secret_slot.direction == "horizontal" else "down",
             start_cell.arrow,
+        )
+
+    def test_generated_secret_parts_keep_czech_preposition_together(
+        self,
+    ) -> None:
+        crossword = generate_empty_template(
+            width=4,
+            height=2,
+            layout="numbered",
+        )
+
+        generated = generate_secret_in_crossword(
+            crossword,
+            SecretRequirement(words=("JDU", "V", "DLOUHÉM", "LESE")),
+            layout="numbered",
+            maximum_width=15,
+            maximum_height=15,
+        )
+
+        slots = {
+            slot.identifier: slot for slot in generated.document.slots
+        }
+        self.assertEqual(
+            ("JDU", "VDLOUHÉM", "LESE"),
+            tuple(
+                slots[part.slot_identifier].answer
+                for part in generated.document.secrets[-1].parts
+                if isinstance(part, CrosswordSecretSlotPart)
+            ),
         )
 
     def test_generates_secret_in_empty_slot_with_matching_crossings(

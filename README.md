@@ -44,8 +44,10 @@ náhodným celým číslem, které lze pro opakování konkrétního rozvržení
 změnit, a volitelné pole **Tajenka**. Generátor rozvržení přizpůsobí tak,
 aby se do něj zadaná tajenka vešla, a její části v novém dokumentu rovnou
 vyplní. Může ji rozdělit pouze mezi celými slovy a nejvýše na tolik dílů,
-kolik obsahuje slov. Více po sobě jdoucích slov ve stejném dílu spojí bez
-mezer. Tlačítko **Vytvořit** otevře výsledek jako nový samostatný dokument.
+kolik obsahuje slov. Stejně jako při zalamování legend přitom neoddělí
+jednopísmennou souhláskovou předložku `k`, `s`, `v` nebo `z` od následujícího
+slova. Více po sobě jdoucích slov ve stejném dílu spojí bez mezer. Tlačítko
+**Vytvořit** otevře výsledek jako nový samostatný dokument.
 Neplatný nebo nerozvrhnutelný rozměr či tajenku dialog vysvětlí a ponechá
 otevřený k opravě. Tlačítko-přepínač **CLI** vlevo dole rozbalí ve spodní
 části dialogu kopírovatelný příkaz, který na příkazové řádce vytvoří
@@ -134,14 +136,15 @@ a začátků hesel i úpravy YAML zdroje včetně dočasně neplatného zápisu.
 změna po návratu do staršího stavu zahodí dosavadní kroky **Vpřed**.
 
 Volba **Úpravy → Dogenerovat tajenku…** doplní konkrétní text tajenky do
-otevřené křížovky. Tajenku může rozdělit pouze mezi celými slovy. Nejprve
-vyhledá vyhovující prázdná místa, aniž zasáhne do vyplněných hesel. Pokud to
-nejde, zvolí umístění vyžadující odstranění nejmenšího počtu stávajících
-hesel včetně rozporných křížení. Když tajenka nepasuje do současných míst,
-vytvoří nové rozvržení se stejným rozměrem; teprve pokud nestačí ani to,
-křížovku co nejméně zvětší, nejvýše na 50 × 50 polí. Při novém rozvržení
-nahradí dosavadní obsah bez potvrzení. Celé dogenerování je jeden krok historie,
-takže je lze vrátit jediným **Zpět**.
+otevřené křížovky. Tajenku může rozdělit pouze mezi celými slovy a zachová
+nezalomitelné spojení jednopísmenných souhláskových předložek s následujícím
+slovem. Nejprve vyhledá vyhovující prázdná místa, aniž zasáhne do vyplněných
+hesel. Pokud to nejde, zvolí umístění vyžadující odstranění nejmenšího počtu
+stávajících hesel včetně rozporných křížení. Když tajenka nepasuje do
+současných míst, vytvoří nové rozvržení se stejným rozměrem; teprve pokud
+nestačí ani to, křížovku co nejméně zvětší, nejvýše na 50 × 50 polí. Při
+novém rozvržení nahradí dosavadní obsah bez potvrzení. Celé dogenerování je
+jeden krok historie, takže je lze vrátit jediným **Zpět**.
 
 Nabídka **Zobrazení** obsahuje volbu **Zdroj YAML**, která pro zvolený dokument
 otevře vlastní běžné okno s jeho upravitelnou YAML podobou. Každá změna
@@ -563,10 +566,11 @@ Tyto volby fungují pro obě hodnoty `--layout`. U konkrétního textu se
 velikost písmen sjednotí, mezery a interpunkce se do buněk nezapisují a
 seznam slov zachová všechny povolené švy. Vybrané sloty generátor rovnou
 vyplní textem tajenky a popiskem příslušné části. Automatické dělení nikdy
-nerozdělí slovo. Generátor podle potřeby změní jinak vyvážené délky běžných
-slotů tak, aby maska obsahovala požadované délky tajenky od 3 do 8 polí;
-pokud se požadavek do zadaného rozměru nevejde, skončí s chybou. Volitelné
-`--secret-prompt` doplní zadání; jeho pozici a zarovnání určují
+nerozdělí slovo ani neoddělí jednopísmennou souhláskovou předložku od
+následujícího slova. Generátor podle potřeby změní jinak vyvážené délky
+běžných slotů tak, aby maska obsahovala požadované délky tajenky od 3 do 8
+polí; pokud se požadavek do zadaného rozměru nevejde, skončí s chybou.
+Volitelné `--secret-prompt` doplní zadání; jeho pozici a zarovnání určují
 `--secret-prompt-placement` a `--secret-prompt-alignment`. Seed ovlivňuje
 výběr vhodných slotů.
 
