@@ -55,10 +55,13 @@ from krizovkar.model import (
 from krizovkar.validation import check_crossword_grid
 
 
-def _complete_dictionary(*lengths: int) -> CrosswordDictionary:
+def _complete_dictionary(
+    *lengths: int,
+    alphabet: str = "ABCD",
+) -> CrosswordDictionary:
     entries = []
     for length in lengths:
-        for letters in product("ABCD", repeat=length):
+        for letters in product(alphabet, repeat=length):
             answer = "".join(letters)
             entries.append(
                 DictionaryEntry(answer=answer, clues=(f"Legenda {answer}",))
@@ -548,6 +551,66 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         self.assertEqual(
             "right" if secret_slot.direction == "horizontal" else "down",
             start_cell.arrow,
+        )
+
+    def test_rejects_secret_pattern_without_dictionary_candidate(self) -> None:
+        crossword = generate_empty_template(
+            width=3,
+            height=2,
+            layout="numbered",
+        )
+        requirement = SecretRequirement(words=("NAA", "NBB"))
+        dictionary = CrosswordDictionary(
+            entries=(
+                DictionaryEntry(answer="AB", clues=("První",)),
+                DictionaryEntry(answer="BA", clues=("Druhá",)),
+            )
+        )
+
+        unchecked = generate_secret_in_crossword(
+            crossword,
+            requirement,
+            layout="numbered",
+            maximum_width=3,
+            maximum_height=2,
+        )
+        self.assertEqual("empty_slots", unchecked.strategy)
+
+        with self.assertRaisesRegex(
+            GenerationError,
+            "ani po změně rozvržení a zvětšení",
+        ):
+            generate_secret_in_crossword(
+                crossword,
+                requirement,
+                layout="numbered",
+                dictionary=dictionary,
+                maximum_width=3,
+                maximum_height=2,
+            )
+
+    def test_enlarges_grid_for_dictionary_compatible_secret_crossings(
+        self,
+    ) -> None:
+        crossword = generate_empty_template(
+            width=3,
+            height=2,
+            layout="numbered",
+        )
+
+        generated = generate_secret_in_crossword(
+            crossword,
+            SecretRequirement(words=("NAA", "NBB")),
+            layout="numbered",
+            dictionary=_complete_dictionary(3, alphabet="ABN"),
+            maximum_width=3,
+            maximum_height=3,
+        )
+
+        self.assertEqual("changed_size", generated.strategy)
+        self.assertEqual(
+            (3, 3),
+            (generated.document.grid.width, generated.document.grid.height),
         )
 
     def test_generated_secret_parts_keep_czech_preposition_together(

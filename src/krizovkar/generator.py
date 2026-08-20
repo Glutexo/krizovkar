@@ -527,6 +527,7 @@ def generate_swedish_template(
     seed: int = DEFAULT_SEED,
     secret: SecretRequirement | None = None,
     randomize_layout: bool = False,
+    dictionary: CrosswordDictionary | None = None,
 ) -> CrosswordDocument:
     """Vytvoří nevyplněnou šablonu s vepsanými legendami."""
 
@@ -544,6 +545,9 @@ def generate_swedish_template(
             raise GenerationError(str(error)) from error
 
     _validate_secret_requirement(secret)
+    entries_by_length = (
+        _usable_entries(dictionary) if dictionary is not None else None
+    )
     last_error: Exception | None = None
     for part_lengths in _secret_length_options(secret):
         try:
@@ -560,10 +564,11 @@ def generate_swedish_template(
             random.Random(seed).shuffle(layouts)
         for layout in layouts:
             try:
-                return place_secret_in_template(
+                return _place_secret_in_template(
                     _swedish_template_from_layout(layout),
                     secret,
                     seed=seed,
+                    entries_by_length=entries_by_length,
                 )
             except GenerationError as error:
                 last_error = error
@@ -681,6 +686,7 @@ def generate_numbered_template(
     seed: int = DEFAULT_SEED,
     secret: SecretRequirement | None = None,
     randomize_layout: bool = False,
+    dictionary: CrosswordDictionary | None = None,
 ) -> CrosswordDocument:
     """Vytvoří nevyplněnou šablonu s vnějšími legendami."""
 
@@ -698,6 +704,9 @@ def generate_numbered_template(
             raise GenerationError(str(error)) from error
 
     _validate_secret_requirement(secret)
+    entries_by_length = (
+        _usable_entries(dictionary) if dictionary is not None else None
+    )
     last_error: Exception | None = None
     for part_lengths in _secret_length_options(secret):
         try:
@@ -714,10 +723,11 @@ def generate_numbered_template(
             random.Random(seed).shuffle(layouts)
         for layout in layouts:
             try:
-                return place_secret_in_template(
+                return _place_secret_in_template(
                     _numbered_template_from_layout(layout),
                     secret,
                     seed=seed,
+                    entries_by_length=entries_by_length,
                 )
             except GenerationError as error:
                 last_error = error
@@ -1180,12 +1190,81 @@ def _part_answers(
     return tuple(answers)
 
 
+def _secret_placement_has_dictionary_candidates(
+    crossword: CrosswordDocument,
+    requirement: SecretRequirement,
+    placement: _ExistingSecretPlacement,
+    entries_by_length: dict[int, tuple[_Entry, ...]],
+) -> bool:
+    """Ověří kandidáty pro prázdné sloty dotčené celou tajenkou."""
+
+    secret_answers = dict(
+        zip(
+            (slot.identifier for slot in placement.slots),
+            _part_answers(requirement.words, placement.word_counts),
+            strict=True,
+        )
+    )
+    fixed_answers: dict[str, str] = {}
+    for slot in crossword.slots:
+        secret_answer = secret_answers.get(slot.identifier)
+        if secret_answer is not None:
+            fixed_answers[slot.identifier] = secret_answer
+        elif (
+            slot.identifier not in placement.replacements
+            and slot.answer is not None
+        ):
+            fixed_answers[slot.identifier] = slot.answer
+    fixed_letters: dict[GridCoordinate, str] = {}
+    for slot in crossword.slots:
+        answer = fixed_answers.get(slot.identifier)
+        if answer is None:
+            continue
+        for coordinate, letter in zip(
+            _slot_coordinates(slot),
+            split_answer_letters(answer),
+            strict=True,
+        ):
+            previous = fixed_letters.get(coordinate)
+            if previous is not None and previous != letter:
+                return False
+            fixed_letters[coordinate] = letter
+
+    secret_coordinates = frozenset(
+        coordinate
+        for slot in placement.slots
+        for coordinate in _slot_coordinates(slot)
+    )
+    used_answers = frozenset(fixed_answers.values())
+    for slot in crossword.slots:
+        if slot.identifier in fixed_answers:
+            continue
+        coordinates = _slot_coordinates(slot)
+        if secret_coordinates.isdisjoint(coordinates):
+            continue
+        if not any(
+            entry.answer not in used_answers
+            and all(
+                fixed_letters.get(coordinate, letter) == letter
+                for coordinate, letter in zip(
+                    coordinates,
+                    entry.letters,
+                    strict=True,
+                )
+            )
+            for entry in entries_by_length.get(slot.length, ())
+        ):
+            return False
+    return True
+
+
 def _find_existing_secret_placement(
     crossword: CrosswordDocument,
     requirement: SecretRequirement,
     *,
     empty_only: bool,
     seed: int,
+    entries_by_length: dict[int, tuple[_Entry, ...]] | None = None,
 ) -> _ExistingSecretPlacement | None:
     slots = list(crossword.slots)
     random.Random(seed).shuffle(slots)
@@ -1245,11 +1324,21 @@ def _find_existing_secret_placement(
             ):
                 return
             if part_index == len(options):
-                best = _ExistingSecretPlacement(
+                candidate = _ExistingSecretPlacement(
                     slots=selected_slots,
                     word_counts=counts,
                     replacements=replacements,
                 )
+                if entries_by_length is not None and not (
+                    _secret_placement_has_dictionary_candidates(
+                        crossword,
+                        requirement,
+                        candidate,
+                        entries_by_length,
+                    )
+                ):
+                    return
+                best = candidate
                 return
             for option in options[part_index]:
                 if option.coordinates & used_coordinates:
@@ -1348,6 +1437,7 @@ def _generated_template_with_secret(
     requirement: SecretRequirement,
     *,
     seed: int,
+    dictionary: CrosswordDictionary | None,
 ) -> CrosswordDocument:
     generator = (
         generate_numbered_template
@@ -1359,6 +1449,7 @@ def _generated_template_with_secret(
         height=height,
         seed=seed,
         secret=requirement,
+        dictionary=dictionary,
     )
 
 
@@ -1398,6 +1489,7 @@ def generate_secret_in_crossword(
     requirement: SecretRequirement,
     *,
     layout: SpecificationLayout,
+    dictionary: CrosswordDictionary | None = None,
     seed: int = DEFAULT_SEED,
     maximum_width: int = 50,
     maximum_height: int = 50,
@@ -1409,12 +1501,16 @@ def generate_secret_in_crossword(
         raise GenerationError("dogenerování vyžaduje konkrétní text tajenky")
     if layout not in {"swedish", "numbered"}:
         raise GenerationError(f"nepodporované rozvržení {layout!r}")
+    entries_by_length = (
+        _usable_entries(dictionary) if dictionary is not None else None
+    )
 
     placement = _find_existing_secret_placement(
         crossword,
         requirement,
         empty_only=True,
         seed=seed,
+        entries_by_length=entries_by_length,
     )
     if placement is not None:
         return SecretGenerationResult(
@@ -1431,6 +1527,7 @@ def generate_secret_in_crossword(
         requirement,
         empty_only=False,
         seed=seed,
+        entries_by_length=entries_by_length,
     )
     if placement is not None:
         return SecretGenerationResult(
@@ -1452,6 +1549,7 @@ def generate_secret_in_crossword(
             height,
             requirement,
             seed=seed,
+            dictionary=dictionary,
         )
     except GenerationError:
         pass
@@ -1479,6 +1577,7 @@ def generate_secret_in_crossword(
                 candidate_height,
                 requirement,
                 seed=seed,
+                dictionary=dictionary,
             )
         except GenerationError:
             continue
@@ -1496,17 +1595,37 @@ def generate_secret_in_crossword(
     )
 
 
-def place_secret_in_template(
+def _place_secret_in_template(
     template: CrosswordDocument,
     requirement: SecretRequirement,
     *,
-    seed: int = DEFAULT_SEED,
+    seed: int,
+    entries_by_length: dict[int, tuple[_Entry, ...]] | None,
 ) -> CrosswordDocument:
     """Umístí tajenku do nepřekrývajících se slotů šablony."""
 
     if template.secrets:
         raise GenerationError("šablona už obsahuje připravenou tajenku")
     _validate_secret_requirement(requirement)
+    if requirement.words and entries_by_length is not None:
+        placement = _find_existing_secret_placement(
+            template,
+            requirement,
+            empty_only=False,
+            seed=seed,
+            entries_by_length=entries_by_length,
+        )
+        if placement is None or placement.replacements:
+            raise GenerationError(
+                "v šabloně nelze tajenku umístit tak, aby pro každé "
+                "dotčené prázdné heslo existoval kandidát ve slovníku"
+            )
+        return _apply_existing_secret_placement(
+            template,
+            requirement,
+            placement,
+        )
+
     slots = list(template.slots)
     random.Random(seed).shuffle(slots)
 
@@ -1580,6 +1699,25 @@ def place_secret_in_template(
         template,
         slots=tuple(filled_slots),
         secrets=(secret,),
+    )
+
+
+def place_secret_in_template(
+    template: CrosswordDocument,
+    requirement: SecretRequirement,
+    *,
+    seed: int = DEFAULT_SEED,
+    dictionary: CrosswordDictionary | None = None,
+) -> CrosswordDocument:
+    """Umístí tajenku do nepřekrývajících se slotů šablony."""
+
+    return _place_secret_in_template(
+        template,
+        requirement,
+        seed=seed,
+        entries_by_length=(
+            _usable_entries(dictionary) if dictionary is not None else None
+        ),
     )
 
 

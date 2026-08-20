@@ -19,6 +19,11 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Literal, cast
 
 from krizovkar.alphabet import split_answer_letters
+from krizovkar.dictionary import (
+    CrosswordDictionary,
+    DictionaryError,
+    load_dictionary,
+)
 from krizovkar.generator import (
     DEFAULT_GRID_HEIGHT,
     DEFAULT_GRID_WIDTH,
@@ -154,6 +159,14 @@ class NewTemplateResult:
     document: CrosswordDocument
     layout: SpecificationLayout
     creation_mode: TemplateCreationMode
+
+
+@dataclass(frozen=True, slots=True)
+class SecretGenerationInput:
+    """Tajenka a slovník vybrané pro její bezpečné dogenerování."""
+
+    requirement: SecretRequirement
+    dictionary: CrosswordDictionary
 
 
 @dataclass(frozen=True, slots=True)
@@ -752,12 +765,14 @@ def _template_cli_command(
 
 
 class SecretGenerationDialog(simpledialog.Dialog):
-    """Načte konkrétní text tajenky pro otevřenou křížovku."""
+    """Načte tajenku a slovník pro kontrolu budoucích křížení."""
 
     def __init__(self, parent: tk.Misc) -> None:
         self._secret_value: tk.StringVar
         self._secret_editor: ttk.Entry
-        self._requirement: SecretRequirement | None = None
+        self._dictionary_value: tk.StringVar
+        self._dictionary_editor: ttk.Entry
+        self._input: SecretGenerationInput | None = None
         super().__init__(parent, "Dogenerovat tajenku")
 
     def body(self, master: tk.Frame) -> tk.Widget:
@@ -767,20 +782,60 @@ class SecretGenerationDialog(simpledialog.Dialog):
         ttk.Label(
             master,
             text=(
-                "Zadejte text tajenky. Rozdělit ji lze pouze mezi "
-                "celými slovy."
+                "Zadejte text tajenky a JSON slovník. Tajenku lze rozdělit "
+                "pouze mezi celými slovy; slovník ověří budoucí křížení."
             ),
             wraplength=360,
         ).grid(row=0, column=0, sticky="w")
+        ttk.Label(master, text="Tajenka").grid(
+            row=1,
+            column=0,
+            sticky="w",
+            pady=(10, 0),
+        )
         self._secret_value = tk.StringVar(master=master)
         self._secret_editor = ttk.Entry(
             master,
             width=36,
             textvariable=self._secret_value,
         )
-        self._secret_editor.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        self._secret_editor.grid(row=2, column=0, sticky="ew", pady=(3, 0))
         _bind_text_entry_context_menu(self._secret_editor)
+
+        ttk.Label(master, text="Slovník (JSON)").grid(
+            row=3,
+            column=0,
+            sticky="w",
+            pady=(10, 0),
+        )
+        dictionary_row = ttk.Frame(master)
+        dictionary_row.grid(row=4, column=0, sticky="ew", pady=(3, 0))
+        dictionary_row.columnconfigure(0, weight=1)
+        self._dictionary_value = tk.StringVar(master=master)
+        self._dictionary_editor = ttk.Entry(
+            dictionary_row,
+            textvariable=self._dictionary_value,
+        )
+        self._dictionary_editor.grid(row=0, column=0, sticky="ew")
+        _bind_text_entry_context_menu(self._dictionary_editor)
+        ttk.Button(
+            dictionary_row,
+            text="Vybrat…",
+            command=self._choose_dictionary,
+        ).grid(row=0, column=1, padx=(8, 0))
         return self._secret_editor
+
+    def _choose_dictionary(self) -> None:
+        filename = filedialog.askopenfilename(
+            parent=self,
+            title="Vybrat slovník Křížovkáře",
+            filetypes=(
+                ("JSON soubory", "*.json"),
+                ("Všechny soubory", "*"),
+            ),
+        )
+        if filename:
+            self._dictionary_value.set(filename)
 
     def buttonbox(self) -> None:
         buttons = ttk.Frame(self, padding=(16, 0, 16, 16))
@@ -805,7 +860,7 @@ class SecretGenerationDialog(simpledialog.Dialog):
             if requirement is None:
                 raise GuiInputError("Vyplňte tajenku.")
         except GuiInputError as error:
-            self._requirement = None
+            self._input = None
             messagebox.showerror(
                 "Tajenku nelze dogenerovat",
                 str(error),
@@ -813,11 +868,37 @@ class SecretGenerationDialog(simpledialog.Dialog):
             )
             self._secret_editor.focus_set()
             return False
-        self._requirement = requirement
+
+        dictionary_path = self._dictionary_value.get().strip()
+        if not dictionary_path:
+            self._input = None
+            messagebox.showerror(
+                "Tajenku nelze dogenerovat",
+                "Vyberte JSON slovník.",
+                parent=self,
+            )
+            self._dictionary_editor.focus_set()
+            return False
+        try:
+            dictionary = load_dictionary(Path(dictionary_path).expanduser())
+        except DictionaryError as error:
+            self._input = None
+            messagebox.showerror(
+                "Tajenku nelze dogenerovat",
+                str(error),
+                parent=self,
+            )
+            self._dictionary_editor.focus_set()
+            return False
+
+        self._input = SecretGenerationInput(
+            requirement=requirement,
+            dictionary=dictionary,
+        )
         return True
 
     def apply(self) -> None:
-        self.result = self._requirement
+        self.result = self._input
 
 
 class TemplateGenerationDialog(simpledialog.Dialog):
@@ -4131,8 +4212,8 @@ class CrosswordDocumentWindow(ttk.Frame):
             return
 
         dialog = SecretGenerationDialog(self.root)
-        requirement = cast(SecretRequirement | None, dialog.result)
-        if requirement is None:
+        generation_input = cast(SecretGenerationInput | None, dialog.result)
+        if generation_input is None:
             return
 
         layout = self._template_layout or _template_generation_layout(
@@ -4143,8 +4224,9 @@ class CrosswordDocumentWindow(ttk.Frame):
         try:
             result: SecretGenerationResult = generate_secret_in_crossword(
                 crossword,
-                requirement,
+                generation_input.requirement,
                 layout=layout,
+                dictionary=generation_input.dictionary,
                 maximum_width=_MAX_CROSSWORD_DIMENSION,
                 maximum_height=_MAX_CROSSWORD_DIMENSION,
             )

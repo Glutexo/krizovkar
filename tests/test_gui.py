@@ -12,6 +12,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock, call, patch
 
+from krizovkar.dictionary import CrosswordDictionary, DictionaryEntry
 from krizovkar.generator import (
     GenerationError,
     SecretGenerationResult,
@@ -27,6 +28,7 @@ from krizovkar.gui import (
     GuiInputError,
     NewTemplateResult,
     SecretGenerationDialog,
+    SecretGenerationInput,
     TemplateGenerationDialog,
     _answer_conflicts_with_crossing,
     _bind_text_entry_context_menu,
@@ -83,6 +85,9 @@ from krizovkar.model import (
 from krizovkar.renderer import RenderError
 
 PDF_BYTES = b"%PDF-1.7\n%%EOF\n"
+TEST_DICTIONARY = CrosswordDictionary(
+    entries=(DictionaryEntry(answer="LES", clues=("Porost stromů",)),)
+)
 
 
 def _fake_lualatex(source: Path, output_directory: Path) -> Path:
@@ -1260,36 +1265,72 @@ class GuiTest(unittest.TestCase):
         dialog._secret_value = Mock()
         dialog._secret_value.get.return_value = " Komu se nelení. "
         dialog._secret_editor = Mock()
-        dialog._requirement = None
+        dialog._dictionary_value = Mock()
+        dialog._dictionary_value.get.return_value = "slovnik.json"
+        dialog._dictionary_editor = Mock()
+        dialog._input = None
 
-        valid = SecretGenerationDialog.validate(dialog)
+        with patch(
+            "krizovkar.gui.load_dictionary",
+            return_value=TEST_DICTIONARY,
+        ) as load:
+            valid = SecretGenerationDialog.validate(dialog)
         SecretGenerationDialog.apply(dialog)
 
         self.assertTrue(valid)
         self.assertEqual(
-            SecretRequirement(words=("KOMU", "SE", "NELENÍ")),
+            SecretGenerationInput(
+                requirement=SecretRequirement(
+                    words=("KOMU", "SE", "NELENÍ")
+                ),
+                dictionary=TEST_DICTIONARY,
+            ),
             dialog.result,
         )
+        load.assert_called_once_with(Path("slovnik.json"))
         dialog._secret_editor.focus_set.assert_not_called()
+        dialog._dictionary_editor.focus_set.assert_not_called()
 
     def test_secret_generation_dialog_keeps_blank_secret_open(self) -> None:
         dialog = SecretGenerationDialog.__new__(SecretGenerationDialog)
         dialog._secret_value = Mock()
         dialog._secret_value.get.return_value = "  "
         dialog._secret_editor = Mock()
-        dialog._requirement = Mock()
+        dialog._input = Mock()
 
         with patch("krizovkar.gui.messagebox.showerror") as show_error:
             valid = SecretGenerationDialog.validate(dialog)
 
         self.assertFalse(valid)
-        self.assertIsNone(dialog._requirement)
+        self.assertIsNone(dialog._input)
         show_error.assert_called_once_with(
             "Tajenku nelze dogenerovat",
             "Vyplňte tajenku.",
             parent=dialog,
         )
         dialog._secret_editor.focus_set.assert_called_once_with()
+
+    def test_secret_generation_dialog_requires_dictionary(self) -> None:
+        dialog = SecretGenerationDialog.__new__(SecretGenerationDialog)
+        dialog._secret_value = Mock()
+        dialog._secret_value.get.return_value = "Tajenka"
+        dialog._secret_editor = Mock()
+        dialog._dictionary_value = Mock()
+        dialog._dictionary_value.get.return_value = "  "
+        dialog._dictionary_editor = Mock()
+        dialog._input = Mock()
+
+        with patch("krizovkar.gui.messagebox.showerror") as show_error:
+            valid = SecretGenerationDialog.validate(dialog)
+
+        self.assertFalse(valid)
+        self.assertIsNone(dialog._input)
+        show_error.assert_called_once_with(
+            "Tajenku nelze dogenerovat",
+            "Vyberte JSON slovník.",
+            parent=dialog,
+        )
+        dialog._dictionary_editor.focus_set.assert_called_once_with()
 
     def test_builds_cli_command_for_empty_template(self) -> None:
         self.assertEqual(
@@ -3725,7 +3766,10 @@ class GuiTest(unittest.TestCase):
                 wraps=window._set_dirty,
             ) as set_dirty,
         ):
-            dialog_type.return_value.result = requirement
+            dialog_type.return_value.result = SecretGenerationInput(
+                requirement=requirement,
+                dictionary=TEST_DICTIONARY,
+            )
             CrosswordDocumentWindow.generate_crossword_secret(window)
 
         dialog_type.assert_called_once_with(window.root)
@@ -3733,6 +3777,7 @@ class GuiTest(unittest.TestCase):
             original,
             requirement,
             layout="numbered",
+            dictionary=TEST_DICTIONARY,
             maximum_width=50,
             maximum_height=50,
         )
@@ -3795,7 +3840,10 @@ class GuiTest(unittest.TestCase):
                 side_effect=GenerationError("tajenku nelze umístit"),
             ),
         ):
-            dialog_type.return_value.result = requirement
+            dialog_type.return_value.result = SecretGenerationInput(
+                requirement=requirement,
+                dictionary=TEST_DICTIONARY,
+            )
             CrosswordDocumentWindow.generate_crossword_secret(window)
 
         self.assertIs(original, window._crossword)

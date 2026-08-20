@@ -137,12 +137,15 @@ a začátků hesel i úpravy YAML zdroje včetně dočasně neplatného zápisu.
 změna po návratu do staršího stavu zahodí dosavadní kroky **Vpřed**.
 
 Volba **Úpravy → Dogenerovat tajenku…** doplní konkrétní text tajenky do
-otevřené křížovky. Tajenku může rozdělit pouze mezi celými slovy a zachová
+otevřené křížovky. Ve stejném dialogu se vybírá JSON slovník, protože zdrojový
+slovník není součástí projektu. Tajenku může rozdělit pouze mezi celými slovy a zachová
 nezalomitelné spojení jednopísmenných souhláskových předložek s následujícím
 slovem. Pevná mezera výslovně zakáže rozdělení v daném místě. Nejprve vyhledá
 vyhovující prázdná místa, aniž zasáhne do vyplněných hesel. Pokud to nejde,
 zvolí umístění vyžadující odstranění nejmenšího počtu stávajících hesel včetně
-rozporných křížení. Když tajenka nepasuje do současných míst, vytvoří nové
+rozporných křížení. Každé prázdné heslo, do kterého zvolená tajenka doplní
+jedno nebo více písmen, přitom musí mít ve slovníku alespoň jedno použitelné
+heslo odpovídající celému vzniklému vzoru. Když tajenka nepasuje do současných míst, vytvoří nové
 rozvržení se stejným rozměrem; teprve pokud nestačí ani to, křížovku co
 nejméně zvětší, nejvýše na 50 × 50 polí. Při novém rozvržení nahradí dosavadní
 obsah bez potvrzení. Celé dogenerování je jeden krok historie, takže je lze
