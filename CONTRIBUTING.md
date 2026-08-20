@@ -33,6 +33,10 @@ uv run python -m compileall -q src tests
 
 Veřejná dokumentace projektu je primárně v češtině. Uživatelské pojmy mají být konzistentní a srozumitelné i lidem bez technického zázemí.
 
+Jazykově specifická pravidla patří do samostatných modulů v
+`src/krizovkar/languages/`; česká implementace je v `czech.py`. Generátor,
+renderer ani datový model nemají tato pravidla duplikovat.
+
 České početní tvary jsou v gettext katalogu
 `src/krizovkar/locale/cs/LC_MESSAGES/krizovkar.po`. Po jeho změně aktualizuj
 binární katalog a zahrň oba soubory do stejného commitu:

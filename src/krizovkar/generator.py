@@ -11,6 +11,7 @@ from typing import Literal
 
 from krizovkar.alphabet import SUPPORTED_SINGLE_LETTERS, split_answer_letters
 from krizovkar.dictionary import CrosswordDictionary
+from krizovkar.languages.czech import unbreakable_word_boundaries
 from krizovkar.layout import (
     MAX_SEGMENT_LENGTH,
     MIN_SEGMENT_LENGTH,
@@ -54,7 +55,6 @@ from krizovkar.model import (
     WordSlot,
     secret_path_arrows,
 )
-from krizovkar.typography import protect_czech_prepositions
 
 DEFAULT_GRID_WIDTH = 15
 DEFAULT_GRID_HEIGHT = 10
@@ -209,9 +209,7 @@ def _validate_secret_requirement(requirement: SecretRequirement) -> None:
         for count in requirement.part_word_counts[:-1]:
             word_offset += count
             part_boundaries.add(word_offset)
-        if part_boundaries & _czech_unbreakable_word_boundaries(
-            requirement.words
-        ):
+        if part_boundaries & unbreakable_word_boundaries(requirement.words):
             raise GenerationError(
                 "tajenku nelze rozdělit mezi jednopísmennou "
                 "souhláskovou předložkou a následujícím slovem"
@@ -849,25 +847,12 @@ def _part_lengths_from_word_counts(
     return tuple(lengths)
 
 
-def _czech_unbreakable_word_boundaries(
-    words: tuple[str, ...],
-) -> frozenset[int]:
-    """Vrátí švy zakázané stejným pravidlem jako zalomení legendy."""
-
-    boundaries = set()
-    for following_index in range(1, len(words)):
-        pair = f"{words[following_index - 1]} {words[following_index]}"
-        if protect_czech_prepositions(pair) != pair:
-            boundaries.add(following_index)
-    return frozenset(boundaries)
-
-
 def _word_partitions(
     words: tuple[str, ...],
     available_lengths: frozenset[int],
 ) -> tuple[tuple[tuple[int, ...], tuple[int, ...]], ...]:
     results: list[tuple[tuple[int, ...], tuple[int, ...]]] = []
-    unbreakable_boundaries = _czech_unbreakable_word_boundaries(words)
+    unbreakable_boundaries = unbreakable_word_boundaries(words)
 
     def search(
         word_index: int,

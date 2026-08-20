@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import BinaryIO, TextIO
 
+from krizovkar.languages.czech import mark_hyphenation, protect_prepositions
 from krizovkar.localization import system_error_message
 from krizovkar.model import (
     CrosswordGrid,
@@ -21,7 +22,6 @@ from krizovkar.model import (
     SecretPrompt,
     cell_numbers,
 )
-from krizovkar.typography import mark_czech_hyphenation, protect_czech_prepositions
 
 CELL_SIZE_MM = 12.0
 CELL_PADDING_MM = 0.6
@@ -128,7 +128,7 @@ def _point(x: float, y: float) -> str:
 
 def _escape_latex(text: str, *, typography: bool = False) -> str:
     if typography:
-        text = mark_czech_hyphenation(protect_czech_prepositions(text))
+        text = mark_hyphenation(protect_prepositions(text))
     return "".join(_LATEX_ESCAPES.get(character, character) for character in text)
 
 
