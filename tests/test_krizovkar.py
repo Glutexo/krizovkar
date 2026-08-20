@@ -1438,6 +1438,7 @@ class CommandTest(unittest.TestCase):
         self.assertIn("--empty", help_text)
         self.assertIn("--randomize", help_text)
         self.assertIn("--seed", help_text)
+        self.assertIn("--dictionary", help_text)
         self.assertIn("bez vnitřních předělů", help_text)
         self.assertIn("pseudonáhodně", help_text)
 
@@ -1670,7 +1671,11 @@ class CommandTest(unittest.TestCase):
     def test_template_rejects_generated_options_with_empty_structure(
         self,
     ) -> None:
-        for option in (("--seed", "1"), ("--secret-length", "4")):
+        for option in (
+            ("--seed", "1"),
+            ("--secret-length", "4"),
+            ("--dictionary", "slovník.json"),
+        ):
             with self.subTest(option=option):
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
@@ -1727,7 +1732,12 @@ class CommandTest(unittest.TestCase):
         self.assertIn("standardní výstup", stderr.getvalue())
 
     def test_template_rejects_dense_options_with_specification(self) -> None:
-        for option in (("--width", "7"), ("--empty",), ("--randomize",)):
+        for option in (
+            ("--width", "7"),
+            ("--empty",),
+            ("--randomize",),
+            ("--dictionary", "slovník.json"),
+        ):
             with self.subTest(option=option):
                 stderr = io.StringIO()
 
@@ -1943,6 +1953,37 @@ class CommandTest(unittest.TestCase):
             assert template.secrets[0].prompt is not None
             self.assertEqual("below", template.secrets[0].prompt.placement)
             self.assertEqual("right", template.secrets[0].prompt.alignment)
+
+    def test_template_uses_dictionary_to_check_secret_crossings(self) -> None:
+        stderr = io.StringIO()
+
+        with (
+            patch(
+                "sys.stdin",
+                io.StringIO('{"ZZZ": ["Tři poslední písmena"]}'),
+            ),
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(stderr),
+        ):
+            result = main(
+                [
+                    "template",
+                    "--randomize",
+                    "--layout",
+                    "numbered",
+                    "--width",
+                    "3",
+                    "--height",
+                    "3",
+                    "--secret",
+                    "ABC",
+                    "--dictionary",
+                    "-",
+                ]
+            )
+
+        self.assertEqual(2, result)
+        self.assertIn("kandidát ve slovníku", stderr.getvalue())
 
     def test_fill_uses_secret_already_stored_in_crossword(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

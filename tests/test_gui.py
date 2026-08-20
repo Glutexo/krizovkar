@@ -12,7 +12,11 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock, call, patch
 
-from krizovkar.dictionary import CrosswordDictionary, DictionaryEntry
+from krizovkar.dictionary import (
+    CrosswordDictionary,
+    DictionaryEntry,
+    DictionaryError,
+)
 from krizovkar.generator import (
     GenerationError,
     SecretGenerationResult,
@@ -31,12 +35,16 @@ from krizovkar.gui import (
     SecretGenerationInput,
     TemplateGenerationDialog,
     _answer_conflicts_with_crossing,
+    _available_dictionary_paths,
     _bind_text_entry_context_menu,
+    _browse_for_dictionary,
     _configure_tk_runtime,
+    _create_dictionary_editor,
     _create_generation_entry,
     _create_help_menu,
     _create_view_menu,
     _create_window_menu,
+    _dictionary_directory,
     _inherit_macos_menu_bar,
     _keyboard_shortcut,
     _multiple_cell_selection_sequence,
@@ -178,6 +186,129 @@ class GuiTest(unittest.TestCase):
             ),
             storage_path,
         )
+
+    def test_dictionaries_use_platform_data_directory(self) -> None:
+        with (
+            patch("krizovkar.gui.sys.platform", "darwin"),
+            patch(
+                "krizovkar.gui.Path.home",
+                return_value=Path("/Users/test"),
+            ),
+        ):
+            macos_directory = _dictionary_directory()
+
+        self.assertEqual(
+            Path(
+                "/Users/test/Library/Application Support/krizovkar/"
+                "dictionaries"
+            ),
+            macos_directory,
+        )
+
+        with (
+            patch("krizovkar.gui.sys.platform", "linux"),
+            patch("krizovkar.gui.os.name", "posix"),
+            patch.dict(
+                "krizovkar.gui.os.environ",
+                {"XDG_DATA_HOME": "/home/test/data"},
+            ),
+        ):
+            linux_directory = _dictionary_directory()
+
+        self.assertEqual(
+            Path("/home/test/data/krizovkar/dictionaries"),
+            linux_directory,
+        )
+
+        windows_os = Mock()
+        windows_os.name = "nt"
+        windows_os.environ = {"APPDATA": "C:/Users/test/AppData/Roaming"}
+        with (
+            patch("krizovkar.gui.sys.platform", "win32"),
+            patch("krizovkar.gui.os", windows_os),
+        ):
+            windows_directory = _dictionary_directory()
+
+        self.assertEqual(
+            Path("C:/Users/test/AppData/Roaming/krizovkar/dictionaries"),
+            windows_directory,
+        )
+
+    def test_finds_json_dictionaries_in_expected_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            later = root / "Žlutý.JSON"
+            first = root / "abeceda.json"
+            ignored = root / "poznámky.txt"
+            nested = root / "vnořený.json"
+            later.write_text("{}", encoding="utf-8")
+            first.write_text("{}", encoding="utf-8")
+            ignored.write_text("{}", encoding="utf-8")
+            nested.mkdir()
+
+            paths = _available_dictionary_paths(root)
+
+        self.assertEqual((first, later), paths)
+
+    def test_dictionary_editor_offers_found_paths_and_accepts_text(
+        self,
+    ) -> None:
+        parent = Mock()
+        variable = Mock()
+        editor = Mock()
+        paths = (Path("/slovniky/a.json"), Path("/slovniky/b.json"))
+
+        with (
+            patch(
+                "krizovkar.gui._available_dictionary_paths",
+                return_value=paths,
+            ),
+            patch(
+                "krizovkar.gui.ttk.Combobox",
+                return_value=editor,
+            ) as combobox,
+            patch("krizovkar.gui._bind_text_entry_context_menu") as bind,
+        ):
+            result = _create_dictionary_editor(parent, variable)
+
+        self.assertIs(editor, result)
+        combobox.assert_called_once_with(
+            parent,
+            state="normal",
+            values=("/slovniky/a.json", "/slovniky/b.json"),
+            textvariable=variable,
+        )
+        bind.assert_called_once_with(editor)
+
+    def test_dictionary_browser_starts_in_expected_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            expected = Path(directory) / "krizovkar" / "dictionaries"
+            selected = expected / "český.json"
+            parent = Mock()
+            variable = Mock()
+            with (
+                patch(
+                    "krizovkar.gui._dictionary_directory",
+                    return_value=expected,
+                ),
+                patch(
+                    "krizovkar.gui.filedialog.askopenfilename",
+                    return_value=str(selected),
+                ) as choose,
+            ):
+                _browse_for_dictionary(parent, variable)
+
+            self.assertTrue(expected.is_dir())
+            choose.assert_called_once_with(
+                parent=parent,
+                title="Vybrat slovník Křížovkáře",
+                initialdir=str(expected),
+                filetypes=(
+                    ("JSON soubory", "*.json"),
+                    ("Všechny soubory", "*"),
+                ),
+            )
+            variable.set.assert_called_once_with(str(selected))
 
     def test_recent_documents_are_deduplicated_limited_and_persisted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1310,7 +1441,7 @@ class GuiTest(unittest.TestCase):
         )
         dialog._secret_editor.focus_set.assert_called_once_with()
 
-    def test_secret_generation_dialog_requires_dictionary(self) -> None:
+    def test_secret_generation_dialog_accepts_missing_dictionary(self) -> None:
         dialog = SecretGenerationDialog.__new__(SecretGenerationDialog)
         dialog._secret_value = Mock()
         dialog._secret_value.get.return_value = "Tajenka"
@@ -1320,16 +1451,52 @@ class GuiTest(unittest.TestCase):
         dialog._dictionary_editor = Mock()
         dialog._input = Mock()
 
-        with patch("krizovkar.gui.messagebox.showerror") as show_error:
+        with (
+            patch("krizovkar.gui.load_dictionary") as load,
+            patch("krizovkar.gui.messagebox.showerror") as show_error,
+        ):
+            valid = SecretGenerationDialog.validate(dialog)
+        SecretGenerationDialog.apply(dialog)
+
+        self.assertTrue(valid)
+        self.assertEqual(
+            SecretGenerationInput(
+                requirement=SecretRequirement(words=("TAJENKA",)),
+                dictionary=None,
+            ),
+            dialog.result,
+        )
+        load.assert_not_called()
+        show_error.assert_not_called()
+        dialog._dictionary_editor.focus_set.assert_not_called()
+
+    def test_secret_generation_dialog_rejects_invalid_dictionary(self) -> None:
+        dialog = SecretGenerationDialog.__new__(SecretGenerationDialog)
+        dialog._secret_value = Mock()
+        dialog._secret_value.get.return_value = "Tajenka"
+        dialog._secret_editor = Mock()
+        dialog._dictionary_value = Mock()
+        dialog._dictionary_value.get.return_value = "poškozený.json"
+        dialog._dictionary_editor = Mock()
+        dialog._input = Mock()
+
+        with (
+            patch(
+                "krizovkar.gui.load_dictionary",
+                side_effect=DictionaryError("slovník není platný"),
+            ),
+            patch("krizovkar.gui.messagebox.showerror") as show_error,
+        ):
             valid = SecretGenerationDialog.validate(dialog)
 
         self.assertFalse(valid)
         self.assertIsNone(dialog._input)
         show_error.assert_called_once_with(
             "Tajenku nelze dogenerovat",
-            "Vyberte JSON slovník.",
+            "slovník není platný",
             parent=dialog,
         )
+        dialog._secret_editor.focus_set.assert_not_called()
         dialog._dictionary_editor.focus_set.assert_called_once_with()
 
     def test_builds_cli_command_for_empty_template(self) -> None:
@@ -1370,6 +1537,21 @@ class GuiTest(unittest.TestCase):
             ),
         )
 
+    def test_builds_cli_command_with_selected_dictionary(self) -> None:
+        self.assertEqual(
+            "uv run krizovkar template --randomize --seed 123 "
+            "--secret TAJENKA --dictionary '/slovníky/český slovník.json' "
+            "--layout numbered --width 15 --height 15",
+            _template_cli_command(
+                CrosswordSettings(width=15, height=15),
+                "numbered",
+                "generated",
+                seed=123,
+                secret=SecretRequirement(words=("TAJENKA",)),
+                dictionary=Path("/slovníky/český slovník.json"),
+            ),
+        )
+
     def test_template_dialog_refreshes_cli_command_from_selection(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
         dialog._width_value = Mock()
@@ -1384,6 +1566,8 @@ class GuiTest(unittest.TestCase):
         dialog._seed_value.get.return_value = "123"
         dialog._secret_value = Mock()
         dialog._secret_value.get.return_value = ""
+        dialog._dictionary_value = Mock()
+        dialog._dictionary_value.get.return_value = ""
         dialog._cli_command_value = Mock()
 
         TemplateGenerationDialog._refresh_cli_command(dialog)
@@ -1587,24 +1771,31 @@ class GuiTest(unittest.TestCase):
         dialog._seed_value.get.return_value = "123"
         dialog._secret_value = Mock()
         dialog._secret_value.get.return_value = "Komu se nelení"
+        dialog._dictionary_value = Mock()
+        dialog._dictionary_value.get.return_value = ""
         dialog._width_editor = Mock()
         dialog._new_template = None
         template = create_blank_template(CrosswordSettings(3, 3), "numbered")
 
-        with patch(
-            "krizovkar.gui.create_new_template",
-            return_value=template,
-        ) as create_template:
+        with (
+            patch("krizovkar.gui.load_dictionary") as load,
+            patch(
+                "krizovkar.gui.create_new_template",
+                return_value=template,
+            ) as create_template,
+        ):
             valid = TemplateGenerationDialog.validate(dialog)
             TemplateGenerationDialog.apply(dialog)
 
         self.assertTrue(valid)
+        load.assert_not_called()
         create_template.assert_called_once_with(
             CrosswordSettings(width=7, height=6),
             "numbered",
             "generated",
             seed=123,
             secret=SecretRequirement(words=("KOMU", "SE", "NELENÍ")),
+            dictionary=None,
         )
         self.assertEqual(
             NewTemplateResult(template, "numbered", "generated"),
@@ -1644,7 +1835,53 @@ class GuiTest(unittest.TestCase):
             "empty",
             seed=None,
             secret=None,
+            dictionary=None,
         )
+
+    def test_template_dialog_loads_selected_dictionary(self) -> None:
+        dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
+        dialog._width_value = Mock()
+        dialog._width_value.get.return_value = "7"
+        dialog._height_value = Mock()
+        dialog._height_value.get.return_value = "6"
+        dialog._layout_value = Mock()
+        dialog._layout_value.get.return_value = "numbered"
+        dialog._creation_mode_value = Mock()
+        dialog._creation_mode_value.get.return_value = "generated"
+        dialog._seed_value = Mock()
+        dialog._seed_value.get.return_value = "123"
+        dialog._secret_value = Mock()
+        dialog._secret_value.get.return_value = "Tajenka"
+        dialog._dictionary_value = Mock()
+        dialog._dictionary_value.get.return_value = "slovník.json"
+        dialog._dictionary_editor = Mock()
+        dialog._width_editor = Mock()
+        dialog._new_template = None
+        template = create_blank_template(CrosswordSettings(3, 3), "numbered")
+
+        with (
+            patch(
+                "krizovkar.gui.load_dictionary",
+                return_value=TEST_DICTIONARY,
+            ) as load,
+            patch(
+                "krizovkar.gui.create_new_template",
+                return_value=template,
+            ) as create_template,
+        ):
+            valid = TemplateGenerationDialog.validate(dialog)
+
+        self.assertTrue(valid)
+        load.assert_called_once_with(Path("slovník.json"))
+        create_template.assert_called_once_with(
+            CrosswordSettings(width=7, height=6),
+            "numbered",
+            "generated",
+            seed=123,
+            secret=SecretRequirement(words=("TAJENKA",)),
+            dictionary=TEST_DICTIONARY,
+        )
+        dialog._dictionary_editor.focus_set.assert_not_called()
 
     def test_template_dialog_keeps_invalid_settings_open(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
@@ -1660,6 +1897,9 @@ class GuiTest(unittest.TestCase):
         dialog._seed_value.get.return_value = "123"
         dialog._secret_value = Mock()
         dialog._secret_value.get.return_value = ""
+        dialog._dictionary_value = Mock()
+        dialog._dictionary_value.get.return_value = ""
+        dialog._dictionary_editor = Mock()
         dialog._width_editor = Mock()
         dialog._new_template = Mock()
 

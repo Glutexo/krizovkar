@@ -41,10 +41,12 @@ počátečního obsahu. Prázdná varianta vytvoří jednoduchý základ bez
 vnitřních předělů; vygenerovaná varianta rozvrhne místa pro hesla
 pseudonáhodně. Po jejím zvolení se zobrazí pole **Sémě**, předvyplněné
 náhodným celým číslem, které lze pro opakování konkrétního rozvržení
-změnit, a volitelné pole **Tajenka**. Generátor rozvržení přizpůsobí tak,
-aby se do něj zadaná tajenka vešla, a její části v novém dokumentu rovnou
-vyplní. Může ji rozdělit pouze mezi celými slovy a nejvýše na tolik dílů,
-kolik obsahuje slov. Stejně jako při zalamování legend přitom neoddělí
+změnit, a volitelná pole **Tajenka** a **Slovník**. Generátor rozvržení
+přizpůsobí tak, aby se do něj zadaná tajenka vešla, a její části v novém
+dokumentu rovnou vyplní. Je-li vybraný slovník, ověří proti němu budoucí
+křížení tajenky; bez slovníku tuto kontrolu vynechá. Tajenku může rozdělit
+pouze mezi celými slovy a nejvýše na tolik dílů, kolik obsahuje slov. Stejně
+jako při zalamování legend přitom neoddělí
 jednopísmennou souhláskovou předložku `k`, `s`, `v` nebo `z` od následujícího
 slova. Nerozdělí ji ani v místě pevné mezery. Více po sobě jdoucích slov ve
 stejném dílu spojí bez mezer. Tlačítko **Vytvořit** otevře výsledek jako nový
@@ -137,19 +139,30 @@ a začátků hesel i úpravy YAML zdroje včetně dočasně neplatného zápisu.
 změna po návratu do staršího stavu zahodí dosavadní kroky **Vpřed**.
 
 Volba **Úpravy → Dogenerovat tajenku…** doplní konkrétní text tajenky do
-otevřené křížovky. Ve stejném dialogu se vybírá JSON slovník, protože zdrojový
-slovník není součástí projektu. Tajenku může rozdělit pouze mezi celými slovy a zachová
+otevřené křížovky. Ve stejném dialogu lze volitelně vybrat slovník, protože
+zdrojový slovník není součástí projektu. Tajenku může rozdělit pouze mezi
+celými slovy a zachová
 nezalomitelné spojení jednopísmenných souhláskových předložek s následujícím
 slovem. Pevná mezera výslovně zakáže rozdělení v daném místě. Nejprve vyhledá
 vyhovující prázdná místa, aniž zasáhne do vyplněných hesel. Pokud to nejde,
 zvolí umístění vyžadující odstranění nejmenšího počtu stávajících hesel včetně
-rozporných křížení. Každé prázdné heslo, do kterého zvolená tajenka doplní
-jedno nebo více písmen, přitom musí mít ve slovníku alespoň jedno použitelné
-heslo odpovídající celému vzniklému vzoru. Když tajenka nepasuje do současných míst, vytvoří nové
+rozporných křížení. Je-li slovník vybraný, musí v něm mít každé prázdné
+heslo, do kterého zvolená tajenka doplní jedno nebo více písmen, alespoň jedno
+použitelné heslo odpovídající celému vzniklému vzoru. Bez slovníku se tato
+kontrola nepoužije. Když tajenka nepasuje do současných míst, vytvoří nové
 rozvržení se stejným rozměrem; teprve pokud nestačí ani to, křížovku co
 nejméně zvětší, nejvýše na 50 × 50 polí. Při novém rozvržení nahradí dosavadní
 obsah bez potvrzení. Celé dogenerování je jeden krok historie, takže je lze
 vrátit jediným **Zpět**.
+
+Oba dialogy nabízejí slovníky nalezené v uživatelské datové složce
+Křížovkáře. Na macOS je to
+`~/Library/Application Support/krizovkar/dictionaries`, ve Windows
+`%APPDATA%\krizovkar\dictionaries` a na Linuxu
+`$XDG_DATA_HOME/krizovkar/dictionaries`, případně
+`~/.local/share/krizovkar/dictionaries`. Tato složka se otevře i jako výchozí
+umístění tlačítka **Vybrat…**. Pole je editovatelné, takže do něj lze zadat také
+libovolnou jinou cestu k JSON slovníku.
 
 Nabídka **Zobrazení** obsahuje volbu **Zdroj YAML**, která pro zvolený dokument
 otevře vlastní běžné okno s jeho upravitelnou YAML podobou. Každá změna

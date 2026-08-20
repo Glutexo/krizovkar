@@ -162,8 +162,8 @@ def _parser() -> argparse.ArgumentParser:
         description=(
             "Převede vstupní zadání na švédskou nebo číslovanou "
             "šablonu. Bez vstupního zadání vytvoří z rozměru prázdný "
-            "základ nebo pseudonáhodně rozvrženou nevyplněnou šablonu, "
-            "aniž použije slovník."
+            "základ nebo pseudonáhodně rozvrženou nevyplněnou šablonu. "
+            "Volitelný slovník ověří budoucí křížení konkrétní tajenky."
         ),
     )
     template.add_argument(
@@ -224,6 +224,15 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     _add_secret_arguments(template, allow_lengths=True)
+    template.add_argument(
+        "--dictionary",
+        type=Path,
+        metavar="SLOVNÍK.json",
+        help=(
+            "volitelný slovník pro kontrolu křížení konkrétní tajenky; "
+            "- znamená standardní vstup"
+        ),
+    )
     template.add_argument(
         "--force",
         action="store_true",
@@ -615,11 +624,13 @@ def _template(arguments: argparse.Namespace) -> int:
                 arguments.secret_prompt,
                 arguments.secret_prompt_placement,
                 arguments.secret_prompt_alignment,
+                arguments.dictionary,
             )
             if any(value is not None for value in dense_options):
                 raise GenerationError(
                     "při převodu zadání nelze použít --width, --height, "
-                    "--empty, --randomize, --seed ani volby tajenky"
+                    "--empty, --randomize, --seed, --dictionary ani volby "
+                    "tajenky"
                 )
             specification = load_crossword_specification(
                 _input_source(arguments.specification)
@@ -649,11 +660,12 @@ def _template(arguments: argparse.Namespace) -> int:
                     arguments.secret_prompt,
                     arguments.secret_prompt_placement,
                     arguments.secret_prompt_alignment,
+                    arguments.dictionary,
                 )
                 if any(value is not None for value in incompatible_options):
                     raise GenerationError(
-                        "s volbou --empty nelze použít --seed ani volby "
-                        "tajenky"
+                        "s volbou --empty nelze použít --seed, --dictionary "
+                        "ani volby tajenky"
                     )
                 template = generate_empty_template(
                     width=width,
@@ -662,6 +674,11 @@ def _template(arguments: argparse.Namespace) -> int:
                 )
             else:
                 secret = _secret_requirement(arguments)
+                dictionary = (
+                    load_dictionary(_input_source(arguments.dictionary))
+                    if arguments.dictionary is not None
+                    else None
+                )
                 generate_template = (
                     generate_numbered_template
                     if arguments.layout == "numbered"
@@ -677,6 +694,7 @@ def _template(arguments: argparse.Namespace) -> int:
                     ),
                     secret=secret,
                     randomize_layout=arguments.randomize,
+                    dictionary=dictionary,
                 )
         if arguments.output is None:
             dump_crossword_document(template, sys.stdout)
@@ -686,7 +704,7 @@ def _template(arguments: argparse.Namespace) -> int:
                 arguments.output,
                 overwrite=arguments.force,
             )
-    except (GenerationError, ModelError) as error:
+    except (DictionaryError, GenerationError, ModelError) as error:
         print(f"chyba: {error}", file=sys.stderr)
         return 2
 

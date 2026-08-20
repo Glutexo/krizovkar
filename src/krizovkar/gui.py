@@ -163,10 +163,10 @@ class NewTemplateResult:
 
 @dataclass(frozen=True, slots=True)
 class SecretGenerationInput:
-    """Tajenka a slovník vybrané pro její bezpečné dogenerování."""
+    """Tajenka a případný slovník pro její bezpečné dogenerování."""
 
     requirement: SecretRequirement
-    dictionary: CrosswordDictionary
+    dictionary: CrosswordDictionary | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -379,6 +379,47 @@ def _recent_documents_storage_path() -> Path:
     return base / "krizovkar" / "recent-documents.json"
 
 
+def _dictionary_directory() -> Path:
+    """Vrátí očekávanou uživatelskou složku se slovníky."""
+
+    if sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    elif os.name == "nt":
+        configured = os.environ.get("APPDATA")
+        base = (
+            Path(configured)
+            if configured
+            else Path.home() / "AppData" / "Roaming"
+        )
+    else:
+        configured = os.environ.get("XDG_DATA_HOME")
+        base = (
+            Path(configured)
+            if configured
+            else Path.home() / ".local" / "share"
+        )
+    return base / "krizovkar" / "dictionaries"
+
+
+def _available_dictionary_paths(
+    directory: Path | None = None,
+) -> tuple[Path, ...]:
+    """Najde JSON slovníky přímo v očekávané uživatelské složce."""
+
+    search_directory = directory or _dictionary_directory()
+    try:
+        paths = tuple(
+            path
+            for path in search_directory.iterdir()
+            if path.is_file() and path.suffix.casefold() == ".json"
+        )
+    except OSError:
+        return ()
+    return tuple(
+        sorted(paths, key=lambda path: (path.name.casefold(), str(path)))
+    )
+
+
 class _RecentDocuments:
     """Udržuje malý trvalý seznam naposledy použitých dokumentů."""
 
@@ -546,7 +587,9 @@ def _inherit_macos_menu_bar(window: tk.Toplevel) -> None:
         window.configure(menu=menu)
 
 
-def _bind_text_entry_context_menu(editor: ttk.Entry) -> None:
+def _bind_text_entry_context_menu(
+    editor: ttk.Entry | ttk.Combobox,
+) -> None:
     menu = tk.Menu(editor, tearoff=False)
     for label, event_name in (
         ("Vyjmout", "<<Cut>>"),
@@ -611,6 +654,64 @@ def _create_generation_entry(
         grid_options["pady"] = (8, 0)
     editor.grid(**grid_options)
     return editor
+
+
+def _create_dictionary_editor(
+    parent: ttk.Frame,
+    variable: tk.StringVar,
+) -> ttk.Combobox:
+    """Vytvoří editovatelný výběr nalezeného nebo vlastního slovníku."""
+
+    editor = ttk.Combobox(
+        parent,
+        state="normal",
+        values=tuple(str(path) for path in _available_dictionary_paths()),
+        textvariable=variable,
+    )
+    _bind_text_entry_context_menu(editor)
+    return editor
+
+
+def _browse_for_dictionary(
+    parent: tk.Misc,
+    variable: tk.StringVar,
+) -> None:
+    """Vybere slovník, přednostně z očekávané uživatelské složky."""
+
+    directory = _dictionary_directory()
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    filename = filedialog.askopenfilename(
+        parent=parent,
+        title="Vybrat slovník Křížovkáře",
+        initialdir=str(directory),
+        filetypes=(
+            ("JSON soubory", "*.json"),
+            ("Všechny soubory", "*"),
+        ),
+    )
+    if filename:
+        variable.set(filename)
+
+
+def _optional_dictionary_path(value: str) -> Path | None:
+    """Převede neprázdnou hodnotu výběru na cestu slovníku."""
+
+    dictionary_path = value.strip()
+    if not dictionary_path:
+        return None
+    return Path(dictionary_path).expanduser()
+
+
+def _load_optional_dictionary(value: str) -> CrosswordDictionary | None:
+    """Načte zadaný slovník; prázdná hodnota kontrolu vypne."""
+
+    dictionary_path = _optional_dictionary_path(value)
+    if dictionary_path is None:
+        return None
+    return load_dictionary(dictionary_path)
 
 
 class PdfExportDialog(simpledialog.Dialog):
@@ -731,6 +832,7 @@ def _template_cli_command(
     *,
     seed: int | None,
     secret: SecretRequirement | None = None,
+    dictionary: Path | None = None,
 ) -> str:
     """Sestaví CLI příkaz pro stejnou novou šablonu jako dialog."""
 
@@ -745,6 +847,8 @@ def _template_cli_command(
         arguments.extend(("--randomize", "--seed", str(seed)))
         if secret is not None:
             arguments.extend(("--secret", " ".join(secret.words)))
+        if dictionary is not None:
+            arguments.extend(("--dictionary", str(dictionary)))
     else:
         raise GuiInputError(
             f"Nepodporovaný počáteční obsah šablony {creation_mode!r}."
@@ -765,13 +869,13 @@ def _template_cli_command(
 
 
 class SecretGenerationDialog(simpledialog.Dialog):
-    """Načte tajenku a slovník pro kontrolu budoucích křížení."""
+    """Načte tajenku a volitelný slovník pro kontrolu křížení."""
 
     def __init__(self, parent: tk.Misc) -> None:
         self._secret_value: tk.StringVar
         self._secret_editor: ttk.Entry
         self._dictionary_value: tk.StringVar
-        self._dictionary_editor: ttk.Entry
+        self._dictionary_editor: ttk.Combobox
         self._input: SecretGenerationInput | None = None
         super().__init__(parent, "Dogenerovat tajenku")
 
@@ -782,8 +886,8 @@ class SecretGenerationDialog(simpledialog.Dialog):
         ttk.Label(
             master,
             text=(
-                "Zadejte text tajenky a JSON slovník. Tajenku lze rozdělit "
-                "pouze mezi celými slovy; slovník ověří budoucí křížení."
+                "Zadejte text tajenky. Tajenku lze rozdělit pouze mezi "
+                "celými slovy; volitelný slovník ověří budoucí křížení."
             ),
             wraplength=360,
         ).grid(row=0, column=0, sticky="w")
@@ -802,7 +906,7 @@ class SecretGenerationDialog(simpledialog.Dialog):
         self._secret_editor.grid(row=2, column=0, sticky="ew", pady=(3, 0))
         _bind_text_entry_context_menu(self._secret_editor)
 
-        ttk.Label(master, text="Slovník (JSON)").grid(
+        ttk.Label(master, text="Slovník (volitelný)").grid(
             row=3,
             column=0,
             sticky="w",
@@ -812,12 +916,11 @@ class SecretGenerationDialog(simpledialog.Dialog):
         dictionary_row.grid(row=4, column=0, sticky="ew", pady=(3, 0))
         dictionary_row.columnconfigure(0, weight=1)
         self._dictionary_value = tk.StringVar(master=master)
-        self._dictionary_editor = ttk.Entry(
+        self._dictionary_editor = _create_dictionary_editor(
             dictionary_row,
-            textvariable=self._dictionary_value,
+            self._dictionary_value,
         )
         self._dictionary_editor.grid(row=0, column=0, sticky="ew")
-        _bind_text_entry_context_menu(self._dictionary_editor)
         ttk.Button(
             dictionary_row,
             text="Vybrat…",
@@ -826,16 +929,7 @@ class SecretGenerationDialog(simpledialog.Dialog):
         return self._secret_editor
 
     def _choose_dictionary(self) -> None:
-        filename = filedialog.askopenfilename(
-            parent=self,
-            title="Vybrat slovník Křížovkáře",
-            filetypes=(
-                ("JSON soubory", "*.json"),
-                ("Všechny soubory", "*"),
-            ),
-        )
-        if filename:
-            self._dictionary_value.set(filename)
+        _browse_for_dictionary(self, self._dictionary_value)
 
     def buttonbox(self) -> None:
         buttons = ttk.Frame(self, padding=(16, 0, 16, 16))
@@ -869,18 +963,10 @@ class SecretGenerationDialog(simpledialog.Dialog):
             self._secret_editor.focus_set()
             return False
 
-        dictionary_path = self._dictionary_value.get().strip()
-        if not dictionary_path:
-            self._input = None
-            messagebox.showerror(
-                "Tajenku nelze dogenerovat",
-                "Vyberte JSON slovník.",
-                parent=self,
-            )
-            self._dictionary_editor.focus_set()
-            return False
         try:
-            dictionary = load_dictionary(Path(dictionary_path).expanduser())
+            dictionary = _load_optional_dictionary(
+                self._dictionary_value.get()
+            )
         except DictionaryError as error:
             self._input = None
             messagebox.showerror(
@@ -921,9 +1007,11 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._creation_mode_value: tk.StringVar
         self._seed_value: tk.StringVar
         self._secret_value: tk.StringVar
+        self._dictionary_value: tk.StringVar
         self._generation_controls: ttk.Frame
         self._seed_editor: ttk.Entry
         self._secret_editor: ttk.Entry
+        self._dictionary_editor: ttk.Combobox
         self._cli_visible_value: tk.BooleanVar
         self._cli_command_value: tk.StringVar
         self._cli_command_frame: ttk.LabelFrame
@@ -1020,6 +1108,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             value=str(self._initial_seed),
         )
         self._secret_value = tk.StringVar(master=master)
+        self._dictionary_value = tk.StringVar(master=master)
         self._generation_controls = ttk.Frame(master)
         self._generation_controls.grid(
             row=7,
@@ -1049,6 +1138,29 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             row=1,
         )
         _bind_text_entry_context_menu(self._secret_editor)
+        ttk.Label(
+            self._generation_controls,
+            text="Slovník (volitelný)",
+        ).grid(row=2, column=0, sticky="w", pady=(8, 0))
+        dictionary_row = ttk.Frame(self._generation_controls)
+        dictionary_row.grid(
+            row=2,
+            column=1,
+            sticky="ew",
+            padx=(8, 0),
+            pady=(8, 0),
+        )
+        dictionary_row.columnconfigure(0, weight=1)
+        self._dictionary_editor = _create_dictionary_editor(
+            dictionary_row,
+            self._dictionary_value,
+        )
+        self._dictionary_editor.grid(row=0, column=0, sticky="ew")
+        ttk.Button(
+            dictionary_row,
+            text="Vybrat…",
+            command=self._choose_dictionary,
+        ).grid(row=0, column=1, padx=(8, 0))
         self._reserve_generation_controls_width(master)
         self._cli_command_value = tk.StringVar(master=master)
         for value in (
@@ -1058,6 +1170,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             self._creation_mode_value,
             self._seed_value,
             self._secret_value,
+            self._dictionary_value,
         ):
             value.trace_add("write", self._refresh_cli_command)
         self._creation_mode_value.trace_add(
@@ -1067,6 +1180,9 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._update_generation_controls()
         self._refresh_cli_command()
         return self._width_editor
+
+    def _choose_dictionary(self) -> None:
+        _browse_for_dictionary(self, self._dictionary_value)
 
     def _reserve_generation_controls_width(self, master: tk.Frame) -> None:
         master.update_idletasks()
@@ -1135,6 +1251,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         TemplateCreationMode,
         int | None,
         SecretRequirement | None,
+        Path | None,
     ]:
         settings = parse_template_settings(
             self._width_value.get(),
@@ -1156,17 +1273,23 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             if creation_mode_value == "generated"
             else None
         )
+        dictionary_path = (
+            _optional_dictionary_path(self._dictionary_value.get())
+            if creation_mode_value == "generated"
+            else None
+        )
         return (
             settings,
             cast(SpecificationLayout, layout_value),
             cast(TemplateCreationMode, creation_mode_value),
             seed,
             secret,
+            dictionary_path,
         )
 
     def _refresh_cli_command(self, *_trace_arguments: str) -> None:
         try:
-            settings, layout, creation_mode, seed, secret = (
+            settings, layout, creation_mode, seed, secret, dictionary_path = (
                 self._selected_configuration()
             )
             command = _template_cli_command(
@@ -1175,6 +1298,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
                 creation_mode,
                 seed=seed,
                 secret=secret,
+                dictionary=dictionary_path,
             )
         except GuiInputError:
             command = "Příkaz bude dostupný po opravě nastavení."
@@ -1205,8 +1329,13 @@ class TemplateGenerationDialog(simpledialog.Dialog):
 
     def validate(self) -> bool:
         try:
-            settings, layout, creation_mode, seed, secret = (
+            settings, layout, creation_mode, seed, secret, dictionary_path = (
                 self._selected_configuration()
+            )
+            dictionary = (
+                load_dictionary(dictionary_path)
+                if dictionary_path is not None
+                else None
             )
             self._new_template = NewTemplateResult(
                 document=create_new_template(
@@ -1215,18 +1344,24 @@ class TemplateGenerationDialog(simpledialog.Dialog):
                     creation_mode,
                     seed=seed,
                     secret=secret,
+                    dictionary=dictionary,
                 ),
                 layout=layout,
                 creation_mode=creation_mode,
             )
-        except GuiInputError as error:
+        except (DictionaryError, GuiInputError) as error:
             self._new_template = None
             messagebox.showerror(
                 "Šablonu nelze vytvořit",
                 str(error),
                 parent=self,
             )
-            self._width_editor.focus_set()
+            editor = (
+                self._dictionary_editor
+                if isinstance(error, DictionaryError)
+                else self._width_editor
+            )
+            editor.focus_set()
             return False
         return True
 
@@ -1272,6 +1407,7 @@ def create_blank_template(
     seed: int = DEFAULT_SEED,
     randomize_layout: bool = False,
     secret: SecretRequirement | None = None,
+    dictionary: CrosswordDictionary | None = None,
 ) -> CrosswordDocument:
     """Vygeneruje hustou prázdnou šablonu z rozvržení a rozměru."""
 
@@ -1289,6 +1425,7 @@ def create_blank_template(
             seed=seed,
             randomize_layout=randomize_layout,
             secret=secret,
+            dictionary=dictionary,
         )
     except GenerationError as error:
         raise GuiInputError(str(error)) from error
@@ -1301,6 +1438,7 @@ def create_new_template(
     *,
     seed: int | None = None,
     secret: SecretRequirement | None = None,
+    dictionary: CrosswordDictionary | None = None,
 ) -> CrosswordDocument:
     """Vytvoří prázdnou nebo pseudonáhodně rozvrženou šablonu."""
 
@@ -1320,6 +1458,7 @@ def create_new_template(
         seed=seed,
         randomize_layout=True,
         secret=secret,
+        dictionary=dictionary,
     )
 
 
