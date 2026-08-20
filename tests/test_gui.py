@@ -425,14 +425,14 @@ class GuiTest(unittest.TestCase):
             widget.bind.call_args_list,
         )
 
-    def test_edit_menu_reflects_available_document_history(self) -> None:
+    def test_edit_menu_reflects_history_and_secret_state(self) -> None:
         window = Mock()
         window._undo_menu_index = 0
         window._redo_menu_index = 1
         window._generate_secret_menu_index = 3
         window._history = [object(), object()]
         window._history_index = 0
-        window._crossword = object()
+        window._crossword = Mock(secrets=())
 
         CrosswordDocumentWindow._refresh_edit_menu(window)
 
@@ -440,13 +440,26 @@ class GuiTest(unittest.TestCase):
             [
                 call(0, state="disabled"),
                 call(1, state="normal"),
-                call(3, state="normal"),
+                call(3, label="Přidat tajenku…", state="normal"),
             ],
             window.edit_menu.entryconfigure.call_args_list,
         )
 
         window.edit_menu.reset_mock()
         window._history_index = 1
+        window._crossword = Mock(secrets=(object(),))
+        CrosswordDocumentWindow._refresh_edit_menu(window)
+
+        self.assertEqual(
+            [
+                call(0, state="normal"),
+                call(1, state="disabled"),
+                call(3, label="Změnit tajenku…", state="normal"),
+            ],
+            window.edit_menu.entryconfigure.call_args_list,
+        )
+
+        window.edit_menu.reset_mock()
         window._crossword = None
         CrosswordDocumentWindow._refresh_edit_menu(window)
 
@@ -454,7 +467,7 @@ class GuiTest(unittest.TestCase):
             [
                 call(0, state="normal"),
                 call(1, state="disabled"),
-                call(3, state="disabled"),
+                call(3, label="Přidat tajenku…", state="disabled"),
             ],
             window.edit_menu.entryconfigure.call_args_list,
         )

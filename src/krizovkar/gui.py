@@ -4074,6 +4074,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
 
     def _refresh_edit_menu(self) -> None:
+        crossword = self._crossword
         self.edit_menu.entryconfigure(
             self._undo_menu_index,
             state="normal" if self._history_index > 0 else "disabled",
@@ -4088,7 +4089,12 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         self.edit_menu.entryconfigure(
             self._generate_secret_menu_index,
-            state="normal" if self._crossword is not None else "disabled",
+            label=(
+                "Změnit tajenku…"
+                if crossword is not None and crossword.secrets
+                else "Přidat tajenku…"
+            ),
+            state="normal" if crossword is not None else "disabled",
         )
 
     def _bind_history_shortcuts(self, widget: tk.Misc) -> None:

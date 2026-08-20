@@ -142,9 +142,10 @@ a začátků hesel i úpravy YAML zdroje včetně dočasně neplatného zápisu.
 změna po návratu do staršího stavu zahodí dosavadní kroky **Vpřed**.
 
 Volba **Úpravy → Přidat tajenku…** doplní konkrétní text tajenky do
-otevřené křížovky. Ve stejném dialogu lze volitelně vybrat slovník, protože
-zdrojový slovník není součástí projektu. Tajenku může rozdělit pouze mezi
-celými slovy a zachová
+otevřené křížovky. Jakmile křížovka tajenku obsahuje, zobrazí se tato volba
+jako **Změnit tajenku…**. Ve stejném dialogu lze volitelně vybrat slovník,
+protože zdrojový slovník není součástí projektu. Tajenku může rozdělit pouze
+mezi celými slovy a zachová
 nezalomitelné spojení jednopísmenných souhláskových předložek s následujícím
 slovem. Pevná mezera výslovně zakáže rozdělení v daném místě. Nejprve vyhledá
 vyhovující prázdná místa, aniž zasáhne do vyplněných hesel. Pokud to nejde,
