@@ -258,7 +258,7 @@ def _append_legend_cell(
         if text is not None:
             lines.append(
                 _cell_text_command(
-                    text,
+                    text.upper(),
                     left + 0.5,
                     section_bottom + section_height / 2,
                     text_width_mm,
@@ -553,7 +553,7 @@ def _append_clue_block(
         for clue in clues:
             lines.append(
                 rf"\textbf{{{clue.number}.}} "
-                rf"{_escape_latex(clue.text, typography=True)}\par"
+                rf"{_escape_latex(clue.text.upper(), typography=True)}\par"
             )
         lines.append(r"\end{minipage}%")
     lines.extend((r"}%", r"}"))

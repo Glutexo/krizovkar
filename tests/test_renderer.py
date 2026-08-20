@@ -88,7 +88,7 @@ class LatexSourceTest(unittest.TestCase):
         self.assertIn(r"\fill[black!7]", legend)
         self.assertIn(r"\KrizovkarCellText", legend)
         self.assertIn(
-            r"\KrizovkarCellText{10.8mm}{4.8mm}{8pt}{8.4pt}{Sa\-vec}",
+            r"\KrizovkarCellText{10.8mm}{4.8mm}{8pt}{8.4pt}{SA\-VEC}",
             legend,
         )
         self.assertIn(r"\textbf{Pomůcka:}", help_source)
@@ -106,6 +106,8 @@ class LatexSourceTest(unittest.TestCase):
         self.assertIn(r"\textbf{Vodorovně}", source)
         self.assertIn(r"\textbf{Svisle}", source)
         self.assertIn(r"\textbf{20.}", source)
+        self.assertIn(r"PRUD\-KÝ HOD", source)
+        self.assertNotIn("Prudký hod", source)
         self.assertIn("font=\\bfseries\\fontsize{7pt}{7pt}", source)
         self.assertEqual(12, source.count(r"line width=1.25pt] (") - 1)
         self.assertNotIn(r"\KrizovkarLetter{9.6mm}", source)
@@ -190,9 +192,10 @@ class LatexSourceTest(unittest.TestCase):
         source = create_latex_source(crossword)
 
         self.assertIn(
-            r"50\%\_\# \& \textbackslash{} \{x\}",
+            r"50\%\_\# \& \textbackslash{} \{X\}",
             source,
         )
+        self.assertIn(r"CI\-TA\-CE", source)
         self.assertEqual(2, source.count(r"\textquotedbl{}"))
         self.assertIn(r"\textasciigrave{}", source)
 

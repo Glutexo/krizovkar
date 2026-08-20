@@ -270,7 +270,7 @@ Každá legenda odkazuje na existující očíslovanou písmennou buňku a dvoji
 
 Čísla, předěly a kořenové `clues` neurčují druh celého dokumentu. Ve stejné mřížce mohou být současně buňky `type: legend`; jedno heslo tak může mít vepsanou legendu a jiné legendu číselnou. Formát nezakazuje ani oba způsoby u téhož hesla. Ucelenou kombinaci ukazuje [příklad se smíšenými legendami](../examples/grid-mixed-clues.yaml).
 
-Renderer sází číslo do levého horního rohu buňky a vnější legendy pod mřížku do samostatných sloupců „Vodorovně“ a „Svisle“. Zadání tajenek, čísla, legendy, předěly, zvýraznění tajenky a tajenkové šipky zůstávají viditelné i při vykreslení nevyplněné varianty.
+Renderer sází číslo do levého horního rohu buňky a vnější legendy pod mřížku do samostatných sloupců „Vodorovně“ a „Svisle“. Zadání tajenek, čísla, legendy, předěly, zvýraznění tajenky a tajenkové šipky zůstávají viditelné i při vykreslení nevyplněné varianty. Text vnějších i vepsaných legend převádí LaTeXový a PDF renderer při sazbě na velká písmena; hodnoty uložené v YAML zůstávají beze změny.
 
 ## Buňka legendy
 
