@@ -91,10 +91,9 @@ okraj mění počet sloupců, horní a dolní počet řádků a rohy oba rozměr
 současně. Nadpis náhledu uvádí aktuální rozměr jako počet sloupců × počet
 řádků. Nový rozměr se použije po puštění tlačítka. Změna rozměru znovu
 vytvoří rozvržení a případný doplněný obsah lze po změně obnovit pomocí
-**Zpět**. Současný stav lze kdykoli exportovat jako mřížkový YAML,
-upravitelný LaTeX, prázdnou tiskovou křížovku v PDF nebo PDF řešení.
-Výstupy s písmeny ukážou právě doplněná písmena a ostatní pole
-ponechají prázdná.
+**Zpět**. Mřížkový YAML, upravitelný LaTeX i PDF lze kdykoli exportovat
+jako křížovku bez písmen nebo řešení se současnými písmeny. Písmenné
+varianty ukážou právě doplněná písmena a ostatní pole ponechají prázdná.
 
 Pravé tlačítko nad písmenným, tajenkovým, legendovým nebo prázdným polem
 náhledu otevře nabídku jeho role **Písmeno** / **Tajenka** / **Legenda** /
@@ -191,12 +190,13 @@ při pokusu o otevření ze seznamu odstraní; celý seznam smaže volba **Vymaz
 nabídku**.
 
 Podnabídka **Soubor → Exportovat** nabízí výstupy podle právě otevřeného
-dokumentu. Mřížkový YAML zachytí aktuální cílovou mřížku `kind: grid`
-včetně právě doplněných písmen. Upravitelný LaTeX zachytí stejný stav
-v podobě připravené k další sazbě. U LaTeXu a PDF se nejprve volí formát
-stránky a poté umístění souboru. Tisková podoba PDF bez písmen i všechny
-výstupy se současnými písmeny jsou dostupné v libovolném stavu dokumentu;
-dosud nevyplněná pole zůstanou prázdná.
+dokumentu. Mřížkový YAML, upravitelný LaTeX i PDF mají samostatnou podobu
+bez písmen a s právě doplněnými písmeny. Mřížkový YAML zachytí cílovou
+mřížku `kind: grid`; varianta bez písmen vynechá hodnoty `value` běžných
+i tajenkových písmenných buněk, ale zachová jejich role a ostatní značky.
+U LaTeXu a PDF se nejprve volí formát stránky a poté umístění souboru.
+Všechny varianty jsou dostupné v libovolném stavu dokumentu; výstupy
+s písmeny ponechají dosud nevyplněná pole prázdná.
 
 Podnabídka **Soubor → Tisknout** nabízí stejné dvě podoby přímo k vytištění.
 Po volbě formátu stránky Křížovkář vytvoří dočasné PDF. Na macOS pro ně otevře

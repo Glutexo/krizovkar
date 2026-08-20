@@ -80,9 +80,11 @@ from krizovkar.gui import (
 from krizovkar.model import (
     Coordinate,
     CrosswordDocument,
+    CrosswordGrid,
     CrosswordSecretCellsPart,
     CrosswordSecretSlotPart,
     EmptyCellRole,
+    Grid,
     LegendCellRole,
     LetterCell,
     LetterCellRole,
@@ -712,8 +714,10 @@ class GuiTest(unittest.TestCase):
                 (
                     "Křížovku bez písmen (PDF)…",
                     "Řešení s písmeny (PDF)…",
-                    "Mřížkový YAML…",
-                    "LaTeX…",
+                    "Mřížku bez písmen (YAML)…",
+                    "Mřížku s písmeny (YAML)…",
+                    "Křížovku bez písmen (LaTeX)…",
+                    "Řešení s písmeny (LaTeX)…",
                 ),
             ),
             (
@@ -4895,7 +4899,7 @@ class GuiTest(unittest.TestCase):
         )
         application._complete_grid_or_error.assert_not_called()
 
-    def test_grid_yaml_and_latex_actions_export_empty_crossword(self) -> None:
+    def test_grid_yaml_and_latex_actions_export_both_empty_versions(self) -> None:
         application = Mock()
         application._crossword = create_blank_template(
             CrosswordSettings(3, 3),
@@ -4903,15 +4907,47 @@ class GuiTest(unittest.TestCase):
         )
 
         with patch("krizovkar.gui.create_grid_from_crossword") as create_grid:
-            CrosswordDocumentWindow.save_grid_yaml(application)
-            CrosswordDocumentWindow.save_latex(application)
+            CrosswordDocumentWindow.save_crossword_grid_yaml(application)
+            CrosswordDocumentWindow.save_solution_grid_yaml(application)
+            CrosswordDocumentWindow.save_crossword_latex(application)
+            CrosswordDocumentWindow.save_solution_latex(application)
 
-        application._save_grid_yaml.assert_called_once_with(
-            create_grid.return_value
-        )
-        application._save_latex.assert_called_once_with(create_grid.return_value)
         self.assertEqual(
-            [call(application._crossword), call(application._crossword)],
+            [
+                call(
+                    create_grid.return_value,
+                    filled=False,
+                    title="Exportovat mřížkový YAML bez písmen",
+                    initialfile="mrizka-bez-pismen.yaml",
+                ),
+                call(
+                    create_grid.return_value,
+                    filled=True,
+                    title="Exportovat mřížkový YAML s písmeny",
+                    initialfile="mrizka-s-pismeny.yaml",
+                ),
+            ],
+            application._save_grid_yaml.call_args_list,
+        )
+        self.assertEqual(
+            [
+                call(
+                    create_grid.return_value,
+                    filled=False,
+                    title="Exportovat křížovku bez písmen jako LaTeX",
+                    initialfile="krizovka.tex",
+                ),
+                call(
+                    create_grid.return_value,
+                    filled=True,
+                    title="Exportovat řešení s písmeny jako LaTeX",
+                    initialfile="reseni.tex",
+                ),
+            ],
+            application._save_latex.call_args_list,
+        )
+        self.assertEqual(
+            [call(application._crossword)] * 4,
             create_grid.call_args_list,
         )
         application._complete_grid_or_error.assert_not_called()
@@ -4982,7 +5018,7 @@ class GuiTest(unittest.TestCase):
         )
         create_grid.assert_called_once_with(application._crossword)
 
-    def test_export_actions_offer_pdf_grid_yaml_and_latex(self) -> None:
+    def test_export_actions_offer_both_variants_in_all_formats(self) -> None:
         crossword_window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         crossword_window.export_menu = Mock()
 
@@ -4999,12 +5035,20 @@ class GuiTest(unittest.TestCase):
                     command=crossword_window.save_solution_pdf,
                 ),
                 call(
-                    label="Mřížkový YAML…",
-                    command=crossword_window.save_grid_yaml,
+                    label="Mřížku bez písmen (YAML)…",
+                    command=crossword_window.save_crossword_grid_yaml,
                 ),
                 call(
-                    label="LaTeX…",
-                    command=crossword_window.save_latex,
+                    label="Mřížku s písmeny (YAML)…",
+                    command=crossword_window.save_solution_grid_yaml,
+                ),
+                call(
+                    label="Křížovku bez písmen (LaTeX)…",
+                    command=crossword_window.save_crossword_latex,
+                ),
+                call(
+                    label="Řešení s písmeny (LaTeX)…",
+                    command=crossword_window.save_solution_latex,
                 ),
             ],
             crossword_window.export_menu.add_command.call_args_list,
@@ -5074,6 +5118,8 @@ class GuiTest(unittest.TestCase):
                 call(1, state="normal"),
                 call(2, state="normal"),
                 call(3, state="normal"),
+                call(4, state="normal"),
+                call(5, state="normal"),
             ],
             application.export_menu.entryconfigure.call_args_list,
         )
@@ -5092,7 +5138,7 @@ class GuiTest(unittest.TestCase):
             application.open_pdf_menu.entryconfigure.call_args_list,
         )
 
-    def test_file_menu_allows_only_exporting_incomplete_solution(self) -> None:
+    def test_file_menu_allows_all_exports_for_incomplete_crossword(self) -> None:
         application = Mock()
         application._save_menu_index = 4
         application._save_as_menu_index = 5
@@ -5117,6 +5163,8 @@ class GuiTest(unittest.TestCase):
                 call(1, state="normal"),
                 call(2, state="normal"),
                 call(3, state="normal"),
+                call(4, state="normal"),
+                call(5, state="normal"),
             ],
             application.export_menu.entryconfigure.call_args_list,
         )
@@ -5151,6 +5199,8 @@ class GuiTest(unittest.TestCase):
                 call(1, state="disabled"),
                 call(2, state="disabled"),
                 call(3, state="disabled"),
+                call(4, state="disabled"),
+                call(5, state="disabled"),
             ],
             application.export_menu.entryconfigure.call_args_list,
         )
@@ -5251,59 +5301,176 @@ class GuiTest(unittest.TestCase):
 
         application._choose_output.assert_not_called()
 
-    def test_saves_current_grid_as_yaml(self) -> None:
-        grid = create_grid_from_crossword(_filled_numbered_crossword())
+    def test_saves_grid_yaml_with_and_without_letters(self) -> None:
+        grid = CrosswordGrid(
+            format_name="krizovkar",
+            kind="grid",
+            version=1,
+            grid=Grid(
+                width=2,
+                height=1,
+                cells=(
+                    (
+                        LetterCell(value="A", number=1),
+                        SecretCell(value="B", arrow="right"),
+                    ),
+                ),
+            ),
+        )
+        blank_grid = CrosswordGrid(
+            format_name="krizovkar",
+            kind="grid",
+            version=1,
+            grid=Grid(
+                width=2,
+                height=1,
+                cells=(
+                    (
+                        LetterCell(number=1),
+                        SecretCell(arrow="right"),
+                    ),
+                ),
+            ),
+        )
         application = Mock()
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "mrizka.yaml"
-            application._choose_output.return_value = (output, False)
+            blank_output = Path(directory) / "mrizka-bez-pismen.yaml"
+            filled_output = Path(directory) / "mrizka-s-pismeny.yaml"
+            application._choose_output.side_effect = (
+                (blank_output, False),
+                (filled_output, False),
+            )
 
-            CrosswordDocumentWindow._save_grid_yaml(application, grid)
+            CrosswordDocumentWindow._save_grid_yaml(
+                application,
+                grid,
+                filled=False,
+                title="Exportovat mřížkový YAML bez písmen",
+                initialfile="mrizka-bez-pismen.yaml",
+            )
+            CrosswordDocumentWindow._save_grid_yaml(
+                application,
+                grid,
+                filled=True,
+                title="Exportovat mřížkový YAML s písmeny",
+                initialfile="mrizka-s-pismeny.yaml",
+            )
 
-            self.assertEqual(grid, load_crossword_grid(output))
+            self.assertEqual(blank_grid, load_crossword_grid(blank_output))
+            self.assertEqual(grid, load_crossword_grid(filled_output))
+            self.assertEqual("A", grid.grid.cells[0][0].value)
+            self.assertEqual("B", grid.grid.cells[0][1].value)
 
-        application._choose_output.assert_called_once_with(
-            title="Exportovat mřížkový YAML",
-            initialfile="mrizka.yaml",
-            extension=".yaml",
-            filetypes=(
-                ("YAML soubory", "*.yaml *.yml"),
-                ("Všechny soubory", "*"),
-            ),
-            overwrite_title="Přepsat mřížkový YAML?",
+        self.assertEqual(
+            [
+                call(
+                    title="Exportovat mřížkový YAML bez písmen",
+                    initialfile="mrizka-bez-pismen.yaml",
+                    extension=".yaml",
+                    filetypes=(
+                        ("YAML soubory", "*.yaml *.yml"),
+                        ("Všechny soubory", "*"),
+                    ),
+                    overwrite_title="Přepsat mřížkový YAML?",
+                ),
+                call(
+                    title="Exportovat mřížkový YAML s písmeny",
+                    initialfile="mrizka-s-pismeny.yaml",
+                    extension=".yaml",
+                    filetypes=(
+                        ("YAML soubory", "*.yaml *.yml"),
+                        ("Všechny soubory", "*"),
+                    ),
+                    overwrite_title="Přepsat mřížkový YAML?",
+                ),
+            ],
+            application._choose_output.call_args_list,
         )
         application._show_action_error.assert_not_called()
 
-    def test_saves_current_grid_as_latex(self) -> None:
+    def test_saves_latex_with_and_without_letters(self) -> None:
         grid = create_grid_from_crossword(_filled_numbered_crossword())
         application = Mock()
-        application._choose_page_format.return_value = "A5"
-        output = Path("krizovka.tex")
-        application._choose_output.return_value = (output, True)
+        application._choose_page_format.side_effect = ("A5", "A4")
+        blank_output = Path("krizovka.tex")
+        filled_output = Path("reseni.tex")
+        application._choose_output.side_effect = (
+            (blank_output, False),
+            (filled_output, True),
+        )
 
         with patch("krizovkar.gui.render_latex") as render:
-            CrosswordDocumentWindow._save_latex(application, grid)
+            CrosswordDocumentWindow._save_latex(
+                application,
+                grid,
+                filled=False,
+                title="Exportovat křížovku bez písmen jako LaTeX",
+                initialfile="krizovka.tex",
+            )
+            CrosswordDocumentWindow._save_latex(
+                application,
+                grid,
+                filled=True,
+                title="Exportovat řešení s písmeny jako LaTeX",
+                initialfile="reseni.tex",
+            )
 
-        application._choose_page_format.assert_called_once_with(
-            title="Exportovat LaTeX",
-            confirm_label="Vybrat umístění…",
+        self.assertEqual(
+            [
+                call(
+                    title="Exportovat křížovku bez písmen jako LaTeX",
+                    confirm_label="Vybrat umístění…",
+                ),
+                call(
+                    title="Exportovat řešení s písmeny jako LaTeX",
+                    confirm_label="Vybrat umístění…",
+                ),
+            ],
+            application._choose_page_format.call_args_list,
         )
-        application._choose_output.assert_called_once_with(
-            title="Exportovat LaTeX",
-            initialfile="krizovka.tex",
-            extension=".tex",
-            filetypes=(
-                ("LaTeXové soubory", "*.tex"),
-                ("Všechny soubory", "*"),
-            ),
-            overwrite_title="Přepsat LaTeX?",
+        self.assertEqual(
+            [
+                call(
+                    title="Exportovat křížovku bez písmen jako LaTeX",
+                    initialfile="krizovka.tex",
+                    extension=".tex",
+                    filetypes=(
+                        ("LaTeXové soubory", "*.tex"),
+                        ("Všechny soubory", "*"),
+                    ),
+                    overwrite_title="Přepsat LaTeX?",
+                ),
+                call(
+                    title="Exportovat řešení s písmeny jako LaTeX",
+                    initialfile="reseni.tex",
+                    extension=".tex",
+                    filetypes=(
+                        ("LaTeXové soubory", "*.tex"),
+                        ("Všechny soubory", "*"),
+                    ),
+                    overwrite_title="Přepsat LaTeX?",
+                ),
+            ],
+            application._choose_output.call_args_list,
         )
-        render.assert_called_once_with(
-            grid,
-            output,
-            overwrite=True,
-            page_format="A5",
-            filled=True,
+        self.assertEqual(
+            [
+                call(
+                    grid,
+                    blank_output,
+                    overwrite=False,
+                    page_format="A5",
+                    filled=False,
+                ),
+                call(
+                    grid,
+                    filled_output,
+                    overwrite=True,
+                    page_format="A4",
+                    filled=True,
+                ),
+            ],
+            render.call_args_list,
         )
         application._show_action_error.assert_not_called()
 
@@ -5315,7 +5482,13 @@ class GuiTest(unittest.TestCase):
             "krizovkar.gui.write_crossword_grid",
             side_effect=ModelError("nelze zapsat"),
         ):
-            CrosswordDocumentWindow._save_grid_yaml(application, Mock())
+            CrosswordDocumentWindow._save_grid_yaml(
+                application,
+                Mock(),
+                filled=True,
+                title="Exportovat mřížkový YAML s písmeny",
+                initialfile="mrizka-s-pismeny.yaml",
+            )
 
         application._show_action_error.assert_called_once_with(
             "Mřížkový YAML nelze vytvořit",

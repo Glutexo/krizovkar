@@ -97,8 +97,10 @@ _NO_DOCUMENT_SLOT_LIST_PLACEMENT_VARIABLE = (
 _EXPORT_ACTION_LABELS = (
     "Křížovku bez písmen (PDF)…",
     "Řešení s písmeny (PDF)…",
-    "Mřížkový YAML…",
-    "LaTeX…",
+    "Mřížku bez písmen (YAML)…",
+    "Mřížku s písmeny (YAML)…",
+    "Křížovku bez písmen (LaTeX)…",
+    "Řešení s písmeny (LaTeX)…",
 )
 _OPEN_PDF_ACTION_LABELS = (
     "Křížovku bez písmen…",
@@ -3274,6 +3276,27 @@ def _grid_from_editable_document(
     return create_grid_from_crossword(document)
 
 
+def _grid_without_letters(crossword: CrosswordGrid) -> CrosswordGrid:
+    cells = crossword.grid.cells
+    if cells is None:
+        return crossword
+    return replace(
+        crossword,
+        grid=replace(
+            crossword.grid,
+            cells=tuple(
+                tuple(
+                    replace(cell, value=None)
+                    if isinstance(cell, (LetterCell, SecretCell))
+                    else cell
+                    for cell in row
+                )
+                for row in cells
+            ),
+        ),
+    )
+
+
 class CrosswordSourceWindow(ttk.Frame):
     """Samostatné okno s upravitelným YAML jednoho dokumentu."""
 
@@ -3990,14 +4013,24 @@ class CrosswordDocumentWindow(ttk.Frame):
                 self.save_solution_pdf,
             ),
             _ExportAction(
-                "grid-yaml",
+                "blank-grid-yaml",
                 _EXPORT_ACTION_LABELS[2],
-                self.save_grid_yaml,
+                self.save_crossword_grid_yaml,
             ),
             _ExportAction(
-                "latex",
+                "solution-grid-yaml",
                 _EXPORT_ACTION_LABELS[3],
-                self.save_latex,
+                self.save_solution_grid_yaml,
+            ),
+            _ExportAction(
+                "blank-latex",
+                _EXPORT_ACTION_LABELS[4],
+                self.save_crossword_latex,
+            ),
+            _ExportAction(
+                "solution-latex",
+                _EXPORT_ACTION_LABELS[5],
+                self.save_solution_latex,
             ),
         )
 
@@ -4985,7 +5018,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             initialfile="reseni.pdf",
         )
 
-    def save_grid_yaml(self) -> None:
+    def save_crossword_grid_yaml(self) -> None:
         if not self._save_inline_slot_edit():
             return
         crossword = self._crossword
@@ -4995,9 +5028,14 @@ class CrosswordDocumentWindow(ttk.Frame):
                 "Dokument křížovky zatím není vytvořený.",
             )
             return
-        self._save_grid_yaml(_grid_from_editable_document(crossword))
+        self._save_grid_yaml(
+            _grid_from_editable_document(crossword),
+            filled=False,
+            title="Exportovat mřížkový YAML bez písmen",
+            initialfile="mrizka-bez-pismen.yaml",
+        )
 
-    def save_latex(self) -> None:
+    def save_solution_grid_yaml(self) -> None:
         if not self._save_inline_slot_edit():
             return
         crossword = self._crossword
@@ -5007,7 +5045,46 @@ class CrosswordDocumentWindow(ttk.Frame):
                 "Dokument křížovky zatím není vytvořený.",
             )
             return
-        self._save_latex(_grid_from_editable_document(crossword))
+        self._save_grid_yaml(
+            _grid_from_editable_document(crossword),
+            filled=True,
+            title="Exportovat mřížkový YAML s písmeny",
+            initialfile="mrizka-s-pismeny.yaml",
+        )
+
+    def save_crossword_latex(self) -> None:
+        if not self._save_inline_slot_edit():
+            return
+        crossword = self._crossword
+        if crossword is None:
+            self._show_action_error(
+                "Křížovka není připravena",
+                "Dokument křížovky zatím není vytvořený.",
+            )
+            return
+        self._save_latex(
+            _grid_from_editable_document(crossword),
+            filled=False,
+            title="Exportovat křížovku bez písmen jako LaTeX",
+            initialfile="krizovka.tex",
+        )
+
+    def save_solution_latex(self) -> None:
+        if not self._save_inline_slot_edit():
+            return
+        crossword = self._crossword
+        if crossword is None:
+            self._show_action_error(
+                "Křížovka není připravena",
+                "Dokument křížovky zatím není vytvořený.",
+            )
+            return
+        self._save_latex(
+            _grid_from_editable_document(crossword),
+            filled=True,
+            title="Exportovat řešení s písmeny jako LaTeX",
+            initialfile="reseni.tex",
+        )
 
     def print_crossword(self) -> None:
         if not self._save_inline_slot_edit():
@@ -5088,10 +5165,17 @@ class CrosswordDocumentWindow(ttk.Frame):
             self._page_format = page_format
         return page_format
 
-    def _save_grid_yaml(self, crossword: CrosswordGrid) -> None:
+    def _save_grid_yaml(
+        self,
+        crossword: CrosswordGrid,
+        *,
+        filled: bool,
+        title: str,
+        initialfile: str,
+    ) -> None:
         selected = self._choose_output(
-            title="Exportovat mřížkový YAML",
-            initialfile="mrizka.yaml",
+            title=title,
+            initialfile=initialfile,
             extension=".yaml",
             filetypes=(
                 ("YAML soubory", "*.yaml *.yml"),
@@ -5104,7 +5188,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         output, overwrite = selected
         try:
             write_crossword_grid(
-                crossword,
+                crossword if filled else _grid_without_letters(crossword),
                 output,
                 overwrite=overwrite,
             )
@@ -5114,8 +5198,14 @@ class CrosswordDocumentWindow(ttk.Frame):
                 str(error),
             )
 
-    def _save_latex(self, crossword: CrosswordGrid) -> None:
-        title = "Exportovat LaTeX"
+    def _save_latex(
+        self,
+        crossword: CrosswordGrid,
+        *,
+        filled: bool,
+        title: str,
+        initialfile: str,
+    ) -> None:
         page_format = self._choose_page_format(
             title=title,
             confirm_label="Vybrat umístění…",
@@ -5124,7 +5214,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             return
         selected = self._choose_output(
             title=title,
-            initialfile="krizovka.tex",
+            initialfile=initialfile,
             extension=".tex",
             filetypes=(
                 ("LaTeXové soubory", "*.tex"),
@@ -5141,7 +5231,7 @@ class CrosswordDocumentWindow(ttk.Frame):
                 output,
                 overwrite=overwrite,
                 page_format=page_format,
-                filled=True,
+                filled=filled,
             )
         except RenderError as error:
             self._show_action_error(
