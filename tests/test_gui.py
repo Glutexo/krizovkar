@@ -511,6 +511,19 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual(
             [
+                "Nová křížovka…",
+                "Otevřít…",
+                "Uložit",
+                "Uložit jako…",
+                "Zavřít",
+            ],
+            [
+                item.kwargs["label"]
+                for item in file_menu.add_command.call_args_list
+            ],
+        )
+        self.assertEqual(
+            [
                 "Command-N",
                 "Command-O",
                 "Command-S",
@@ -660,7 +673,7 @@ class GuiTest(unittest.TestCase):
                 "Otevřít…",
                 "Uložit",
                 "Uložit jako…",
-                "Zavřít okno",
+                "Zavřít",
             ],
             [item.kwargs["label"] for item in commands],
         )

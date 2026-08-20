@@ -3501,7 +3501,7 @@ class CrosswordApplication:
         )
         self.file_menu.add_separator()
         self.file_menu.add_command(
-            label="Zavřít okno",
+            label="Zavřít",
             accelerator=close_shortcut.accelerator,
             state="disabled",
         )
@@ -3907,7 +3907,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.file_menu.add_cascade(label="Tisknout", menu=self.print_menu)
         self.file_menu.add_separator()
         self.file_menu.add_command(
-            label="Zavřít okno",
+            label="Zavřít",
             accelerator=close_shortcut.accelerator,
             command=self.request_close,
         )
