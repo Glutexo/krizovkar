@@ -3948,13 +3948,10 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _add_export_actions(self) -> None:
         for action in self._export_actions():
-            options: dict[str, object] = {
-                "label": action.label,
-                "command": action.command,
-            }
-            if action.identifier == "solution":
-                options["state"] = "disabled"
-            self.export_menu.add_command(**options)
+            self.export_menu.add_command(
+                label=action.label,
+                command=action.command,
+            )
 
     def _add_print_actions(self) -> None:
         for action in self._print_actions():
@@ -4422,7 +4419,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         self.export_menu.entryconfigure(
             1,
-            state="normal" if complete else "disabled",
+            state=document_state,
         )
         self.print_menu.entryconfigure(
             0,
@@ -4963,11 +4960,15 @@ class CrosswordDocumentWindow(ttk.Frame):
     def save_solution_pdf(self) -> None:
         if not self._save_inline_slot_edit():
             return
-        grid = self._complete_grid_or_error()
-        if grid is None:
+        crossword = self._crossword
+        if crossword is None:
+            self._show_action_error(
+                "Křížovka není připravena",
+                "Dokument křížovky zatím není vytvořený.",
+            )
             return
         self._save_pdf(
-            grid,
+            _grid_from_editable_document(crossword),
             filled=True,
             title="Exportovat řešení s písmeny",
             initialfile="reseni.pdf",

@@ -91,8 +91,8 @@ okraj mění počet sloupců, horní a dolní počet řádků a rohy oba rozměr
 současně. Nadpis náhledu uvádí aktuální rozměr jako počet sloupců × počet
 řádků. Nový rozměr se použije po puštění tlačítka. Změna rozměru znovu
 vytvoří rozvržení a případný doplněný obsah lze po změně obnovit pomocí
-**Zpět**. Prázdnou tiskovou křížovku lze exportovat do PDF kdykoli, samostatné
-řešení až po vyplnění všech hesel.
+**Zpět**. Prázdnou tiskovou křížovku i řešení lze exportovat do PDF kdykoli.
+Řešení ukáže právě doplněná písmena a ostatní pole ponechá prázdná.
 
 Pravé tlačítko nad písmenným, tajenkovým, legendovým nebo prázdným polem
 náhledu otevře nabídku jeho role **Písmeno** / **Tajenka** / **Legenda** /
@@ -190,8 +190,9 @@ nabídku**.
 
 Podnabídka **Soubor → Exportovat** nabízí výstupy podle právě otevřeného
 dokumentu. Formát stránky se volí přímo v dialogu vybraného exportu; poté
-naváže systémový dialog pro výběr umístění PDF. Tisková podoba bez písmen je
-dostupná vždy; řešení se zpřístupní po vyplnění všech hesel.
+naváže systémový dialog pro výběr umístění PDF. Tisková podoba bez písmen
+i řešení jsou dostupné v libovolném stavu dokumentu. Řešení zobrazí všechna
+právě doplněná písmena; dosud nevyplněná pole zůstanou prázdná.
 
 Podnabídka **Soubor → Tisknout** nabízí stejné dvě podoby přímo k vytištění.
 Po volbě formátu stránky Křížovkář vytvoří dočasné PDF. Na macOS pro ně otevře

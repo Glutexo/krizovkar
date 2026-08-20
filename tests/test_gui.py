@@ -4857,14 +4857,12 @@ class GuiTest(unittest.TestCase):
         ask.assert_not_called()
         window.application.close_window.assert_not_called()
 
-    def test_crossword_pdf_actions_choose_puzzle_and_solution(self) -> None:
+    def test_crossword_pdf_actions_export_empty_puzzle_and_solution(self) -> None:
         application = Mock()
         application._crossword = create_blank_template(
             CrosswordSettings(3, 3),
             "numbered",
         )
-        solution = Mock()
-        application._complete_grid_or_error.return_value = solution
 
         with patch("krizovkar.gui.create_grid_from_crossword") as create_grid:
             CrosswordDocumentWindow.save_crossword_pdf(application)
@@ -4879,7 +4877,7 @@ class GuiTest(unittest.TestCase):
                     initialfile="krizovka.pdf",
                 ),
                 call(
-                    solution,
+                    create_grid.return_value,
                     filled=True,
                     title="Exportovat řešení s písmeny",
                     initialfile="reseni.pdf",
@@ -4887,7 +4885,11 @@ class GuiTest(unittest.TestCase):
             ],
             application._save_pdf.call_args_list,
         )
-        create_grid.assert_called_once_with(application._crossword)
+        self.assertEqual(
+            [call(application._crossword), call(application._crossword)],
+            create_grid.call_args_list,
+        )
+        application._complete_grid_or_error.assert_not_called()
 
     def test_print_actions_choose_puzzle_and_solution(self) -> None:
         application = Mock()
@@ -4970,7 +4972,6 @@ class GuiTest(unittest.TestCase):
                 call(
                     label="Řešení s písmeny (PDF)…",
                     command=crossword_window.save_solution_pdf,
-                    state="disabled",
                 ),
             ],
             crossword_window.export_menu.add_command.call_args_list,
@@ -5056,7 +5057,7 @@ class GuiTest(unittest.TestCase):
             application.open_pdf_menu.entryconfigure.call_args_list,
         )
 
-    def test_file_menu_disables_incomplete_crossword_outputs(self) -> None:
+    def test_file_menu_allows_only_exporting_incomplete_solution(self) -> None:
         application = Mock()
         application._save_menu_index = 4
         application._save_as_menu_index = 5
@@ -5076,7 +5077,7 @@ class GuiTest(unittest.TestCase):
             application.file_menu.entryconfigure.call_args_list,
         )
         self.assertEqual(
-            [call(0, state="normal"), call(1, state="disabled")],
+            [call(0, state="normal"), call(1, state="normal")],
             application.export_menu.entryconfigure.call_args_list,
         )
         self.assertEqual(
