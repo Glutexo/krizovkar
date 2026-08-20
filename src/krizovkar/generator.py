@@ -967,13 +967,39 @@ def _select_slots_for_total_length(
     return None
 
 
+def _secret_slot_assignments(
+    secret: CrosswordSecret,
+) -> dict[str, _Entry]:
+    assignments: dict[str, _Entry] = {}
+    word_offset = 0
+    multipart = len(secret.parts) > 1
+    for part_index, part in enumerate(secret.parts):
+        if isinstance(part, CrosswordSecretCellsPart):
+            continue
+        assert part.word_count is not None
+        part_words = secret.words[word_offset : word_offset + part.word_count]
+        word_offset += part.word_count
+        answer = "".join(part_words)
+        clue = (
+            DEFAULT_SECRET_PART_LEGEND.format(number=part_index + 1)
+            if multipart
+            else DEFAULT_SECRET_LEGEND
+        )
+        assignments[part.slot_identifier] = _Entry(
+            answer=answer,
+            clue=clue,
+            letters=split_answer_letters(answer),
+        )
+    return assignments
+
+
 def place_secret_in_template(
     template: CrosswordDocument,
     requirement: SecretRequirement,
     *,
     seed: int = DEFAULT_SEED,
 ) -> CrosswordDocument:
-    """Rezervuje v šabloně nepřekrývající se sloty pro tajenku."""
+    """Umístí tajenku do nepřekrývajících se slotů šablony."""
 
     if template.secrets:
         raise GenerationError("šablona už obsahuje připravenou tajenku")
@@ -1020,15 +1046,37 @@ def place_secret_in_template(
         )
         for index, slot in enumerate(selected)
     )
+    secret = CrosswordSecret(
+        parts=parts,
+        words=requirement.words,
+        prompt=requirement.prompt,
+    )
+    if not requirement.words:
+        return replace(template, secrets=(secret,))
+
+    assignments = _secret_slot_assignments(secret)
+    filled_slots = []
+    for slot in template.slots:
+        assignment = assignments.get(slot.identifier)
+        if assignment is None:
+            filled_slots.append(slot)
+            continue
+        if slot.answer is not None and slot.answer != assignment.answer:
+            raise GenerationError(
+                f"pevné heslo {slot.answer!r} ve slotu {slot.identifier!r} "
+                f"neodpovídá tajence {assignment.answer!r}"
+            )
+        filled_slots.append(
+            replace(
+                slot,
+                answer=assignment.answer,
+                clue=assignment.clue,
+            )
+        )
     return replace(
         template,
-        secrets=(
-            CrosswordSecret(
-                parts=parts,
-                words=requirement.words,
-                prompt=requirement.prompt,
-            ),
-        ),
+        slots=tuple(filled_slots),
+        secrets=(secret,),
     )
 
 
@@ -1142,27 +1190,7 @@ def _secret_assignments(
 ) -> dict[str, _Entry]:
     assignments: dict[str, _Entry] = {}
     for secret in crossword.secrets:
-        word_offset = 0
-        multipart = len(secret.parts) > 1
-        for part_index, part in enumerate(secret.parts):
-            if isinstance(part, CrosswordSecretCellsPart):
-                continue
-            assert part.word_count is not None
-            part_words = secret.words[
-                word_offset : word_offset + part.word_count
-            ]
-            word_offset += part.word_count
-            answer = "".join(part_words)
-            clue = (
-                DEFAULT_SECRET_PART_LEGEND.format(number=part_index + 1)
-                if multipart
-                else DEFAULT_SECRET_LEGEND
-            )
-            assignments[part.slot_identifier] = _Entry(
-                answer=answer,
-                clue=clue,
-                letters=split_answer_letters(answer),
-            )
+        assignments.update(_secret_slot_assignments(secret))
     return assignments
 
 

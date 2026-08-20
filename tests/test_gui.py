@@ -66,6 +66,7 @@ from krizovkar.model import (
     Coordinate,
     CrosswordDocument,
     CrosswordSecretCellsPart,
+    CrosswordSecretSlotPart,
     EmptyCellRole,
     LegendCellRole,
     LetterCell,
@@ -1517,6 +1518,37 @@ class GuiTest(unittest.TestCase):
             sum(count or 0 for count in word_counts),
         )
         self.assertIn(2, word_counts)
+
+        slots = {slot.identifier: slot for slot in crossword.slots}
+        expected_answers = []
+        word_offset = 0
+        for part_index, (part, word_count) in enumerate(
+            zip(stored.parts, word_counts),
+            start=1,
+        ):
+            self.assertIsInstance(part, CrosswordSecretSlotPart)
+            assert isinstance(part, CrosswordSecretSlotPart)
+            assert word_count is not None
+            answer = "".join(
+                stored.words[word_offset : word_offset + word_count]
+            )
+            word_offset += word_count
+            expected_answers.append(answer)
+            slot = slots[part.slot_identifier]
+            self.assertEqual(answer, slot.answer)
+            self.assertEqual(f"{part_index}. část tajenky", slot.clue)
+
+        grid = create_grid_from_crossword(crossword)
+        assert grid.grid.cells is not None
+        for part, answer in zip(stored.parts, expected_answers):
+            assert isinstance(part, CrosswordSecretSlotPart)
+            slot = slots[part.slot_identifier]
+            cells = tuple(
+                grid.grid.cells[coordinate.row - 1][coordinate.column - 1]
+                for coordinate in slot_coordinates(slot)
+            )
+            self.assertTrue(all(isinstance(cell, SecretCell) for cell in cells))
+            self.assertEqual(answer, "".join(cell.value or "" for cell in cells))
 
     def test_recognizes_unchanged_empty_template_after_opening(self) -> None:
         empty = create_empty_template(CrosswordSettings(4, 3), "swedish")

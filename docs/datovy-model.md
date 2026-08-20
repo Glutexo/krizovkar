@@ -133,16 +133,17 @@ Vodorovné sloty dostávají identifikátory `h1`, `h2`, … v pořadí shora do
 a zleva doprava; svislé obdobně `v1`, `v2`, … Volby tajenky mohou určit
 celkovou délku, pevné délky částí, konkrétní seznam slov s automatickým
 dělením nebo konkrétní pevné části. Generátor pro ně vybírá navzájem se
-nepřekrývající sloty a u známého textu ukládá výsledné `word_count`.
-Prohledává seřazené varianty délek 3 až 8 a vybere první, která obsahuje
-všechny požadované délky a dovolí jejich umístění.
+nepřekrývající sloty. U známého textu ukládá výsledné `word_count` a vybrané
+sloty rovnou vyplní odpovědí i legendou tajenky. Prohledává seřazené varianty
+délek 3 až 8 a vybere první, která obsahuje všechny požadované délky a dovolí
+jejich umístění.
 
 Příkaz `fill` přijímá libovolnou platnou křížovku a slovník. Doplněné
 sloty použije jako počáteční omezení. Pomocí zpětného prohledávání přiřadí
 každému zbývajícímu běžnému slotu jiné heslo správné délky a průběžně
-omezuje kandidáty podle již známých písmen na kříženích. Tajenkové sloty
-vyplní přímo, bez hledání odpovědi ve slovníku, a jejich písmena použije
-jako další pevná omezení. Neznámou
+omezuje kandidáty podle již známých písmen na kříženích. Dosud prázdné
+tajenkové sloty vyplní přímo, bez hledání odpovědi ve slovníku; už vyplněnou
+tajenku zachová a její písmena použije jako další pevná omezení. Neznámou
 rezervovanou tajenku musí doplnit konkrétní text; není-li v dokumentu
 rezervace, `fill` vhodné sloty automaticky vybere. Rozdělení je přípustné
 jen tehdy, pokud každá část končí na hranici slova.

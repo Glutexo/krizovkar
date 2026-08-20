@@ -434,6 +434,14 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
             (1, 1),
             tuple(part.word_count for part in prepared.secrets[0].parts),
         )
+        self.assertEqual(
+            ("KOMU", "SE"),
+            tuple(slot.answer for slot in prepared.slots),
+        )
+        self.assertEqual(
+            ("1. část tajenky", "2. část tajenky"),
+            tuple(slot.clue for slot in prepared.slots),
+        )
 
     def test_fills_known_secret_and_propagates_prompt(self) -> None:
         prompt = SecretPrompt(text="Dokončete rčení")

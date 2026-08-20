@@ -1904,7 +1904,7 @@ class CommandTest(unittest.TestCase):
             self.assertEqual("Tajenka", crossword.slots[0].clue)
 
 
-    def test_template_reserves_known_secret_and_prompt(self) -> None:
+    def test_template_fills_known_secret_and_keeps_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "template.yaml"
 
@@ -1936,6 +1936,10 @@ class CommandTest(unittest.TestCase):
             self.assertEqual(1, len(template.secrets))
             self.assertEqual(("ABCD",), template.secrets[0].words)
             self.assertEqual(1, template.secrets[0].parts[0].word_count)
+            secret_slot = next(
+                slot for slot in template.slots if slot.answer == "ABCD"
+            )
+            self.assertEqual("Tajenka", secret_slot.clue)
             assert template.secrets[0].prompt is not None
             self.assertEqual("below", template.secrets[0].prompt.placement)
             self.assertEqual("right", template.secrets[0].prompt.alignment)

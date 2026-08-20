@@ -41,12 +41,12 @@ vnitřních předělů; vygenerovaná varianta rozvrhne místa pro hesla
 pseudonáhodně. Po jejím zvolení se zobrazí pole **Sémě**, předvyplněné
 náhodným celým číslem, které lze pro opakování konkrétního rozvržení
 změnit, a volitelné pole **Tajenka**. Generátor rozvržení přizpůsobí tak,
-aby se do něj zadaná tajenka vešla. Může ji rozdělit pouze mezi celými
-slovy a nejvýše na tolik dílů, kolik obsahuje slov. Více po sobě jdoucích
-slov ve stejném dílu spojí bez mezer. Tlačítko **Vytvořit** otevře výsledek
-jako nový samostatný dokument. Neplatný nebo nerozvrhnutelný rozměr či
-tajenku dialog vysvětlí a ponechá otevřený k opravě. Tlačítko-přepínač
-**CLI** vlevo dole rozbalí ve spodní
+aby se do něj zadaná tajenka vešla, a její části v novém dokumentu rovnou
+vyplní. Může ji rozdělit pouze mezi celými slovy a nejvýše na tolik dílů,
+kolik obsahuje slov. Více po sobě jdoucích slov ve stejném dílu spojí bez
+mezer. Tlačítko **Vytvořit** otevře výsledek jako nový samostatný dokument.
+Neplatný nebo nerozvrhnutelný rozměr či tajenku dialog vysvětlí a ponechá
+otevřený k opravě. Tlačítko-přepínač **CLI** vlevo dole rozbalí ve spodní
 části dialogu kopírovatelný příkaz, který na příkazové řádce vytvoří
 totožnou šablonu. Text používá písmo s pevnou šířkou, podle
 dostupného místa se zalamuje a otevře se pod tlačítky, aniž změní šířku
@@ -545,7 +545,16 @@ uv run krizovkar template --width 7 --height 12 \
   --output build/secret-fixed.yaml
 ```
 
-Tyto volby fungují pro obě hodnoty `--layout`. U konkrétního textu se velikost písmen sjednotí, mezery a interpunkce se do buněk nezapisují a seznam slov zachová všechny povolené švy. Automatické dělení nikdy nerozdělí slovo. Generátor podle potřeby změní jinak vyvážené délky běžných slotů tak, aby maska obsahovala požadované délky tajenky od 3 do 8 polí; pokud se požadavek do zadaného rozměru nevejde, skončí s chybou. Volitelné `--secret-prompt` doplní zadání; jeho pozici a zarovnání určují `--secret-prompt-placement` a `--secret-prompt-alignment`. Seed ovlivňuje výběr vhodných slotů.
+Tyto volby fungují pro obě hodnoty `--layout`. U konkrétního textu se
+velikost písmen sjednotí, mezery a interpunkce se do buněk nezapisují a
+seznam slov zachová všechny povolené švy. Vybrané sloty generátor rovnou
+vyplní textem tajenky a popiskem příslušné části. Automatické dělení nikdy
+nerozdělí slovo. Generátor podle potřeby změní jinak vyvážené délky běžných
+slotů tak, aby maska obsahovala požadované délky tajenky od 3 do 8 polí;
+pokud se požadavek do zadaného rozměru nevejde, skončí s chybou. Volitelné
+`--secret-prompt` doplní zadání; jeho pozici a zarovnání určují
+`--secret-prompt-placement` a `--secret-prompt-alignment`. Seed ovlivňuje
+výběr vhodných slotů.
 
 Platnou křížovku lze v kterémkoli stavu bez slovníku převést na cílovou mřížku:
 
@@ -556,9 +565,10 @@ uv run krizovkar grid build/template.yaml \
 
 Převod zachová nevyplňovaná, legendová a pomocná pole, čísla a silné
 předěly číslovaného rozvržení, zvýraznění tajenek, jejich zobáčky a zadání.
-U husté nevyplněné šablony zůstanou písmena a texty legend prázdné.
-Šablona vytvořená ze zadání naopak přenese pevné odpovědi, legendy a
-slova pomůcky. Bez mezikroku ji lze vysázet příkazem
+U husté šablony bez konkrétní tajenky zůstanou písmena a texty legend
+prázdné. Konkrétní tajenka zadaná při generování se přenese už vyplněná;
+šablona vytvořená ze zadání obdobně přenese pevné odpovědi, legendy a slova
+pomůcky. Bez mezikroku ji lze vysázet příkazem
 `krizovkar latex build/template.yaml` nebo z ní rovnou sestavit PDF příkazem
 `krizovkar render build/template.yaml`.
 
@@ -586,13 +596,13 @@ Při převodu dostane slot s `clue_placement: inline` švédskou legendu;
 ostatní sloty dostanou číslo a vnější legendu. Stejná křížovka, slovník a
 seed vytvoří stejnou vyplněnou křížovku.
 
-Známou tajenku uloženou v křížovce `fill` doplní automaticky a její
-místa nevyhledává ve slovníku. Rezervuje-li dokument jen prázdná tajenková
-místa, předá se konkrétní text pomocí `--secret` nebo opakovaného
-`--secret-part`. Stejné volby lze použít i bez předchozí rezervace; plnění
-pak vhodná místa tajenky samo vybere. Jednotlivé části při plnění dostanou
-legendy `1. část tajenky`, `2. část tajenky` a tak dále; následný převod
-jejich pole ve výsledné mřížce zvýrazní.
+Známou tajenku uloženou jen v metadatech křížovky `fill` doplní automaticky;
+už vyplněnou tajenku zachová a její místa nevyhledává ve slovníku.
+Rezervuje-li dokument jen prázdná tajenková místa, předá se konkrétní text
+pomocí `--secret` nebo opakovaného `--secret-part`. Stejné volby lze použít
+i bez předchozí rezervace; plnění pak vhodná místa tajenky samo vybere.
+Jednotlivé části při plnění dostanou legendy `1. část tajenky`, `2. část
+tajenky` a tak dále; následný převod jejich pole ve výsledné mřížce zvýrazní.
 
 ## Slovník
 
