@@ -52,6 +52,7 @@ from krizovkar.gui import (
     _inherit_macos_menu_bar,
     _keyboard_shortcut,
     _multiple_cell_selection_sequence,
+    _NewCrosswordPreferences,
     _open_pdf_in_default_application,
     _PdfOpenError,
     _PrintError,
@@ -379,6 +380,45 @@ class GuiTest(unittest.TestCase):
             recent_documents = _RecentDocuments(storage_path)
 
         self.assertEqual((), recent_documents.paths)
+
+    def test_new_crossword_preferences_are_persisted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            storage_path = Path(directory) / "new-crossword.json"
+            dictionary = Path(directory) / "slovník.json"
+            preferences = _NewCrosswordPreferences(storage_path)
+
+            self.assertEqual(
+                CrosswordSettings(15, 10),
+                preferences.settings,
+            )
+            self.assertEqual("swedish", preferences.layout)
+            self.assertIsNone(preferences.dictionary)
+
+            preferences.remember(
+                CrosswordSettings(12, 8),
+                "numbered",
+                dictionary,
+            )
+            loaded = _NewCrosswordPreferences(storage_path)
+
+        self.assertEqual(CrosswordSettings(12, 8), loaded.settings)
+        self.assertEqual("numbered", loaded.layout)
+        self.assertEqual(dictionary, loaded.dictionary)
+
+    def test_new_crossword_preferences_ignore_invalid_storage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            storage_path = Path(directory) / "new-crossword.json"
+            storage_path.write_text(
+                '{"width": true, "height": 99, '
+                '"layout": "neznámé", "dictionary": 42}',
+                encoding="utf-8",
+            )
+
+            preferences = _NewCrosswordPreferences(storage_path)
+
+        self.assertEqual(CrosswordSettings(15, 10), preferences.settings)
+        self.assertEqual("swedish", preferences.layout)
+        self.assertIsNone(preferences.dictionary)
 
     def test_duplicate_recent_document_names_include_their_directories(self) -> None:
         first = Path("prvni") / "krizovka.yaml"
@@ -1475,6 +1515,7 @@ class GuiTest(unittest.TestCase):
         dialog._initial_settings = CrosswordSettings(15, 10)
         dialog._initial_layout = "swedish"
         dialog._initial_content_mode = "empty"
+        dialog._initial_dictionary = Path("/slovníky/český.json")
         dialog._initial_seed = 123
         dialog._fit_generation_controls_width = Mock()
         dialog._update_generation_controls = Mock()
@@ -1502,7 +1543,7 @@ class GuiTest(unittest.TestCase):
             patch(
                 "krizovkar.gui.tk.StringVar",
                 side_effect=variables,
-            ),
+            ) as string_var,
             patch(
                 "krizovkar.gui.ttk.Spinbox",
                 side_effect=(width_editor, Mock()),
@@ -1525,6 +1566,10 @@ class GuiTest(unittest.TestCase):
             initial_focus = TemplateGenerationDialog.body(dialog, master)
 
         self.assertIs(width_editor, initial_focus)
+        self.assertEqual(
+            call(master=master, value="/slovníky/český.json"),
+            string_var.call_args_list[6],
+        )
         self.assertEqual(
             [
                 call(
@@ -2344,7 +2389,13 @@ class GuiTest(unittest.TestCase):
             dictionary=None,
         )
         self.assertEqual(
-            NewTemplateResult(template, "numbered", "generated"),
+            NewTemplateResult(
+                template,
+                "numbered",
+                "generated",
+                CrosswordSettings(7, 6),
+                None,
+            ),
             dialog.result,
         )
 
@@ -5119,20 +5170,30 @@ class GuiTest(unittest.TestCase):
         application._open_window.return_value = expected_window
         parent = Mock()
         application._no_document_dialog_parent.return_value = parent
+        preferences = Mock()
+        preferences.settings = CrosswordSettings(12, 8)
+        preferences.layout = "swedish"
+        preferences.dictionary = Path("/slovníky/původní.json")
+        application._new_crossword_preferences = preferences
+        selected_settings = CrosswordSettings(7, 6)
+        selected_dictionary = Path("/slovníky/nový.json")
 
         with patch("krizovkar.gui.TemplateGenerationDialog") as dialog_type:
             dialog_type.return_value.result = NewTemplateResult(
                 template,
                 "numbered",
                 "generated",
+                selected_settings,
+                selected_dictionary,
             )
             result = CrosswordApplication.new_template_document(application)
 
         dialog_type.assert_called_once_with(
             parent,
-            initial_settings=CrosswordSettings(15, 10),
+            initial_settings=CrosswordSettings(12, 8),
             initial_layout="swedish",
             initial_content_mode="empty",
+            initial_dictionary=Path("/slovníky/původní.json"),
         )
         application._no_document_dialog_parent.assert_called_once_with()
         application._open_window.assert_called_once_with(
@@ -5141,13 +5202,50 @@ class GuiTest(unittest.TestCase):
             template_layout="numbered",
             template_creation_mode="generated",
         )
+        preferences.remember.assert_called_once_with(
+            selected_settings,
+            "numbered",
+            selected_dictionary,
+        )
         self.assertIs(expected_window, result)
+
+    def test_empty_template_keeps_last_selected_dictionary(self) -> None:
+        application = Mock()
+        template = create_empty_template(CrosswordSettings(4, 3), "swedish")
+        application._open_window.return_value = Mock()
+        preferences = Mock()
+        preferences.settings = CrosswordSettings(12, 8)
+        preferences.layout = "numbered"
+        preferences.dictionary = Path("/slovníky/český.json")
+        application._new_crossword_preferences = preferences
+
+        with patch("krizovkar.gui.TemplateGenerationDialog") as dialog_type:
+            dialog_type.return_value.result = NewTemplateResult(
+                template,
+                "swedish",
+                "empty",
+                CrosswordSettings(4, 3),
+                None,
+            )
+
+            CrosswordApplication.new_template_document(
+                application,
+                parent=Mock(),
+            )
+
+        preferences.remember.assert_called_once_with(
+            CrosswordSettings(4, 3),
+            "swedish",
+            Path("/slovníky/český.json"),
+        )
 
     def test_application_does_not_open_document_after_cancelled_generation(
         self,
     ) -> None:
         application = Mock()
         parent = Mock()
+        preferences = Mock()
+        application._new_crossword_preferences = preferences
 
         with patch("krizovkar.gui.TemplateGenerationDialog") as dialog_type:
             dialog_type.return_value.result = None
@@ -5158,9 +5256,11 @@ class GuiTest(unittest.TestCase):
 
         self.assertIsNone(result)
         application._open_window.assert_not_called()
+        preferences.remember.assert_not_called()
 
     def test_application_owner_stays_hidden_behind_document_windows(self) -> None:
         root = Mock()
+        preferences = Mock()
 
         with (
             patch.object(
@@ -5169,12 +5269,16 @@ class GuiTest(unittest.TestCase):
             ),
             patch.object(CrosswordApplication, "_build_menu"),
         ):
-            application = CrosswordApplication(root)
+            application = CrosswordApplication(
+                root,
+                new_crossword_preferences=preferences,
+            )
 
         root.withdraw.assert_called_once_with()
         self.assertEqual([], application._windows)
         self.assertIsNone(application._active_window)
         self.assertEqual({}, application._source_windows)
+        self.assertIs(preferences, application._new_crossword_preferences)
 
     def test_application_creates_source_window_for_each_document(self) -> None:
         application = CrosswordApplication.__new__(CrosswordApplication)

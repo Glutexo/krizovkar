@@ -57,6 +57,9 @@ jednopísmennou souhláskovou předložku `k`, `s`, `v` nebo `z` od následujíc
 slova. Nerozdělí ji ani v místě pevné mezery. Více po sobě jdoucích slov ve
 stejném dílu spojí bez mezer. Tlačítko **Vytvořit** otevře výsledek jako nový
 samostatný dokument.
+Po úspěšném vytvoření si aplikace zapamatuje použité rozměry, typ
+křížovky a zvolený slovník a předvyplní je při dalším otevření dialogu
+i po restartu. Prázdná varianta dříve zvolený slovník nesmaže.
 Neplatný nebo nerozvrhnutelný rozměr či tajenku dialog vysvětlí a ponechá
 otevřený k opravě. Tlačítko-přepínač **CLI** vlevo dole rozbalí ve spodní
 části dialogu kopírovatelný příkaz, který na příkazové řádce vytvoří

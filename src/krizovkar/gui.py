@@ -176,6 +176,8 @@ class NewTemplateResult:
     document: CrosswordDocument
     layout: SpecificationLayout
     creation_mode: TemplateCreationMode
+    settings: CrosswordSettings
+    dictionary: Path | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,7 +385,7 @@ def _multiple_cell_selection_sequence() -> str:
     return f"<{modifier}-Button-1>"
 
 
-def _recent_documents_storage_path() -> Path:
+def _application_state_directory() -> Path:
     if sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
     elif os.name == "nt":
@@ -400,7 +402,15 @@ def _recent_documents_storage_path() -> Path:
             if configured
             else Path.home() / ".local" / "state"
         )
-    return base / "krizovkar" / "recent-documents.json"
+    return base / "krizovkar"
+
+
+def _recent_documents_storage_path() -> Path:
+    return _application_state_directory() / "recent-documents.json"
+
+
+def _new_crossword_preferences_storage_path() -> Path:
+    return _application_state_directory() / "new-crossword.json"
 
 
 def _dictionary_directory() -> Path:
@@ -442,6 +452,111 @@ def _available_dictionary_paths(
     return tuple(
         sorted(paths, key=lambda path: (path.name.casefold(), str(path)))
     )
+
+
+def _write_json_file(storage_path: Path, value: object) -> None:
+    temporary = storage_path.with_name(f".{storage_path.name}.tmp")
+    try:
+        storage_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary.write_text(
+            json.dumps(value, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, storage_path)
+    except OSError:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+class _NewCrosswordPreferences:
+    """Uchovává poslední úspěšně použité volby nové křížovky."""
+
+    def __init__(self, storage_path: Path | None = None) -> None:
+        self._storage_path = (
+            storage_path or _new_crossword_preferences_storage_path()
+        )
+        self._settings, self._layout, self._dictionary = self._load()
+
+    @property
+    def settings(self) -> CrosswordSettings:
+        return self._settings
+
+    @property
+    def layout(self) -> SpecificationLayout:
+        return self._layout
+
+    @property
+    def dictionary(self) -> Path | None:
+        return self._dictionary
+
+    def remember(
+        self,
+        settings: CrosswordSettings,
+        layout: SpecificationLayout,
+        dictionary: Path | None,
+    ) -> None:
+        normalized_dictionary = (
+            dictionary.expanduser().absolute()
+            if dictionary is not None
+            else None
+        )
+        values = (settings, layout, normalized_dictionary)
+        if values == (self._settings, self._layout, self._dictionary):
+            return
+        self._settings, self._layout, self._dictionary = values
+        _write_json_file(
+            self._storage_path,
+            {
+                "width": settings.width,
+                "height": settings.height,
+                "layout": layout,
+                "dictionary": (
+                    str(normalized_dictionary)
+                    if normalized_dictionary is not None
+                    else None
+                ),
+            },
+        )
+
+    def _load(
+        self,
+    ) -> tuple[
+        CrosswordSettings,
+        SpecificationLayout,
+        Path | None,
+    ]:
+        settings = CrosswordSettings(DEFAULT_GRID_WIDTH, DEFAULT_GRID_HEIGHT)
+        layout: SpecificationLayout = "swedish"
+        dictionary: Path | None = None
+        try:
+            values = json.loads(self._storage_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return settings, layout, dictionary
+        if not isinstance(values, dict):
+            return settings, layout, dictionary
+
+        width = values.get("width")
+        height = values.get("height")
+        if (
+            type(width) is int
+            and type(height) is int
+            and 0 < width <= _MAX_CROSSWORD_DIMENSION
+            and 0 < height <= _MAX_CROSSWORD_DIMENSION
+        ):
+            settings = CrosswordSettings(width, height)
+
+        layout_value = values.get("layout")
+        if layout_value in {"swedish", "numbered"}:
+            layout = cast(SpecificationLayout, layout_value)
+
+        dictionary_value = values.get("dictionary")
+        if isinstance(dictionary_value, str) and dictionary_value:
+            dictionary_path = Path(dictionary_value).expanduser()
+            if dictionary_path.is_absolute():
+                dictionary = dictionary_path
+        return settings, layout, dictionary
 
 
 class _RecentDocuments:
@@ -500,26 +615,10 @@ class _RecentDocuments:
         return tuple(paths)
 
     def _persist(self) -> None:
-        temporary = self._storage_path.with_name(
-            f".{self._storage_path.name}.tmp"
+        _write_json_file(
+            self._storage_path,
+            [str(path) for path in self._paths],
         )
-        try:
-            self._storage_path.parent.mkdir(parents=True, exist_ok=True)
-            temporary.write_text(
-                json.dumps(
-                    [str(path) for path in self._paths],
-                    ensure_ascii=False,
-                    indent=2,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-            os.replace(temporary, self._storage_path)
-        except OSError:
-            try:
-                temporary.unlink(missing_ok=True)
-            except OSError:
-                pass
 
 
 def _recent_document_label(path: Path, paths: Sequence[Path]) -> str:
@@ -1172,10 +1271,12 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         initial_settings: CrosswordSettings,
         initial_layout: SpecificationLayout,
         initial_content_mode: TemplateContentMode,
+        initial_dictionary: Path | None = None,
     ) -> None:
         self._initial_settings = initial_settings
         self._initial_layout = initial_layout
         self._initial_content_mode = initial_content_mode
+        self._initial_dictionary = initial_dictionary
         self._width_value: tk.StringVar
         self._height_value: tk.StringVar
         self._layout_value: tk.StringVar
@@ -1289,7 +1390,14 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             value=str(self._initial_seed),
         )
         self._secret_value = tk.StringVar(master=master)
-        self._dictionary_value = tk.StringVar(master=master)
+        self._dictionary_value = tk.StringVar(
+            master=master,
+            value=(
+                str(self._initial_dictionary)
+                if self._initial_dictionary is not None
+                else ""
+            ),
+        )
         self._generation_controls = ttk.Frame(master)
         self._generation_controls.grid(
             row=8,
@@ -1542,6 +1650,8 @@ class TemplateGenerationDialog(simpledialog.Dialog):
                 creation_mode=(
                     "empty" if content_mode == "empty" else "generated"
                 ),
+                settings=settings,
+                dictionary=dictionary_path,
             )
         except (DictionaryError, GuiInputError) as error:
             self._new_template = None
@@ -3613,6 +3723,7 @@ class CrosswordApplication:
         root: tk.Tk,
         *,
         recent_documents: _RecentDocuments | None = None,
+        new_crossword_preferences: _NewCrosswordPreferences | None = None,
     ) -> None:
         self.root = root
         self._windows: list[CrosswordDocumentWindow] = []
@@ -3625,6 +3736,11 @@ class CrosswordApplication:
             recent_documents
             if recent_documents is not None
             else _RecentDocuments()
+        )
+        self._new_crossword_preferences = (
+            new_crossword_preferences
+            if new_crossword_preferences is not None
+            else _NewCrosswordPreferences()
         )
         self._configure_no_document_window()
         self._build_menu()
@@ -3892,24 +4008,33 @@ class CrosswordApplication:
         *,
         parent: tk.Misc | None = None,
     ) -> CrosswordDocumentWindow | None:
+        preferences = self._new_crossword_preferences
         dialog = TemplateGenerationDialog(
             parent if parent is not None else self._no_document_dialog_parent(),
-            initial_settings=CrosswordSettings(
-                DEFAULT_GRID_WIDTH,
-                DEFAULT_GRID_HEIGHT,
-            ),
-            initial_layout="swedish",
+            initial_settings=preferences.settings,
+            initial_layout=preferences.layout,
             initial_content_mode="empty",
+            initial_dictionary=preferences.dictionary,
         )
         new_template = cast(NewTemplateResult | None, dialog.result)
         if new_template is None:
             return None
-        return self._open_window(
+        window = self._open_window(
             new_template.document,
             dirty=True,
             template_layout=new_template.layout,
             template_creation_mode=new_template.creation_mode,
         )
+        preferences.remember(
+            new_template.settings,
+            new_template.layout,
+            (
+                preferences.dictionary
+                if new_template.creation_mode == "empty"
+                else new_template.dictionary
+            ),
+        )
+        return window
 
     def choose_document(
         self,
