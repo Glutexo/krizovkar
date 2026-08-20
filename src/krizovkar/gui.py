@@ -3200,10 +3200,15 @@ class CrosswordApplication:
         return None if sys.platform == "darwin" else self.root
 
     def show_no_document_state(self) -> None:
+        """Zpřístupní aplikaci bez otevřeného dokumentu."""
+
+        if sys.platform == "darwin":
+            # Obsluha Activate na kořenovém okně znovu nainstaluje jeho
+            # nabídku v Tk/Aqua, aniž by se schované okno muselo zobrazit.
+            self.root.event_generate("<Activate>")
+            return
         self.root.deiconify()
         self.root.lift()
-        if sys.platform == "darwin":
-            self.root.focus_force()
 
     def _new_event(self, _event: tk.Event[tk.Misc]) -> str:
         self.new_template_document()

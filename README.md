@@ -22,9 +22,10 @@ příkazem:
 uv run krizovkar-gui
 ```
 
-Tím se otevře dialog pro vytvoření nové šablony. Po jeho zavření se zobrazí
-aplikační okno bez otevřeného dokumentu; z nabídky **Soubor** lze dialog
-otevřít znovu, otevřít soubor nebo vybrat některý z posledních dokumentů.
+Tím se otevře dialog pro vytvoření nové šablony. Po jeho zavření zůstane
+aplikace spuštěná bez otevřeného dokumentu; na macOS také bez viditelného
+okna. Z nabídky **Soubor** lze dialog otevřít znovu, otevřít soubor nebo
+vybrat některý z posledních dokumentů.
 Existující soubor
 lze také otevřít přímo při spuštění; každá zadaná cesta dostane vlastní
 okno a systémový dialog se v tom případě nezobrazí:
@@ -121,8 +122,9 @@ Na macOS používá zkratky `⌘N`, `⌘O`,
 `Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+S` a `Ctrl+W`. Poslední z nich zavře pouze
 dané okno; pokud obsahuje neuložené změny, editor se zeptá na jejich
 uložení. Po zavření posledního okna zůstane aplikace spuštěná bez
-dokumentu a zobrazí aplikační okno se svou nabídkou. Každé otevřené okno je
-nezávislé; změna jednoho proto obsah druhého neovlivní.
+dokumentu. Na macOS ji lze i bez viditelného okna dál ovládat z její nabídky.
+Každé otevřené okno je nezávislé; změna jednoho proto obsah druhého
+neovlivní.
 
 Nabídka **Úpravy** obsahuje **Zpět** a **Vpřed**. Na macOS používají zkratky
 `⌘Z` a `⇧⌘Z`, na ostatních systémech `Ctrl+Z` a `Ctrl+Shift+Z`. Historie je

@@ -3896,7 +3896,9 @@ class GuiTest(unittest.TestCase):
         first.root.destroy.assert_called_once_with()
         application.show_no_document_state.assert_called_once_with()
 
-    def test_application_shows_owner_window_without_document(self) -> None:
+    def test_application_shows_owner_window_without_document_off_macos(
+        self,
+    ) -> None:
         application = CrosswordApplication.__new__(CrosswordApplication)
         application.root = Mock()
 
@@ -3905,15 +3907,18 @@ class GuiTest(unittest.TestCase):
 
         application.root.deiconify.assert_called_once_with()
         application.root.lift.assert_called_once_with()
-        application.root.focus_force.assert_not_called()
+        application.root.event_generate.assert_not_called()
 
-        application.root.reset_mock()
+    def test_application_activates_menu_without_window_on_macos(self) -> None:
+        application = CrosswordApplication.__new__(CrosswordApplication)
+        application.root = Mock()
+
         with patch("krizovkar.gui.sys.platform", "darwin"):
             application.show_no_document_state()
 
-        application.root.deiconify.assert_called_once_with()
-        application.root.lift.assert_called_once_with()
-        application.root.focus_force.assert_called_once_with()
+        application.root.event_generate.assert_called_once_with("<Activate>")
+        application.root.deiconify.assert_not_called()
+        application.root.lift.assert_not_called()
 
     def test_application_opens_crossword_used_as_template(self) -> None:
         application = Mock()
