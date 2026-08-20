@@ -4970,7 +4970,7 @@ class CrosswordDocumentWindow(ttk.Frame):
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Otevře zadané dokumenty nebo zobrazí jejich systémový výběr."""
+    """Otevře zadané dokumenty nebo nabídne vytvoření nové šablony."""
 
     document_paths = tuple(
         Path(argument) for argument in (sys.argv[1:] if argv is None else argv)
@@ -4998,7 +4998,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             root.destroy()
             return 2
     else:
-        if application.choose_document(parent=None) is None:
+        if application.new_template_document(parent=None) is None:
             application.show_no_document_state()
     root.mainloop()
     return 0

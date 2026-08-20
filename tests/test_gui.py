@@ -4794,10 +4794,10 @@ class GuiTest(unittest.TestCase):
         self.assertIn("nalezena verze 8.6", error_output.getvalue())
         root_type.assert_not_called()
 
-    def test_main_opens_system_file_dialog(self) -> None:
+    def test_main_opens_new_template_dialog(self) -> None:
         root = Mock()
         application = Mock()
-        application.choose_document.return_value = Mock()
+        application.new_template_document.return_value = Mock()
         with (
             patch("krizovkar.gui.tk.Tk", return_value=root),
             patch(
@@ -4808,16 +4808,16 @@ class GuiTest(unittest.TestCase):
             exit_code = main([])
 
         self.assertEqual(0, exit_code)
-        application.choose_document.assert_called_once_with(parent=None)
+        application.new_template_document.assert_called_once_with(parent=None)
         application.show_no_document_state.assert_not_called()
-        application.new_template_document.assert_not_called()
+        application.choose_document.assert_not_called()
         application.open_document.assert_not_called()
         root.mainloop.assert_called_once_with()
 
-    def test_main_stays_open_when_system_file_dialog_is_cancelled(self) -> None:
+    def test_main_stays_open_when_new_template_dialog_is_cancelled(self) -> None:
         root = Mock()
         application = Mock()
-        application.choose_document.return_value = None
+        application.new_template_document.return_value = None
         with (
             patch("krizovkar.gui.tk.Tk", return_value=root),
             patch(
@@ -4828,8 +4828,9 @@ class GuiTest(unittest.TestCase):
             exit_code = main([])
 
         self.assertEqual(0, exit_code)
-        application.choose_document.assert_called_once_with(parent=None)
+        application.new_template_document.assert_called_once_with(parent=None)
         application.show_no_document_state.assert_called_once_with()
+        application.choose_document.assert_not_called()
         root.destroy.assert_not_called()
         root.mainloop.assert_called_once_with()
 
@@ -4855,6 +4856,7 @@ class GuiTest(unittest.TestCase):
             application.open_document.call_args_list,
         )
         application.choose_document.assert_not_called()
+        application.new_template_document.assert_not_called()
         root.mainloop.assert_called_once_with()
 
     def test_main_exits_when_no_given_yaml_can_be_opened(self) -> None:

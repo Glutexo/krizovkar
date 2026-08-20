@@ -22,10 +22,10 @@ příkazem:
 uv run krizovkar-gui
 ```
 
-Tím se otevře systémový dialog pro výběr existující křížovky. Po jeho
-zavření zůstane aplikace spuštěná bez otevřeného dokumentu; z nabídky
-**Soubor** lze vytvořit novou šablonu, otevřít soubor nebo vybrat některý z
-posledních dokumentů. Existující soubor
+Tím se otevře dialog pro vytvoření nové šablony. Po jeho zavření zůstane
+aplikace spuštěná bez otevřeného dokumentu; z nabídky **Soubor** lze dialog
+otevřít znovu, otevřít soubor nebo vybrat některý z posledních dokumentů.
+Existující soubor
 lze také otevřít přímo při spuštění; každá zadaná cesta dostane vlastní
 okno a systémový dialog se v tom případě nezobrazí:
 
