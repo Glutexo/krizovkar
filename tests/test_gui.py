@@ -28,6 +28,7 @@ from krizovkar.gui import (
     _answer_conflicts_with_crossing,
     _bind_text_entry_context_menu,
     _configure_tk_runtime,
+    _create_generation_entry,
     _create_help_menu,
     _create_view_menu,
     _create_window_menu,
@@ -1423,6 +1424,43 @@ class GuiTest(unittest.TestCase):
 
         dialog._generation_controls.grid_remove.assert_called_once_with()
         dialog._generation_controls.grid.assert_called_once_with()
+
+    def test_template_generation_entries_have_the_same_width(self) -> None:
+        parent = Mock()
+        seed_value = Mock()
+        secret_value = Mock()
+        seed_editor = Mock()
+        secret_editor = Mock()
+
+        with patch(
+            "krizovkar.gui.ttk.Entry",
+            side_effect=(seed_editor, secret_editor),
+        ) as entry_type:
+            first = _create_generation_entry(parent, seed_value, row=0)
+            second = _create_generation_entry(parent, secret_value, row=1)
+
+        self.assertIs(seed_editor, first)
+        self.assertIs(secret_editor, second)
+        self.assertEqual(
+            [
+                call(parent, width=22, textvariable=seed_value),
+                call(parent, width=22, textvariable=secret_value),
+            ],
+            entry_type.call_args_list,
+        )
+        seed_editor.grid.assert_called_once_with(
+            row=0,
+            column=1,
+            sticky="ew",
+            padx=(8, 0),
+        )
+        secret_editor.grid.assert_called_once_with(
+            row=1,
+            column=1,
+            sticky="ew",
+            padx=(8, 0),
+            pady=(8, 0),
+        )
 
     def test_template_dialog_reserves_only_generation_controls_width(
         self,

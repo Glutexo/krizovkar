@@ -67,6 +67,7 @@ from krizovkar.renderer import (
 
 _MAX_CROSSWORD_DIMENSION = 50
 _GENERATION_CONTROLS_INDENT = 24
+_GENERATION_ENTRY_WIDTH = 22
 _MAX_DOCUMENT_HISTORY = 200
 _MAX_RECENT_DOCUMENTS = 10
 _MINIMUM_TK_VERSION = 9.0
@@ -574,6 +575,29 @@ def _bind_text_entry_context_menu(editor: ttk.Entry) -> None:
     editor.bind("<<ContextMenu>>", show_context_menu, add="+")
 
 
+def _create_generation_entry(
+    parent: ttk.Frame,
+    variable: tk.StringVar,
+    *,
+    row: int,
+) -> ttk.Entry:
+    editor = ttk.Entry(
+        parent,
+        width=_GENERATION_ENTRY_WIDTH,
+        textvariable=variable,
+    )
+    grid_options: dict[str, object] = {
+        "row": row,
+        "column": 1,
+        "sticky": "ew",
+        "padx": (8, 0),
+    }
+    if row > 0:
+        grid_options["pady"] = (8, 0)
+    editor.grid(**grid_options)
+    return editor
+
+
 class PdfExportDialog(simpledialog.Dialog):
     """Vybere formát PDF před jeho uložením, otevřením nebo tiskem."""
 
@@ -858,27 +882,19 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             column=0,
             sticky="w",
         )
-        self._seed_editor = ttk.Entry(
+        self._seed_editor = _create_generation_entry(
             self._generation_controls,
-            width=22,
-            textvariable=self._seed_value,
+            self._seed_value,
+            row=0,
         )
-        self._seed_editor.grid(row=0, column=1, sticky="w", padx=(8, 0))
         ttk.Label(
             self._generation_controls,
             text="Tajenka (volitelná)",
         ).grid(row=1, column=0, sticky="w", pady=(8, 0))
-        self._secret_editor = ttk.Entry(
+        self._secret_editor = _create_generation_entry(
             self._generation_controls,
-            width=32,
-            textvariable=self._secret_value,
-        )
-        self._secret_editor.grid(
+            self._secret_value,
             row=1,
-            column=1,
-            sticky="ew",
-            padx=(8, 0),
-            pady=(8, 0),
         )
         _bind_text_entry_context_menu(self._secret_editor)
         self._reserve_generation_controls_width(master)
