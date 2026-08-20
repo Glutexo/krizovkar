@@ -63,7 +63,6 @@ from krizovkar.gui import (
     create_blank_template,
     create_empty_template,
     create_new_template,
-    crossword_is_complete,
     crossword_slot_pattern,
     fill_crossword_slot,
     main,
@@ -2835,14 +2834,6 @@ class GuiTest(unittest.TestCase):
         self.assertIsNone(slot.answer)
         self.assertIsNone(slot.clue)
 
-    def test_recognizes_complete_crossword(self) -> None:
-        crossword = _filled_numbered_crossword()
-
-        self.assertTrue(crossword_is_complete(crossword))
-
-        crossword = clear_crossword_slot(crossword, "v3")
-        self.assertFalse(crossword_is_complete(crossword))
-
     def test_saves_partially_filled_crossword_in_project_format(self) -> None:
         crossword = create_blank_template(CrosswordSettings(7, 6), "swedish")
         crossword = fill_crossword_slot(
@@ -4898,7 +4889,6 @@ class GuiTest(unittest.TestCase):
             [call(application._crossword), call(application._crossword)],
             create_grid.call_args_list,
         )
-        application._complete_grid_or_error.assert_not_called()
 
     def test_grid_yaml_and_latex_actions_export_both_empty_versions(self) -> None:
         application = Mock()
@@ -4951,16 +4941,13 @@ class GuiTest(unittest.TestCase):
             [call(application._crossword)] * 4,
             create_grid.call_args_list,
         )
-        application._complete_grid_or_error.assert_not_called()
 
-    def test_print_actions_choose_puzzle_and_solution(self) -> None:
+    def test_print_actions_choose_empty_puzzle_and_partial_solution(self) -> None:
         application = Mock()
         application._crossword = create_blank_template(
             CrosswordSettings(3, 3),
             "numbered",
         )
-        solution = Mock()
-        application._complete_grid_or_error.return_value = solution
 
         with patch("krizovkar.gui.create_grid_from_crossword") as create_grid:
             CrosswordDocumentWindow.print_crossword(application)
@@ -4976,7 +4963,7 @@ class GuiTest(unittest.TestCase):
                     job_name="Křížovkář – křížovka",
                 ),
                 call(
-                    solution,
+                    create_grid.return_value,
                     filled=True,
                     title="Tisknout řešení s písmeny",
                     filename="reseni.pdf",
@@ -4985,16 +4972,19 @@ class GuiTest(unittest.TestCase):
             ],
             application._print_pdf.call_args_list,
         )
-        create_grid.assert_called_once_with(application._crossword)
+        self.assertEqual(
+            [call(application._crossword), call(application._crossword)],
+            create_grid.call_args_list,
+        )
 
-    def test_open_pdf_actions_choose_puzzle_and_solution(self) -> None:
+    def test_open_pdf_actions_choose_empty_puzzle_and_partial_solution(
+        self,
+    ) -> None:
         application = Mock()
         application._crossword = create_blank_template(
             CrosswordSettings(3, 3),
             "numbered",
         )
-        solution = Mock()
-        application._complete_grid_or_error.return_value = solution
 
         with patch("krizovkar.gui.create_grid_from_crossword") as create_grid:
             CrosswordDocumentWindow.open_crossword_pdf(application)
@@ -5009,7 +4999,7 @@ class GuiTest(unittest.TestCase):
                     filename="krizovka.pdf",
                 ),
                 call(
-                    solution,
+                    create_grid.return_value,
                     filled=True,
                     title="Otevřít jako PDF – řešení s písmeny",
                     filename="reseni.pdf",
@@ -5017,7 +5007,10 @@ class GuiTest(unittest.TestCase):
             ],
             application._open_temporary_pdf.call_args_list,
         )
-        create_grid.assert_called_once_with(application._crossword)
+        self.assertEqual(
+            [call(application._crossword), call(application._crossword)],
+            create_grid.call_args_list,
+        )
 
     def test_export_actions_offer_both_variants_in_all_formats(self) -> None:
         crossword_window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
@@ -5072,7 +5065,6 @@ class GuiTest(unittest.TestCase):
                 call(
                     label="Řešení s písmeny…",
                     command=crossword_window.print_solution,
-                    state="disabled",
                 ),
             ],
             crossword_window.print_menu.add_command.call_args_list,
@@ -5093,7 +5085,6 @@ class GuiTest(unittest.TestCase):
                 call(
                     label="Řešení s písmeny…",
                     command=crossword_window.open_solution_pdf,
-                    state="disabled",
                 ),
             ],
             crossword_window.open_pdf_menu.add_command.call_args_list,
@@ -5141,7 +5132,7 @@ class GuiTest(unittest.TestCase):
             application.open_pdf_menu.entryconfigure.call_args_list,
         )
 
-    def test_file_menu_allows_all_exports_for_incomplete_crossword(self) -> None:
+    def test_file_menu_allows_all_outputs_for_incomplete_crossword(self) -> None:
         application = Mock()
         application._save_menu_index = 4
         application._save_as_menu_index = 5
@@ -5172,11 +5163,11 @@ class GuiTest(unittest.TestCase):
             application.export_menu.entryconfigure.call_args_list,
         )
         self.assertEqual(
-            [call(0, state="normal"), call(1, state="disabled")],
+            [call(0, state="normal"), call(1, state="normal")],
             application.print_menu.entryconfigure.call_args_list,
         )
         self.assertEqual(
-            [call(0, state="normal"), call(1, state="disabled")],
+            [call(0, state="normal"), call(1, state="normal")],
             application.open_pdf_menu.entryconfigure.call_args_list,
         )
 

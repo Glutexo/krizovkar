@@ -41,7 +41,7 @@ from krizovkar.generator import (
     normalize_secret_text,
 )
 from krizovkar.layout import MIN_SEGMENT_LENGTH
-from krizovkar.localization import ngettext, system_error_message
+from krizovkar.localization import system_error_message
 from krizovkar.model import (
     Coordinate,
     CrosswordDocument,
@@ -217,7 +217,6 @@ class _DocumentHistoryEntry:
 class _ExportAction:
     """Jedna položka nabídky exportu, otevření nebo tisku."""
 
-    identifier: str
     label: str
     command: Callable[[], None]
 
@@ -2397,15 +2396,6 @@ def _answer_conflicts_with_crossing(
     return False
 
 
-def crossword_is_complete(crossword: CrosswordDocument) -> bool:
-    """Určí, zda mají všechny sloty odpověď i nápovědu."""
-
-    return all(
-        slot.answer is not None and slot.clue is not None
-        for slot in crossword.slots
-    )
-
-
 def _template_generation_layout(
     document: CrosswordDocument,
 ) -> SpecificationLayout:
@@ -2428,10 +2418,6 @@ def _template_creation_mode(
     except GuiInputError:
         return "generated"
     return "empty" if document == empty_template else "generated"
-
-
-def _word_count_text(count: int) -> str:
-    return f"{count} {ngettext('heslo', 'hesel', count)}"
 
 
 def _cell_count_text(count: int) -> str:
@@ -3994,53 +3980,41 @@ class CrosswordDocumentWindow(ttk.Frame):
 
     def _add_print_actions(self) -> None:
         for action in self._print_actions():
-            options: dict[str, object] = {
-                "label": action.label,
-                "command": action.command,
-            }
-            if action.identifier == "solution":
-                options["state"] = "disabled"
-            self.print_menu.add_command(**options)
+            self.print_menu.add_command(
+                label=action.label,
+                command=action.command,
+            )
 
     def _add_open_pdf_actions(self) -> None:
         for action in self._open_pdf_actions():
-            options: dict[str, object] = {
-                "label": action.label,
-                "command": action.command,
-            }
-            if action.identifier == "solution":
-                options["state"] = "disabled"
-            self.open_pdf_menu.add_command(**options)
+            self.open_pdf_menu.add_command(
+                label=action.label,
+                command=action.command,
+            )
 
     def _export_actions(self) -> tuple[_ExportAction, ...]:
         return (
             _ExportAction(
-                "blank-crossword",
                 _EXPORT_ACTION_LABELS[0],
                 self.save_crossword_pdf,
             ),
             _ExportAction(
-                "solution",
                 _EXPORT_ACTION_LABELS[1],
                 self.save_solution_pdf,
             ),
             _ExportAction(
-                "blank-latex",
                 _EXPORT_ACTION_LABELS[2],
                 self.save_crossword_latex,
             ),
             _ExportAction(
-                "solution-latex",
                 _EXPORT_ACTION_LABELS[3],
                 self.save_solution_latex,
             ),
             _ExportAction(
-                "blank-grid-yaml",
                 _EXPORT_ACTION_LABELS[4],
                 self.save_crossword_grid_yaml,
             ),
             _ExportAction(
-                "solution-grid-yaml",
                 _EXPORT_ACTION_LABELS[5],
                 self.save_solution_grid_yaml,
             ),
@@ -4049,12 +4023,10 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _print_actions(self) -> tuple[_ExportAction, ...]:
         return (
             _ExportAction(
-                "blank-crossword",
                 _PRINT_ACTION_LABELS[0],
                 self.print_crossword,
             ),
             _ExportAction(
-                "solution",
                 _PRINT_ACTION_LABELS[1],
                 self.print_solution,
             ),
@@ -4063,12 +4035,10 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _open_pdf_actions(self) -> tuple[_ExportAction, ...]:
         return (
             _ExportAction(
-                "blank-crossword",
                 _OPEN_PDF_ACTION_LABELS[0],
                 self.open_crossword_pdf,
             ),
             _ExportAction(
-                "solution",
                 _OPEN_PDF_ACTION_LABELS[1],
                 self.open_solution_pdf,
             ),
@@ -4461,7 +4431,6 @@ class CrosswordDocumentWindow(ttk.Frame):
     def _refresh_file_menu(self) -> None:
         crossword = self._crossword
         document_state = "normal" if crossword is not None else "disabled"
-        complete = crossword is not None and crossword_is_complete(crossword)
         self.file_menu.entryconfigure(
             self._save_menu_index,
             label="Uložit",
@@ -4484,7 +4453,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         self.print_menu.entryconfigure(
             1,
-            state="normal" if complete else "disabled",
+            state=document_state,
         )
         self.open_pdf_menu.entryconfigure(
             0,
@@ -4492,7 +4461,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         )
         self.open_pdf_menu.entryconfigure(
             1,
-            state="normal" if complete else "disabled",
+            state=document_state,
         )
 
     def _slot_label(self, selected: WordSlot) -> str:
@@ -4980,23 +4949,6 @@ class CrosswordDocumentWindow(ttk.Frame):
             return None
         return output, overwrite
 
-    def _complete_grid_or_error(self) -> CrosswordGrid | None:
-        crossword = self._crossword
-        if crossword is None:
-            self._show_action_error(
-                "Křížovka není připravena",
-                "Dokument křížovky zatím není vytvořený.",
-            )
-            return None
-        if not crossword_is_complete(crossword):
-            remaining = sum(slot.answer is None for slot in crossword.slots)
-            self._show_action_error(
-                "Křížovka není připravena",
-                f"Doplňte ještě {_word_count_text(remaining)}.",
-            )
-            return None
-        return _grid_from_editable_document(crossword)
-
     def save_crossword_pdf(self) -> None:
         if not self._save_inline_slot_edit():
             return
@@ -5120,11 +5072,15 @@ class CrosswordDocumentWindow(ttk.Frame):
     def print_solution(self) -> None:
         if not self._save_inline_slot_edit():
             return
-        grid = self._complete_grid_or_error()
-        if grid is None:
+        crossword = self._crossword
+        if crossword is None:
+            self._show_action_error(
+                "Křížovka není připravena",
+                "Dokument křížovky zatím není vytvořený.",
+            )
             return
         self._print_pdf(
-            grid,
+            _grid_from_editable_document(crossword),
             filled=True,
             title="Tisknout řešení s písmeny",
             filename="reseni.pdf",
@@ -5151,11 +5107,15 @@ class CrosswordDocumentWindow(ttk.Frame):
     def open_solution_pdf(self) -> None:
         if not self._save_inline_slot_edit():
             return
-        grid = self._complete_grid_or_error()
-        if grid is None:
+        crossword = self._crossword
+        if crossword is None:
+            self._show_action_error(
+                "Křížovka není připravena",
+                "Dokument křížovky zatím není vytvořený.",
+            )
             return
         self._open_temporary_pdf(
-            grid,
+            _grid_from_editable_document(crossword),
             filled=True,
             title="Otevřít jako PDF – řešení s písmeny",
             filename="reseni.pdf",

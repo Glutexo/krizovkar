@@ -199,6 +199,8 @@ Všechny varianty jsou dostupné v libovolném stavu dokumentu; výstupy
 s písmeny ponechají dosud nevyplněná pole prázdná.
 
 Podnabídka **Soubor → Tisknout** nabízí stejné dvě podoby přímo k vytištění.
+Obě jsou dostupné v libovolném stavu dokumentu; řešení ukáže právě
+doplněná písmena a ostatní pole ponechá prázdná.
 Po volbě formátu stránky Křížovkář vytvoří dočasné PDF. Na macOS pro ně otevře
 systémový tiskový dialog; na Windows a systémech X11 je odešle na výchozí
 tiskárnu. Pokud tiskárna ani tiskový systém nejsou dostupné, zobrazí konkrétní
@@ -207,7 +209,8 @@ chybu. Dočasný soubor se nikam neexportuje a aplikace jej sama odstraní.
 Podnabídka **Soubor → Otevřít jako PDF** nabízí stejné dvě podoby pro
 rychlou kontrolu hotového PDF. Po volbě formátu stránky je Křížovkář
 vytvoří jen dočasně a otevře ve výchozí aplikaci operačního systému;
-pro trvalé uložení nadále slouží export.
+pro trvalé uložení nadále slouží export. Obě podoby lze otevřít
+v libovolném stavu dokumentu, tedy i s neúplným řešením.
 
 Hesla s vepsanou legendou mají místo pro nápovědu přímo v předem vytvořené
 mřížce. Hesla s vnější legendou dostanou číslo a nápovědu pod mřížkou. Ruční
