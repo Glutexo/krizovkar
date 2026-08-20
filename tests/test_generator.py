@@ -472,6 +472,23 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
             "ABCD",
             tuple(slot.answer for slot in generated.document.slots),
         )
+        part = generated.document.secrets[-1].parts[0]
+        assert isinstance(part, CrosswordSecretSlotPart)
+        secret_slot = next(
+            slot
+            for slot in generated.document.slots
+            if slot.identifier == part.slot_identifier
+        )
+        grid = create_grid_from_crossword(generated.document)
+        assert grid.grid.cells is not None
+        start_cell = grid.grid.cells[
+            secret_slot.start.row - 1
+        ][secret_slot.start.column - 1]
+        assert isinstance(start_cell, SecretCell)
+        self.assertEqual(
+            "right" if secret_slot.direction == "horizontal" else "down",
+            start_cell.arrow,
+        )
 
     def test_generates_secret_in_empty_slot_with_matching_crossings(
         self,

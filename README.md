@@ -262,7 +262,8 @@ neztratila povolená místa budoucího rozdělení. `word_count` u každé čás
 určuje, kolik po sobě jdoucích slov se spojí do příslušného místa. Ukazuje
 to [šablona s tajenkou](examples/template-secret.yaml). Pokud konkrétní znění
 zatím není známé, `words` i `word_count` se vynechají a zůstanou jen
-připravená místa.
+připravená místa. Při převodu do cílové mřížky dostane první pole každé
+slotové části tajenky zobáček ve směru hesla.
 
 Samostatné zadání popisuje rozměr a umístěná slova:
 

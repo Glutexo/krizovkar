@@ -1871,8 +1871,12 @@ def _crossword_secret_metadata(
     for secret in crossword.secrets:
         for part in secret.parts:
             if isinstance(part, CrosswordSecretSlotPart):
-                coordinates.update(
-                    _slot_coordinates(slots_by_identifier[part.slot_identifier])
+                slot = slots_by_identifier[part.slot_identifier]
+                slot_coordinates = _slot_coordinates(slot)
+                coordinates.update(slot_coordinates)
+                arrows.setdefault(
+                    slot_coordinates[0],
+                    "right" if slot.direction == "horizontal" else "down",
                 )
                 continue
 
