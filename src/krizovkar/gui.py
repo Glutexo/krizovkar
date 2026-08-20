@@ -718,6 +718,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._seed_value: tk.StringVar
         self._secret_value: tk.StringVar
         self._generation_controls: ttk.Frame
+        self._generation_controls_placeholder: ttk.Frame
         self._seed_editor: ttk.Entry
         self._secret_editor: ttk.Entry
         self._cli_visible_value: tk.BooleanVar
@@ -853,10 +854,20 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             pady=(8, 0),
         )
         _bind_text_entry_context_menu(self._secret_editor)
-        ttk.Label(
-            self._generation_controls,
-            text="Dělení mezi slovy zvolí generátor.",
-        ).grid(row=2, column=1, sticky="w", padx=(8, 0), pady=(3, 0))
+        master.update_idletasks()
+        self._generation_controls_placeholder = ttk.Frame(
+            master,
+            width=self._generation_controls.winfo_reqwidth(),
+            height=self._generation_controls.winfo_reqheight(),
+        )
+        self._generation_controls_placeholder.grid_propagate(False)
+        self._generation_controls_placeholder.grid(
+            row=7,
+            column=0,
+            sticky="ew",
+            padx=(24, 0),
+            pady=(7, 0),
+        )
         self._cli_command_value = tk.StringVar(master=master)
         for value in (
             self._width_value,
@@ -985,9 +996,11 @@ class TemplateGenerationDialog(simpledialog.Dialog):
 
     def _update_generation_controls(self, *_trace_arguments: str) -> None:
         if self._creation_mode_value.get() == "generated":
+            self._generation_controls_placeholder.grid_remove()
             self._generation_controls.grid()
         else:
             self._generation_controls.grid_remove()
+            self._generation_controls_placeholder.grid()
 
     def _toggle_cli_command(self) -> None:
         if self._cli_visible_value.get():
