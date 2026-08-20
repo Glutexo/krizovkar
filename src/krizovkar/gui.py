@@ -4408,12 +4408,12 @@ class CrosswordDocumentWindow(ttk.Frame):
         complete = crossword is not None and crossword_is_complete(crossword)
         self.file_menu.entryconfigure(
             self._save_menu_index,
-            label="Uložit křížovku",
+            label="Uložit",
             state=document_state,
         )
         self.file_menu.entryconfigure(
             self._save_as_menu_index,
-            label="Uložit křížovku jako…",
+            label="Uložit jako…",
             state=document_state,
         )
         self.export_menu.entryconfigure(
@@ -5343,9 +5343,9 @@ class CrosswordDocumentWindow(ttk.Frame):
         if self._path is not None:
             initialfile = self._path.name
         else:
-            initialfile = "sablona.yaml"
+            initialfile = "krizovka.yaml"
         selected = self._choose_output(
-            title="Uložit křížovku jako",
+            title="Uložit jako",
             initialfile=initialfile,
             extension=".yaml",
             filetypes=(

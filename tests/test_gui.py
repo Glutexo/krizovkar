@@ -4748,6 +4748,27 @@ class GuiTest(unittest.TestCase):
         window._set_dirty.assert_called_once_with(False)
         window.application.remember_recent_document.assert_called_once_with(output)
 
+    def test_new_crossword_save_as_uses_short_title_and_filename(self) -> None:
+        window = Mock()
+        window._save_inline_slot_edit.return_value = True
+        window._crossword = Mock()
+        window._path = None
+        window._choose_output.return_value = None
+
+        saved = CrosswordDocumentWindow.save_document_as(window)
+
+        self.assertFalse(saved)
+        window._choose_output.assert_called_once_with(
+            title="Uložit jako",
+            initialfile="krizovka.yaml",
+            extension=".yaml",
+            filetypes=(
+                ("YAML soubory", "*.yaml *.yml"),
+                ("Všechny soubory", "*"),
+            ),
+            overwrite_title="Přepsat datový soubor?",
+        )
+
     def test_window_title_identifies_file_and_unsaved_changes(self) -> None:
         window = Mock()
         path = Path("krizovka.yaml")
@@ -5008,8 +5029,8 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                call(4, label="Uložit křížovku", state="normal"),
-                call(5, label="Uložit křížovku jako…", state="normal"),
+                call(4, label="Uložit", state="normal"),
+                call(5, label="Uložit jako…", state="normal"),
             ],
             application.file_menu.entryconfigure.call_args_list,
         )
@@ -5049,8 +5070,8 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                call(4, label="Uložit křížovku", state="normal"),
-                call(5, label="Uložit křížovku jako…", state="normal"),
+                call(4, label="Uložit", state="normal"),
+                call(5, label="Uložit jako…", state="normal"),
             ],
             application.file_menu.entryconfigure.call_args_list,
         )
@@ -5078,8 +5099,8 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                call(4, label="Uložit křížovku", state="disabled"),
-                call(5, label="Uložit křížovku jako…", state="disabled"),
+                call(4, label="Uložit", state="disabled"),
+                call(5, label="Uložit jako…", state="disabled"),
             ],
             application.file_menu.entryconfigure.call_args_list,
         )
