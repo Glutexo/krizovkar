@@ -445,7 +445,12 @@ class GuiTest(unittest.TestCase):
         menu = Mock()
         file_menu = Mock()
         recent_documents_menu = Mock()
+        export_menu = Mock()
+        open_pdf_menu = Mock()
+        print_menu = Mock()
+        edit_menu = Mock()
         view_menu = Mock()
+        slot_list_placement_menu = Mock()
         window_menu = Mock()
         help_menu = Mock()
 
@@ -457,7 +462,12 @@ class GuiTest(unittest.TestCase):
                     menu,
                     file_menu,
                     recent_documents_menu,
+                    export_menu,
+                    open_pdf_menu,
+                    print_menu,
+                    edit_menu,
                     view_menu,
+                    slot_list_placement_menu,
                     window_menu,
                     help_menu,
                 ),
@@ -467,18 +477,107 @@ class GuiTest(unittest.TestCase):
 
         commands = file_menu.add_command.call_args_list
         self.assertEqual(
-            ["Nová šablona…", "Otevřít…"],
+            [
+                "Nová šablona…",
+                "Otevřít…",
+                "Uložit",
+                "Uložit jako…",
+                "Zavřít okno",
+            ],
             [item.kwargs["label"] for item in commands],
         )
         self.assertEqual(
-            ["Command-N", "Command-O"],
+            [
+                "Command-N",
+                "Command-O",
+                "Command-S",
+                "Command-Shift-S",
+                "Command-W",
+            ],
             [item.kwargs["accelerator"] for item in commands],
+        )
+        self.assertTrue(
+            all(
+                item.kwargs["state"] == "disabled"
+                for item in commands[2:]
+            )
         )
         commands[1].kwargs["command"]()
         application.choose_document.assert_called_once_with(parent=None)
-        file_menu.add_cascade.assert_called_once_with(
-            label="Otevřít poslední",
-            menu=recent_documents_menu,
+        self.assertEqual(3, file_menu.add_separator.call_count)
+        self.assertEqual(
+            [
+                call(
+                    label="Otevřít poslední",
+                    menu=recent_documents_menu,
+                ),
+                call(
+                    label="Exportovat",
+                    menu=export_menu,
+                    state="disabled",
+                ),
+                call(
+                    label="Otevřít jako PDF",
+                    menu=open_pdf_menu,
+                    state="disabled",
+                ),
+                call(
+                    label="Tisknout",
+                    menu=print_menu,
+                    state="disabled",
+                ),
+            ],
+            file_menu.add_cascade.call_args_list,
+        )
+        for submenu, labels in (
+            (
+                export_menu,
+                (
+                    "Křížovku bez písmen (PDF)…",
+                    "Řešení s písmeny (PDF)…",
+                ),
+            ),
+            (
+                open_pdf_menu,
+                ("Křížovku bez písmen…", "Řešení s písmeny…"),
+            ),
+            (
+                print_menu,
+                ("Křížovku bez písmen…", "Řešení s písmeny…"),
+            ),
+        ):
+            self.assertEqual(
+                list(labels),
+                [
+                    item.kwargs["label"]
+                    for item in submenu.add_command.call_args_list
+                ],
+            )
+            self.assertTrue(
+                all(
+                    item.kwargs["state"] == "disabled"
+                    for item in submenu.add_command.call_args_list
+                )
+            )
+        self.assertEqual(
+            ["Zpět", "Vpřed"],
+            [
+                item.kwargs["label"]
+                for item in edit_menu.add_command.call_args_list
+            ],
+        )
+        self.assertEqual(
+            ["Command-Z", "Command-Shift-Z"],
+            [
+                item.kwargs["accelerator"]
+                for item in edit_menu.add_command.call_args_list
+            ],
+        )
+        self.assertTrue(
+            all(
+                item.kwargs["state"] == "disabled"
+                for item in edit_menu.add_command.call_args_list
+            )
         )
         menu_type.assert_any_call(menu, name="window")
         menu_type.assert_any_call(menu, name="help")
@@ -486,9 +585,33 @@ class GuiTest(unittest.TestCase):
             label="Zdroj YAML",
             state="disabled",
         )
+        view_menu.add_separator.assert_called_once_with()
+        view_menu.add_cascade.assert_called_once_with(
+            label="Místa pro hesla",
+            menu=slot_list_placement_menu,
+            state="disabled",
+        )
+        slot_list_placement_menu.setvar.assert_called_once_with(
+            "krizovkar_no_document_slot_list_placement",
+            "main",
+        )
+        placement_items = (
+            slot_list_placement_menu.add_radiobutton.call_args_list
+        )
+        self.assertEqual(
+            ["V hlavním okně", "V samostatném okně"],
+            [item.kwargs["label"] for item in placement_items],
+        )
+        self.assertTrue(
+            all(
+                item.kwargs["state"] == "disabled"
+                for item in placement_items
+            )
+        )
         menu.add_cascade.assert_has_calls(
             [
                 call(label="Soubor", menu=file_menu),
+                call(label="Úpravy", menu=edit_menu),
                 call(label="Zobrazení", menu=view_menu),
                 call(label="Okno", menu=window_menu),
                 call(label="Nápověda", menu=help_menu),

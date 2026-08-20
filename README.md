@@ -123,8 +123,9 @@ Na macOS používá zkratky `⌘N`, `⌘O`,
 dané okno; pokud obsahuje neuložené změny, editor se zeptá na jejich
 uložení. Po zavření posledního okna zůstane aplikace spuštěná bez
 dokumentu. Na macOS ji lze i bez viditelného okna dál ovládat z její nabídky.
-Každé otevřené okno je nezávislé; změna jednoho proto obsah druhého
-neovlivní.
+Nabídka zůstane celá zobrazená, pouze příkazy vyžadující otevřený dokument
+budou neaktivní. Každé otevřené okno je nezávislé; změna jednoho proto obsah
+druhého neovlivní.
 
 Nabídka **Úpravy** obsahuje **Zpět** a **Vpřed**. Na macOS používají zkratky
 `⌘Z` a `⇧⌘Z`, na ostatních systémech `Ctrl+Z` a `Ctrl+Shift+Z`. Historie je

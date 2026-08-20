@@ -77,6 +77,22 @@ _WINDOW_MENU_SELECTION_VARIABLE = "krizovkar_active_window"
 _SHADOW_ANSWER_TAG = "shadow-answer"
 _SLOT_LIST_PLACEMENT_MAIN = "main"
 _SLOT_LIST_PLACEMENT_WINDOW = "window"
+_SLOT_LIST_PLACEMENT_OPTIONS = (
+    ("V hlavním okně", _SLOT_LIST_PLACEMENT_MAIN),
+    ("V samostatném okně", _SLOT_LIST_PLACEMENT_WINDOW),
+)
+_NO_DOCUMENT_SLOT_LIST_PLACEMENT_VARIABLE = (
+    "krizovkar_no_document_slot_list_placement"
+)
+_EXPORT_ACTION_LABELS = (
+    "Křížovku bez písmen (PDF)…",
+    "Řešení s písmeny (PDF)…",
+)
+_OPEN_PDF_ACTION_LABELS = (
+    "Křížovku bez písmen…",
+    "Řešení s písmeny…",
+)
+_PRINT_ACTION_LABELS = _OPEN_PDF_ACTION_LABELS
 _SLOT_TREE_STYLE = "KrizovkarSlots.Treeview"
 # Výchozí pole Aqua potřebuje 27 px plus okraj buňky.
 _SLOT_TREE_ROW_HEIGHT = 30
@@ -466,20 +482,31 @@ def _create_slot_list_placement_menu(
     *,
     variable: str,
     selected: str,
-    command: Callable[[str], None],
+    command: Callable[[str], None] | None,
 ) -> tk.Menu:
     menu = tk.Menu(parent)
     menu.setvar(variable, selected)
-    for label, value in (
-        ("V hlavním okně", _SLOT_LIST_PLACEMENT_MAIN),
-        ("V samostatném okně", _SLOT_LIST_PLACEMENT_WINDOW),
-    ):
-        menu.add_radiobutton(
-            label=label,
-            variable=variable,
-            value=value,
-            command=lambda placement=value: command(placement),
-        )
+    for label, value in _SLOT_LIST_PLACEMENT_OPTIONS:
+        options: dict[str, object] = {
+            "label": label,
+            "variable": variable,
+            "value": value,
+        }
+        if command is None:
+            options["state"] = "disabled"
+        else:
+            options["command"] = lambda placement=value: command(placement)
+        menu.add_radiobutton(**options)
+    return menu
+
+
+def _create_disabled_command_menu(
+    parent: tk.Menu,
+    labels: Sequence[str],
+) -> tk.Menu:
+    menu = tk.Menu(parent)
+    for label in labels:
+        menu.add_command(label=label, state="disabled")
     return menu
 
 
@@ -3068,6 +3095,11 @@ class CrosswordApplication:
     def _build_menu(self) -> None:
         new_shortcut = _keyboard_shortcut("n")
         open_shortcut = _keyboard_shortcut("o")
+        save_shortcut = _keyboard_shortcut("s")
+        save_as_shortcut = _keyboard_shortcut("s", shift=True)
+        close_shortcut = _keyboard_shortcut("w")
+        undo_shortcut = _keyboard_shortcut("z")
+        redo_shortcut = _keyboard_shortcut("z", shift=True)
         menu = tk.Menu(self.root)
         self.file_menu = tk.Menu(menu)
         self.file_menu.add_command(
@@ -3090,8 +3122,77 @@ class CrosswordApplication:
             label="Otevřít poslední",
             menu=self.recent_documents_menu,
         )
+        self.file_menu.add_separator()
+        self.file_menu.add_command(
+            label="Uložit",
+            accelerator=save_shortcut.accelerator,
+            state="disabled",
+        )
+        self.file_menu.add_command(
+            label="Uložit jako…",
+            accelerator=save_as_shortcut.accelerator,
+            state="disabled",
+        )
+        self.file_menu.add_separator()
+        self.export_menu = _create_disabled_command_menu(
+            self.file_menu,
+            _EXPORT_ACTION_LABELS,
+        )
+        self.file_menu.add_cascade(
+            label="Exportovat",
+            menu=self.export_menu,
+            state="disabled",
+        )
+        self.open_pdf_menu = _create_disabled_command_menu(
+            self.file_menu,
+            _OPEN_PDF_ACTION_LABELS,
+        )
+        self.file_menu.add_cascade(
+            label="Otevřít jako PDF",
+            menu=self.open_pdf_menu,
+            state="disabled",
+        )
+        self.print_menu = _create_disabled_command_menu(
+            self.file_menu,
+            _PRINT_ACTION_LABELS,
+        )
+        self.file_menu.add_cascade(
+            label="Tisknout",
+            menu=self.print_menu,
+            state="disabled",
+        )
+        self.file_menu.add_separator()
+        self.file_menu.add_command(
+            label="Zavřít okno",
+            accelerator=close_shortcut.accelerator,
+            state="disabled",
+        )
         menu.add_cascade(label="Soubor", menu=self.file_menu)
+        self.edit_menu = tk.Menu(menu)
+        self.edit_menu.add_command(
+            label="Zpět",
+            accelerator=undo_shortcut.accelerator,
+            state="disabled",
+        )
+        self.edit_menu.add_command(
+            label="Vpřed",
+            accelerator=redo_shortcut.accelerator,
+            state="disabled",
+        )
+        menu.add_cascade(label="Úpravy", menu=self.edit_menu)
         self.view_menu = _create_view_menu(menu, None)
+        self.view_menu.add_separator()
+        self.slot_list_placement_menu = _create_slot_list_placement_menu(
+            self.view_menu,
+            variable=_NO_DOCUMENT_SLOT_LIST_PLACEMENT_VARIABLE,
+            selected=_SLOT_LIST_PLACEMENT_MAIN,
+            command=None,
+        )
+        self.view_menu.add_cascade(
+            label="Místa pro hesla",
+            menu=self.slot_list_placement_menu,
+            state="disabled",
+        )
         menu.add_cascade(label="Zobrazení", menu=self.view_menu)
         self.window_menu = _create_window_menu(
             menu,
@@ -3550,12 +3651,12 @@ class CrosswordDocumentWindow(ttk.Frame):
         return (
             _ExportAction(
                 "blank-crossword",
-                "Křížovku bez písmen (PDF)…",
+                _EXPORT_ACTION_LABELS[0],
                 self.save_crossword_pdf,
             ),
             _ExportAction(
                 "solution",
-                "Řešení s písmeny (PDF)…",
+                _EXPORT_ACTION_LABELS[1],
                 self.save_solution_pdf,
             ),
         )
@@ -3564,12 +3665,12 @@ class CrosswordDocumentWindow(ttk.Frame):
         return (
             _ExportAction(
                 "blank-crossword",
-                "Křížovku bez písmen…",
+                _PRINT_ACTION_LABELS[0],
                 self.print_crossword,
             ),
             _ExportAction(
                 "solution",
-                "Řešení s písmeny…",
+                _PRINT_ACTION_LABELS[1],
                 self.print_solution,
             ),
         )
@@ -3578,12 +3679,12 @@ class CrosswordDocumentWindow(ttk.Frame):
         return (
             _ExportAction(
                 "blank-crossword",
-                "Křížovku bez písmen…",
+                _OPEN_PDF_ACTION_LABELS[0],
                 self.open_crossword_pdf,
             ),
             _ExportAction(
                 "solution",
-                "Řešení s písmeny…",
+                _OPEN_PDF_ACTION_LABELS[1],
                 self.open_solution_pdf,
             ),
         )
