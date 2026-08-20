@@ -158,11 +158,11 @@ def _parser() -> argparse.ArgumentParser:
 
     template = commands.add_parser(
         "template",
-        help="vytvoří šablonu křížovky ze zadání nebo bez něj",
+        help="vytvoří křížovku ze zadání nebo bez něj",
         description=(
             "Převede vstupní zadání na švédskou nebo číslovanou "
-            "šablonu. Bez vstupního zadání vytvoří z rozměru prázdný "
-            "základ nebo pseudonáhodně rozvrženou nevyplněnou šablonu. "
+            "křížovku. Bez vstupního zadání vytvoří z rozměru prázdný "
+            "základ nebo pseudonáhodně rozvrženou nevyplněnou křížovku. "
             "Volitelný slovník ověří budoucí křížení konkrétní tajenky."
         ),
     )
@@ -177,7 +177,7 @@ def _parser() -> argparse.ArgumentParser:
         "-o",
         "--output",
         type=Path,
-        metavar="ŠABLONA.yaml",
+        metavar="KŘÍŽOVKA.yaml",
         help="cílový YAML soubor; bez volby standardní výstup",
     )
     template.add_argument(
@@ -201,7 +201,7 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "vytvoří jednoduchý základ bez vnitřních předělů místo "
-            "automaticky rozvržené šablony"
+            "automaticky rozvržené křížovky"
         ),
     )
     template_creation.add_argument(
@@ -709,7 +709,7 @@ def _template(arguments: argparse.Namespace) -> int:
         return 2
 
     _print_success(
-        f"Šablona vytvořena: {_output_description(arguments.output)} "
+        f"Křížovka vytvořena: {_output_description(arguments.output)} "
         f"({template.grid.width} × {template.grid.height}, "
         f"{_localized_count(len(template.slots), 'heslo', 'hesel')})",
         arguments.output,

@@ -1,4 +1,4 @@
-"""Generování šablon a deterministické plnění křížovek."""
+"""Generování a deterministické plnění křížovek."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ SpecificationLayout = Literal["swedish", "numbered"]
 
 
 class GenerationError(RuntimeError):
-    """Šablonu se nepodařilo vygenerovat."""
+    """Křížovku se nepodařilo vygenerovat."""
 
 
 class FillingError(RuntimeError):
@@ -135,7 +135,7 @@ class _ExistingSecretPlacement:
 
 @dataclass(frozen=True, slots=True)
 class _SpecificationSlot:
-    """Pevné heslo zadání převáděné na místo v šabloně."""
+    """Pevné heslo zadání převáděné na místo v křížovce."""
 
     token: tuple[str, int, int]
     answer: str
@@ -285,7 +285,7 @@ def create_template_from_specification(
     *,
     layout: SpecificationLayout = "swedish",
 ) -> CrosswordDocument:
-    """Rozvrhne umístěné zadání do šablony křížovky."""
+    """Rozvrhne umístěné zadání do editovatelné křížovky."""
 
     if layout not in {"swedish", "numbered"}:
         raise GenerationError(f"nepodporované rozvržení {layout!r}")
@@ -529,7 +529,7 @@ def generate_swedish_template(
     randomize_layout: bool = False,
     dictionary: CrosswordDictionary | None = None,
 ) -> CrosswordDocument:
-    """Vytvoří nevyplněnou šablonu s vepsanými legendami."""
+    """Vytvoří nevyplněnou křížovku s vepsanými legendami."""
 
     if secret is None:
         try:
@@ -590,7 +590,7 @@ def generate_empty_template(
     if layout not in {"swedish", "numbered"}:
         raise GenerationError(f"nepodporované rozvržení {layout!r}")
     if width < 1 or height < 1:
-        raise GenerationError("rozměry šablony musí být větší než nula")
+        raise GenerationError("rozměry křížovky musí být větší než nula")
 
     if layout == "numbered":
         cells = tuple(
@@ -617,7 +617,7 @@ def generate_empty_template(
     else:
         if width == height == 1:
             raise GenerationError(
-                "prázdná švédská šablona musí mít alespoň dva "
+                "prázdná švédská křížovka musí mít alespoň dva "
                 "sloupce nebo dva řádky"
             )
         cell_rows = []
@@ -688,7 +688,7 @@ def generate_numbered_template(
     randomize_layout: bool = False,
     dictionary: CrosswordDictionary | None = None,
 ) -> CrosswordDocument:
-    """Vytvoří nevyplněnou šablonu s vnějšími legendami."""
+    """Vytvoří nevyplněnou křížovku s vnějšími legendami."""
 
     if secret is None:
         try:
@@ -1602,10 +1602,10 @@ def _place_secret_in_template(
     seed: int,
     entries_by_length: dict[int, tuple[_Entry, ...]] | None,
 ) -> CrosswordDocument:
-    """Umístí tajenku do nepřekrývajících se slotů šablony."""
+    """Umístí tajenku do nepřekrývajících se slotů křížovky."""
 
     if template.secrets:
-        raise GenerationError("šablona už obsahuje připravenou tajenku")
+        raise GenerationError("křížovka už obsahuje připravenou tajenku")
     _validate_secret_requirement(requirement)
     if requirement.words and entries_by_length is not None:
         placement = _find_existing_secret_placement(
@@ -1617,7 +1617,7 @@ def _place_secret_in_template(
         )
         if placement is None or placement.replacements:
             raise GenerationError(
-                "v šabloně nelze tajenku umístit tak, aby pro každé "
+                "v křížovce nelze tajenku umístit tak, aby pro každé "
                 "dotčené prázdné heslo existoval kandidát ve slovníku"
             )
         return _apply_existing_secret_placement(
@@ -1658,7 +1658,7 @@ def _place_secret_in_template(
 
     if selected is None:
         raise GenerationError(
-            "v šabloně nelze pro požadovanou tajenku najít "
+            "v křížovce nelze pro požadovanou tajenku najít "
             "vhodné nepřekrývající se sloty"
         )
     parts = tuple(
@@ -1709,7 +1709,7 @@ def place_secret_in_template(
     seed: int = DEFAULT_SEED,
     dictionary: CrosswordDictionary | None = None,
 ) -> CrosswordDocument:
-    """Umístí tajenku do nepřekrývajících se slotů šablony."""
+    """Umístí tajenku do nepřekrývajících se slotů křížovky."""
 
     return _place_secret_in_template(
         template,

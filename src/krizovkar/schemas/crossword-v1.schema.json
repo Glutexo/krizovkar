@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/Glutexo/krizovkar/master/src/krizovkar/schemas/crossword-v1.schema.json",
   "title": "Editovatelná křížovka Křížovkáře, verze 1",
-  "description": "Prázdná, rozpracovaná nebo hotová editovatelná křížovka, kterou lze použít jako šablonu; obsahuje role buněk, místa pro hesla, volitelně doplněný obsah, pomůcku a tajenky.",
+  "description": "Prázdná, rozpracovaná nebo hotová editovatelná křížovka; obsahuje role buněk, místa pro hesla, volitelně doplněný obsah, pomůcku a tajenky.",
   "type": "object",
   "additionalProperties": false,
   "required": [

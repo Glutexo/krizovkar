@@ -154,7 +154,7 @@ class CrosswordSettings:
 
 @dataclass(frozen=True, slots=True)
 class NewTemplateResult:
-    """Nová šablona spolu s volbami potřebnými pro další úpravy."""
+    """Nová křížovka spolu s volbami potřebnými pro další úpravy."""
 
     document: CrosswordDocument
     layout: SpecificationLayout
@@ -505,7 +505,7 @@ def _recent_document_label(path: Path, paths: Sequence[Path]) -> str:
 
 
 def _document_window_label(path: Path | None, dirty: bool) -> str:
-    name = path.name if path is not None else "Nová šablona"
+    name = path.name if path is not None else "Nová křížovka"
     marker = "*" if dirty else ""
     return f"{marker}{name}"
 
@@ -796,7 +796,7 @@ class PdfExportDialog(simpledialog.Dialog):
 
 
 def parse_template_settings(width: str, height: str) -> CrosswordSettings:
-    """Převede a omezí rozměr automaticky generované šablony."""
+    """Převede a omezí rozměr automaticky generované křížovky."""
 
     dimensions = []
     for value, label in ((width, "Počet sloupců"), (height, "Počet řádků")):
@@ -814,7 +814,7 @@ def parse_template_settings(width: str, height: str) -> CrosswordSettings:
         or settings.height > _MAX_CROSSWORD_DIMENSION
     ):
         raise GuiInputError(
-            "Šablona může mít nejvýše "
+            "Křížovka může mít nejvýše "
             f"{_MAX_CROSSWORD_DIMENSION} sloupců a řádků."
         )
     return settings
@@ -850,16 +850,16 @@ def _template_cli_command(
     secret: SecretRequirement | None = None,
     dictionary: Path | None = None,
 ) -> str:
-    """Sestaví CLI příkaz pro stejnou novou šablonu jako dialog."""
+    """Sestaví CLI příkaz pro stejnou novou křížovku jako dialog."""
 
     arguments = ["uv", "run", "krizovkar", "template"]
     if creation_mode == "empty":
         if secret is not None:
-            raise GuiInputError("Tajenku lze zadat jen vygenerované šabloně.")
+            raise GuiInputError("Tajenku lze zadat jen vygenerované křížovce.")
         arguments.append("--empty")
     elif creation_mode == "generated":
         if seed is None:
-            raise GuiInputError("Vygenerovaná šablona vyžaduje sémě.")
+            raise GuiInputError("Vygenerovaná křížovka vyžaduje sémě.")
         arguments.extend(("--randomize", "--seed", str(seed)))
         if secret is not None:
             arguments.extend(("--secret", " ".join(secret.words)))
@@ -867,7 +867,7 @@ def _template_cli_command(
             arguments.extend(("--dictionary", str(dictionary)))
     else:
         raise GuiInputError(
-            f"Nepodporovaný počáteční obsah šablony {creation_mode!r}."
+            f"Nepodporovaný počáteční obsah křížovky {creation_mode!r}."
         )
     if layout not in {"swedish", "numbered"}:
         raise GuiInputError(f"Nepodporované rozvržení křížovky {layout!r}.")
@@ -994,7 +994,7 @@ class SecretGenerationDialog(simpledialog.Dialog):
 
 
 class TemplateGenerationDialog(simpledialog.Dialog):
-    """Vybere podobu nové prázdné nebo generované šablony."""
+    """Vybere podobu nové prázdné nebo generované křížovky."""
 
     def __init__(
         self,
@@ -1025,7 +1025,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._width_editor: ttk.Spinbox
         self._initial_seed = random.randrange(2**63)
         self._new_template: NewTemplateResult | None = None
-        super().__init__(parent, "Nová šablona")
+        super().__init__(parent, "Nová křížovka")
 
     def body(self, master: tk.Frame) -> tk.Widget:
         _inherit_macos_menu_bar(self)
@@ -1270,7 +1270,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             raise GuiInputError("Vyberte typ křížovky.")
         creation_mode_value = self._creation_mode_value.get()
         if creation_mode_value not in {"empty", "generated"}:
-            raise GuiInputError("Vyberte počáteční obsah šablony.")
+            raise GuiInputError("Vyberte počáteční obsah křížovky.")
         seed = (
             parse_template_seed(self._seed_value.get())
             if creation_mode_value == "generated"
@@ -1360,7 +1360,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         except (DictionaryError, GuiInputError) as error:
             self._new_template = None
             messagebox.showerror(
-                "Šablonu nelze vytvořit",
+                "Křížovku nelze vytvořit",
                 str(error),
                 parent=self,
             )
@@ -1417,7 +1417,7 @@ def create_blank_template(
     secret: SecretRequirement | None = None,
     dictionary: CrosswordDictionary | None = None,
 ) -> CrosswordDocument:
-    """Vygeneruje hustou prázdnou šablonu z rozvržení a rozměru."""
+    """Vygeneruje hustou prázdnou křížovku z rozvržení a rozměru."""
 
     if layout not in {"swedish", "numbered"}:
         raise GuiInputError(f"Nepodporované rozvržení křížovky {layout!r}.")
@@ -1448,15 +1448,15 @@ def create_new_template(
     secret: SecretRequirement | None = None,
     dictionary: CrosswordDictionary | None = None,
 ) -> CrosswordDocument:
-    """Vytvoří prázdnou nebo pseudonáhodně rozvrženou šablonu."""
+    """Vytvoří prázdnou nebo pseudonáhodně rozvrženou křížovku."""
 
     if creation_mode == "empty":
         if secret is not None:
-            raise GuiInputError("Tajenku lze zadat jen vygenerované šabloně.")
+            raise GuiInputError("Tajenku lze zadat jen vygenerované křížovce.")
         return create_empty_template(settings, layout)
     if creation_mode != "generated":
         raise GuiInputError(
-            f"Nepodporovaný počáteční obsah šablony {creation_mode!r}."
+            f"Nepodporovaný počáteční obsah křížovky {creation_mode!r}."
         )
     if seed is None:
         seed = random.randrange(2**63)
@@ -2393,7 +2393,7 @@ def crossword_is_complete(crossword: CrosswordDocument) -> bool:
 def _template_generation_layout(
     document: CrosswordDocument,
 ) -> SpecificationLayout:
-    """Určí rozvržení pro nové vygenerování šablony."""
+    """Určí rozvržení pro nové vygenerování křížovky."""
 
     if any(slot.clue_placement == "inline" for slot in document.slots):
         return "swedish"
@@ -3418,7 +3418,7 @@ class CrosswordApplication:
         menu = tk.Menu(self.root)
         self.file_menu = tk.Menu(menu)
         self.file_menu.add_command(
-            label="Nová šablona…",
+            label="Nová křížovka…",
             accelerator=new_shortcut.accelerator,
             command=self.new_template_document,
         )
@@ -3837,7 +3837,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         menu = tk.Menu(self.root)
         self.file_menu = tk.Menu(menu)
         self.file_menu.add_command(
-            label="Nová šablona…",
+            label="Nová křížovka…",
             accelerator=new_shortcut.accelerator,
             command=lambda: self.application.new_template_document(
                 parent=self.root
@@ -5462,7 +5462,7 @@ class CrosswordDocumentWindow(ttk.Frame):
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Otevře zadané dokumenty nebo nabídne vytvoření nové šablony."""
+    """Otevře zadané dokumenty nebo nabídne vytvoření nové křížovky."""
 
     document_paths = tuple(
         Path(argument) for argument in (sys.argv[1:] if argv is None else argv)

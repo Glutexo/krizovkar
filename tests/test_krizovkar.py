@@ -1537,8 +1537,11 @@ class CommandTest(unittest.TestCase):
         self.assertEqual(0, result)
         self.assertTrue(stdout.getvalue().startswith("format: krizovkar\n"))
         self.assertIn("kind: crossword\n", stdout.getvalue())
-        self.assertNotIn("Šablona vytvořena", stdout.getvalue())
-        self.assertIn("Šablona vytvořena: standardní výstup", stderr.getvalue())
+        self.assertNotIn("Křížovka vytvořena", stdout.getvalue())
+        self.assertIn(
+            "Křížovka vytvořena: standardní výstup",
+            stderr.getvalue(),
+        )
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "template.yaml"
             source.write_text(stdout.getvalue(), encoding="utf-8")
@@ -2123,7 +2126,7 @@ class CommandTest(unittest.TestCase):
                 result = main(command)
 
             self.assertEqual(0, result)
-            self.assertIn("Šablona vytvořena:", stdout.getvalue())
+            self.assertIn("Křížovka vytvořena:", stdout.getvalue())
             template = load_crossword_document(output)
             self.assertEqual(9, template.grid.width)
             self.assertEqual(9, template.grid.height)

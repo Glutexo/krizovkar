@@ -653,7 +653,7 @@ class GuiTest(unittest.TestCase):
         commands = file_menu.add_command.call_args_list
         self.assertEqual(
             [
-                "Nová šablona…",
+                "Nová křížovka…",
                 "Otevřít…",
                 "Uložit",
                 "Uložit jako…",
@@ -1215,7 +1215,7 @@ class GuiTest(unittest.TestCase):
         )
         items = window_menu.add_radiobutton.call_args_list
         self.assertEqual(
-            ["*Nová šablona", "krizovka.yaml"],
+            ["*Nová křížovka", "krizovka.yaml"],
             [item.kwargs["label"] for item in items],
         )
         self.assertEqual(
@@ -1370,6 +1370,22 @@ class GuiTest(unittest.TestCase):
     def test_rejects_empty_clue(self) -> None:
         with self.assertRaisesRegex(GuiInputError, "Vyplňte nápovědu"):
             parse_slot_content("CHATA", "  ", 4)
+
+    def test_template_generation_dialog_uses_crossword_title(self) -> None:
+        parent = Mock()
+
+        with patch(
+            "krizovkar.gui.simpledialog.Dialog.__init__"
+        ) as initialize:
+            dialog = TemplateGenerationDialog(
+                parent,
+                initial_settings=CrosswordSettings(15, 10),
+                initial_layout="swedish",
+                initial_creation_mode="empty",
+            )
+
+        initialize.assert_called_once_with(parent, "Nová křížovka")
+        self.assertIsNone(dialog._new_template)
 
     def test_parses_template_settings(self) -> None:
         self.assertEqual(
@@ -2038,7 +2054,7 @@ class GuiTest(unittest.TestCase):
         self.assertFalse(valid)
         self.assertIsNone(dialog._new_template)
         show_error.assert_called_once_with(
-            "Šablonu nelze vytvořit",
+            "Křížovku nelze vytvořit",
             "rozměr nelze rozdělit",
             parent=dialog,
         )
@@ -4763,7 +4779,9 @@ class GuiTest(unittest.TestCase):
         with patch("krizovkar.gui.sys.platform", "darwin"):
             CrosswordDocumentWindow._update_title(window)
 
-        window.root.title.assert_called_once_with("*Nová šablona — Křížovkář")
+        window.root.title.assert_called_once_with(
+            "*Nová křížovka — Křížovkář"
+        )
         window.root.attributes.assert_called_once_with("-titlepath", "")
 
     def test_other_platforms_do_not_set_macos_proxy_icon(self) -> None:
