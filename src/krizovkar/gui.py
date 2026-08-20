@@ -3200,9 +3200,10 @@ class CrosswordApplication:
         return None if sys.platform == "darwin" else self.root
 
     def show_no_document_state(self) -> None:
-        if sys.platform != "darwin":
-            self.root.deiconify()
-            self.root.lift()
+        self.root.deiconify()
+        self.root.lift()
+        if sys.platform == "darwin":
+            self.root.focus_force()
 
     def _new_event(self, _event: tk.Event[tk.Misc]) -> str:
         self.new_template_document()
