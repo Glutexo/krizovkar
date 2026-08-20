@@ -141,6 +141,7 @@ _DIRECTION_STEPS: dict[WordDirection, tuple[int, int]] = {
 
 EditableCellRole = Literal["letter", "secret", "legend", "empty"]
 TemplateCreationMode = Literal["empty", "generated"]
+TemplateContentMode = Literal["empty", "secret", "filled"]
 
 
 class GuiInputError(ValueError):
@@ -869,7 +870,7 @@ def parse_template_secret(value: str) -> SecretRequirement | None:
 def _template_cli_command(
     settings: CrosswordSettings,
     layout: SpecificationLayout,
-    creation_mode: TemplateCreationMode,
+    content_mode: TemplateContentMode,
     *,
     seed: int | None,
     secret: SecretRequirement | None = None,
@@ -878,13 +879,17 @@ def _template_cli_command(
     """Sestaví CLI příkaz pro stejnou novou křížovku jako dialog."""
 
     arguments = ["uv", "run", "krizovkar", "template"]
-    if creation_mode == "empty":
+    if content_mode == "empty":
         if secret is not None:
-            raise GuiInputError("Tajenku lze zadat jen vygenerované křížovce.")
+            raise GuiInputError("Tajenku lze zadat jen v neprázdné křížovce.")
         arguments.append("--empty")
-    elif creation_mode == "generated":
+    elif content_mode in {"secret", "filled"}:
         if seed is None:
-            raise GuiInputError("Vygenerovaná křížovka vyžaduje sémě.")
+            raise GuiInputError("Neprázdná křížovka vyžaduje sémě.")
+        if content_mode == "secret" and secret is None:
+            raise GuiInputError("Vyplňte tajenku.")
+        if content_mode == "filled" and dictionary is None:
+            raise GuiInputError("Vyberte slovník.")
         arguments.extend(("--randomize", "--seed", str(seed)))
         if secret is not None:
             arguments.extend(("--secret", " ".join(secret.words)))
@@ -892,7 +897,7 @@ def _template_cli_command(
             arguments.extend(("--dictionary", str(dictionary)))
     else:
         raise GuiInputError(
-            f"Nepodporovaný počáteční obsah křížovky {creation_mode!r}."
+            f"Nepodporovaný počáteční obsah křížovky {content_mode!r}."
         )
     if layout not in {"swedish", "numbered"}:
         raise GuiInputError(f"Nepodporované rozvržení křížovky {layout!r}.")
@@ -906,7 +911,23 @@ def _template_cli_command(
             str(settings.height),
         )
     )
-    return shlex.join(arguments)
+    command = shlex.join(arguments)
+    if content_mode != "filled":
+        return command
+    assert dictionary is not None
+    assert seed is not None
+    fill_arguments = [
+        "uv",
+        "run",
+        "krizovkar",
+        "fill",
+        "-",
+        str(dictionary),
+        "--seed",
+        str(seed),
+        "--replace-blocking",
+    ]
+    return f"{command} | {shlex.join(fill_arguments)}"
 
 
 class SecretGenerationDialog(simpledialog.Dialog):
@@ -1141,7 +1162,7 @@ class CrosswordFillDialog(simpledialog.Dialog):
 
 
 class TemplateGenerationDialog(simpledialog.Dialog):
-    """Vybere podobu nové prázdné nebo generované křížovky."""
+    """Vybere podobu a počáteční obsah nové křížovky."""
 
     def __init__(
         self,
@@ -1149,15 +1170,15 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         *,
         initial_settings: CrosswordSettings,
         initial_layout: SpecificationLayout,
-        initial_creation_mode: TemplateCreationMode,
+        initial_content_mode: TemplateContentMode,
     ) -> None:
         self._initial_settings = initial_settings
         self._initial_layout = initial_layout
-        self._initial_creation_mode = initial_creation_mode
+        self._initial_content_mode = initial_content_mode
         self._width_value: tk.StringVar
         self._height_value: tk.StringVar
         self._layout_value: tk.StringVar
-        self._creation_mode_value: tk.StringVar
+        self._content_mode_value: tk.StringVar
         self._seed_value: tk.StringVar
         self._secret_value: tk.StringVar
         self._dictionary_value: tk.StringVar
@@ -1240,22 +1261,28 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             sticky="w",
             pady=(14, 0),
         )
-        self._creation_mode_value = tk.StringVar(
+        self._content_mode_value = tk.StringVar(
             master=master,
-            value=self._initial_creation_mode,
+            value=self._initial_content_mode,
         )
         ttk.Radiobutton(
             master,
-            text="Prázdná – bez vnitřních předělů",
-            variable=self._creation_mode_value,
+            text="Prázdná",
+            variable=self._content_mode_value,
             value="empty",
         ).grid(row=5, column=0, sticky="w", pady=(5, 0))
         ttk.Radiobutton(
             master,
-            text="Vygenerovaná – pseudonáhodně rozdělená na hesla",
-            variable=self._creation_mode_value,
-            value="generated",
+            text="Pouze tajenka",
+            variable=self._content_mode_value,
+            value="secret",
         ).grid(row=6, column=0, sticky="w", pady=(4, 0))
+        ttk.Radiobutton(
+            master,
+            text="Vyplněná",
+            variable=self._content_mode_value,
+            value="filled",
+        ).grid(row=7, column=0, sticky="w", pady=(4, 0))
         self._seed_value = tk.StringVar(
             master=master,
             value=str(self._initial_seed),
@@ -1264,7 +1291,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._dictionary_value = tk.StringVar(master=master)
         self._generation_controls = ttk.Frame(master)
         self._generation_controls.grid(
-            row=7,
+            row=8,
             column=0,
             sticky="ew",
             padx=(_GENERATION_CONTROLS_INDENT, 0),
@@ -1319,13 +1346,13 @@ class TemplateGenerationDialog(simpledialog.Dialog):
             self._width_value,
             self._height_value,
             self._layout_value,
-            self._creation_mode_value,
+            self._content_mode_value,
             self._seed_value,
             self._secret_value,
             self._dictionary_value,
         ):
             value.trace_add("write", self._refresh_cli_command)
-        self._creation_mode_value.trace_add(
+        self._content_mode_value.trace_add(
             "write",
             self._update_generation_controls,
         )
@@ -1403,7 +1430,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
     ) -> tuple[
         CrosswordSettings,
         SpecificationLayout,
-        TemplateCreationMode,
+        TemplateContentMode,
         int | None,
         SecretRequirement | None,
         Path | None,
@@ -1415,28 +1442,32 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         layout_value = self._layout_value.get()
         if layout_value not in {"swedish", "numbered"}:
             raise GuiInputError("Vyberte typ křížovky.")
-        creation_mode_value = self._creation_mode_value.get()
-        if creation_mode_value not in {"empty", "generated"}:
+        content_mode_value = self._content_mode_value.get()
+        if content_mode_value not in {"empty", "secret", "filled"}:
             raise GuiInputError("Vyberte počáteční obsah křížovky.")
         seed = (
             parse_template_seed(self._seed_value.get())
-            if creation_mode_value == "generated"
+            if content_mode_value != "empty"
             else None
         )
         secret = (
             parse_template_secret(self._secret_value.get())
-            if creation_mode_value == "generated"
+            if content_mode_value != "empty"
             else None
         )
+        if content_mode_value == "secret" and secret is None:
+            raise GuiInputError("Vyplňte tajenku.")
         dictionary_path = (
             _optional_dictionary_path(self._dictionary_value.get())
-            if creation_mode_value == "generated"
+            if content_mode_value != "empty"
             else None
         )
+        if content_mode_value == "filled" and dictionary_path is None:
+            raise GuiInputError("Vyberte slovník.")
         return (
             settings,
             cast(SpecificationLayout, layout_value),
-            cast(TemplateCreationMode, creation_mode_value),
+            cast(TemplateContentMode, content_mode_value),
             seed,
             secret,
             dictionary_path,
@@ -1444,13 +1475,13 @@ class TemplateGenerationDialog(simpledialog.Dialog):
 
     def _refresh_cli_command(self, *_trace_arguments: str) -> None:
         try:
-            settings, layout, creation_mode, seed, secret, dictionary_path = (
+            settings, layout, content_mode, seed, secret, dictionary_path = (
                 self._selected_configuration()
             )
             command = _template_cli_command(
                 settings,
                 layout,
-                creation_mode,
+                content_mode,
                 seed=seed,
                 secret=secret,
                 dictionary=dictionary_path,
@@ -1466,7 +1497,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._cli_command_text.configure(state="disabled")
 
     def _update_generation_controls(self, *_trace_arguments: str) -> None:
-        if self._creation_mode_value.get() == "generated":
+        if self._content_mode_value.get() != "empty":
             self._generation_controls.grid()
         else:
             self._generation_controls.grid_remove()
@@ -1484,7 +1515,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
 
     def validate(self) -> bool:
         try:
-            settings, layout, creation_mode, seed, secret, dictionary_path = (
+            settings, layout, content_mode, seed, secret, dictionary_path = (
                 self._selected_configuration()
             )
             dictionary = (
@@ -1493,16 +1524,18 @@ class TemplateGenerationDialog(simpledialog.Dialog):
                 else None
             )
             self._new_template = NewTemplateResult(
-                document=create_new_template(
+                document=create_initial_crossword(
                     settings,
                     layout,
-                    creation_mode,
+                    content_mode,
                     seed=seed,
                     secret=secret,
                     dictionary=dictionary,
                 ),
                 layout=layout,
-                creation_mode=creation_mode,
+                creation_mode=(
+                    "empty" if content_mode == "empty" else "generated"
+                ),
             )
         except (DictionaryError, GuiInputError) as error:
             self._new_template = None
@@ -1511,11 +1544,18 @@ class TemplateGenerationDialog(simpledialog.Dialog):
                 str(error),
                 parent=self,
             )
-            editor = (
-                self._dictionary_editor
-                if isinstance(error, DictionaryError)
-                else self._width_editor
-            )
+            if isinstance(error, DictionaryError) or (
+                self._content_mode_value.get() == "filled"
+                and not self._dictionary_value.get().strip()
+            ):
+                editor = self._dictionary_editor
+            elif (
+                self._content_mode_value.get() == "secret"
+                and not self._secret_value.get().strip()
+            ):
+                editor = self._secret_editor
+            else:
+                editor = self._width_editor
             editor.focus_set()
             return False
         return True
@@ -1615,6 +1655,51 @@ def create_new_template(
         secret=secret,
         dictionary=dictionary,
     )
+
+
+def create_initial_crossword(
+    settings: CrosswordSettings,
+    layout: SpecificationLayout,
+    content_mode: TemplateContentMode,
+    *,
+    seed: int | None = None,
+    secret: SecretRequirement | None = None,
+    dictionary: CrosswordDictionary | None = None,
+) -> CrosswordDocument:
+    """Vytvoří křížovku s obsahem vybraným v novém dialogu."""
+
+    if content_mode == "empty":
+        return create_new_template(
+            settings,
+            layout,
+            "empty",
+            secret=secret,
+        )
+    if content_mode not in {"secret", "filled"}:
+        raise GuiInputError(
+            f"Nepodporovaný počáteční obsah křížovky {content_mode!r}."
+        )
+    if content_mode == "secret" and secret is None:
+        raise GuiInputError("Vyplňte tajenku.")
+    if content_mode == "filled" and dictionary is None:
+        raise GuiInputError("Vyberte slovník.")
+    if seed is None:
+        seed = random.randrange(2**63)
+    crossword = create_new_template(
+        settings,
+        layout,
+        "generated",
+        seed=seed,
+        secret=secret,
+        dictionary=dictionary,
+    )
+    if content_mode == "secret":
+        return crossword
+    assert dictionary is not None
+    try:
+        return generate_filled_crossword(crossword, dictionary, seed=seed)
+    except FillingError as error:
+        raise GuiInputError(str(error)) from error
 
 
 def parse_slot_content(
@@ -3808,7 +3893,7 @@ class CrosswordApplication:
                 DEFAULT_GRID_HEIGHT,
             ),
             initial_layout="swedish",
-            initial_creation_mode="empty",
+            initial_content_mode="empty",
         )
         new_template = cast(NewTemplateResult | None, dialog.result)
         if new_template is None:

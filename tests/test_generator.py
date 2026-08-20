@@ -391,6 +391,51 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         self.assertEqual("AB", slots["h1"].clue)
         self.assertEqual("Zachované heslo", slots["h2"].clue)
 
+    def test_flexible_fill_resolves_secret_before_replacing_content(
+        self,
+    ) -> None:
+        crossword = CrosswordDocument(
+            format_name="krizovkar",
+            kind="crossword",
+            version=1,
+            grid=CrosswordLayout(
+                width=2,
+                height=2,
+                cells=((LetterCellRole(),) * 2,) * 2,
+            ),
+            slots=(
+                WordSlot("h1", Coordinate(1, 1), "horizontal", 2),
+                WordSlot(
+                    "v1",
+                    Coordinate(1, 1),
+                    "vertical",
+                    2,
+                    answer="XC",
+                    clue="Blokující heslo",
+                ),
+            ),
+            secrets=(
+                CrosswordSecret(
+                    parts=(CrosswordSecretSlotPart("h1"),),
+                ),
+            ),
+        )
+        dictionary = CrosswordDictionary(
+            entries=(DictionaryEntry(answer="AC", clues=("Nové heslo",)),)
+        )
+
+        filled = generate_filled_crossword(
+            crossword,
+            dictionary,
+            secret=SecretRequirement(words=("AB",)),
+        )
+
+        self.assertEqual(
+            {"h1": "AB", "v1": "AC"},
+            {slot.identifier: slot.answer for slot in filled.slots},
+        )
+        self.assertEqual(("AB",), filled.secrets[0].words)
+
     def test_flexible_fill_moves_secret_when_its_slot_blocks_solution(
         self,
     ) -> None:

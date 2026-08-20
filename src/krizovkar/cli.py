@@ -22,6 +22,7 @@ from krizovkar.generator import (
     create_template_from_specification,
     fill_crossword,
     generate_empty_template,
+    generate_filled_crossword,
     generate_numbered_template,
     generate_swedish_template,
     normalize_secret_text,
@@ -273,7 +274,8 @@ def _parser() -> argparse.ArgumentParser:
         help="doplní prázdná místa křížovky ze slovníku",
         description=(
             "Přiřadí různá hesla všem prázdným místům křížovky, dodrží "
-            "jejich délky a písmena na kříženích a zachová již doplněný obsah."
+            "jejich délky a písmena na kříženích a nejprve se pokusí "
+            "zachovat již doplněný obsah."
         ),
     )
     fill.add_argument(
@@ -301,6 +303,14 @@ def _parser() -> argparse.ArgumentParser:
         default=DEFAULT_SEED,
         metavar="ČÍSLO",
         help=f"počáteční hodnota náhodných voleb; výchozí je {DEFAULT_SEED}",
+    )
+    fill.add_argument(
+        "--replace-blocking",
+        action="store_true",
+        help=(
+            "při neúspěchu smí nahradit blokující hesla a přesunout "
+            "známou tajenku"
+        ),
     )
     _add_secret_arguments(fill, allow_lengths=False)
     fill.add_argument(
@@ -758,7 +768,12 @@ def _fill(arguments: argparse.Namespace) -> int:
             raise FillingError(str(error)) from error
         document = load_crossword_document(_input_source(arguments.document))
         dictionary = load_dictionary(_input_source(arguments.dictionary))
-        crossword = fill_crossword(
+        fill_document = (
+            generate_filled_crossword
+            if arguments.replace_blocking
+            else fill_crossword
+        )
+        crossword = fill_document(
             document,
             dictionary,
             seed=arguments.seed,

@@ -65,6 +65,7 @@ from krizovkar.gui import (
     clear_crossword_slot,
     create_blank_template,
     create_empty_template,
+    create_initial_crossword,
     create_new_template,
     crossword_slot_pattern,
     fill_crossword_slot,
@@ -1461,11 +1462,89 @@ class GuiTest(unittest.TestCase):
                 parent,
                 initial_settings=CrosswordSettings(15, 10),
                 initial_layout="swedish",
-                initial_creation_mode="empty",
+                initial_content_mode="empty",
             )
 
         initialize.assert_called_once_with(parent, "Nová křížovka")
         self.assertIsNone(dialog._new_template)
+
+    def test_template_dialog_offers_three_initial_content_choices(self) -> None:
+        dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
+        dialog._initial_settings = CrosswordSettings(15, 10)
+        dialog._initial_layout = "swedish"
+        dialog._initial_content_mode = "empty"
+        dialog._initial_seed = 123
+        dialog._fit_generation_controls_width = Mock()
+        dialog._update_generation_controls = Mock()
+        dialog._refresh_cli_command = Mock()
+        master = Mock()
+        dimensions = Mock()
+        generation_controls = Mock()
+        dictionary_row = Mock()
+        variables = tuple(Mock() for _ in range(8))
+        content_value = variables[3]
+        width_editor = Mock()
+
+        with (
+            patch("krizovkar.gui._inherit_macos_menu_bar"),
+            patch(
+                "krizovkar.gui.ttk.Frame",
+                side_effect=(
+                    dimensions,
+                    generation_controls,
+                    dictionary_row,
+                ),
+            ),
+            patch("krizovkar.gui.ttk.Label", return_value=Mock()),
+            patch(
+                "krizovkar.gui.tk.StringVar",
+                side_effect=variables,
+            ),
+            patch(
+                "krizovkar.gui.ttk.Spinbox",
+                side_effect=(width_editor, Mock()),
+            ),
+            patch(
+                "krizovkar.gui.ttk.Radiobutton",
+                return_value=Mock(),
+            ) as radio_type,
+            patch(
+                "krizovkar.gui._create_generation_entry",
+                side_effect=(Mock(), Mock()),
+            ),
+            patch("krizovkar.gui._bind_text_entry_context_menu"),
+            patch(
+                "krizovkar.gui._create_dictionary_editor",
+                return_value=Mock(),
+            ),
+            patch("krizovkar.gui._create_dictionary_browse_button"),
+        ):
+            initial_focus = TemplateGenerationDialog.body(dialog, master)
+
+        self.assertIs(width_editor, initial_focus)
+        self.assertEqual(
+            [
+                call(
+                    master,
+                    text="Prázdná",
+                    variable=content_value,
+                    value="empty",
+                ),
+                call(
+                    master,
+                    text="Pouze tajenka",
+                    variable=content_value,
+                    value="secret",
+                ),
+                call(
+                    master,
+                    text="Vyplněná",
+                    variable=content_value,
+                    value="filled",
+                ),
+            ],
+            radio_type.call_args_list[2:],
+        )
 
     def test_parses_template_settings(self) -> None:
         self.assertEqual(
@@ -1928,15 +2007,18 @@ class GuiTest(unittest.TestCase):
             ),
         )
 
-    def test_builds_repeatable_cli_command_for_generated_template(self) -> None:
+    def test_builds_repeatable_cli_command_for_secret_only_template(
+        self,
+    ) -> None:
         self.assertEqual(
             "uv run krizovkar template --randomize --seed 123 "
-            "--layout numbered --width 7 --height 6",
+            "--secret TAJENKA --layout numbered --width 7 --height 6",
             _template_cli_command(
                 CrosswordSettings(width=7, height=6),
                 "numbered",
-                "generated",
+                "secret",
                 seed=123,
+                secret=SecretRequirement(words=("TAJENKA",)),
             ),
         )
 
@@ -1948,7 +2030,7 @@ class GuiTest(unittest.TestCase):
             _template_cli_command(
                 CrosswordSettings(width=15, height=15),
                 "numbered",
-                "generated",
+                "secret",
                 seed=123,
                 secret=SecretRequirement(words=("KOMU", "SE", "NELENÍ")),
             ),
@@ -1962,9 +2044,25 @@ class GuiTest(unittest.TestCase):
             _template_cli_command(
                 CrosswordSettings(width=15, height=15),
                 "numbered",
-                "generated",
+                "secret",
                 seed=123,
                 secret=SecretRequirement(words=("TAJENKA",)),
+                dictionary=Path("/slovníky/český slovník.json"),
+            ),
+        )
+
+    def test_builds_cli_pipeline_for_filled_template(self) -> None:
+        self.assertEqual(
+            "uv run krizovkar template --randomize --seed 123 "
+            "--dictionary '/slovníky/český slovník.json' "
+            "--layout numbered --width 7 --height 6 | uv run krizovkar "
+            "fill - '/slovníky/český slovník.json' --seed 123 "
+            "--replace-blocking",
+            _template_cli_command(
+                CrosswordSettings(width=7, height=6),
+                "numbered",
+                "filled",
+                seed=123,
                 dictionary=Path("/slovníky/český slovník.json"),
             ),
         )
@@ -1977,12 +2075,12 @@ class GuiTest(unittest.TestCase):
         dialog._height_value.get.return_value = "6"
         dialog._layout_value = Mock()
         dialog._layout_value.get.return_value = "numbered"
-        dialog._creation_mode_value = Mock()
-        dialog._creation_mode_value.get.return_value = "generated"
+        dialog._content_mode_value = Mock()
+        dialog._content_mode_value.get.return_value = "secret"
         dialog._seed_value = Mock()
         dialog._seed_value.get.return_value = "123"
         dialog._secret_value = Mock()
-        dialog._secret_value.get.return_value = ""
+        dialog._secret_value.get.return_value = "Tajenka"
         dialog._dictionary_value = Mock()
         dialog._dictionary_value.get.return_value = ""
         dialog._cli_command_value = Mock()
@@ -1991,7 +2089,7 @@ class GuiTest(unittest.TestCase):
 
         dialog._cli_command_value.set.assert_called_once_with(
             "uv run krizovkar template --randomize --seed 123 "
-            "--layout numbered --width 7 --height 6"
+            "--secret TAJENKA --layout numbered --width 7 --height 6"
         )
 
     def test_template_dialog_explains_invalid_cli_selection(self) -> None:
@@ -2002,8 +2100,8 @@ class GuiTest(unittest.TestCase):
         dialog._height_value.get.return_value = "6"
         dialog._layout_value = Mock()
         dialog._layout_value.get.return_value = "numbered"
-        dialog._creation_mode_value = Mock()
-        dialog._creation_mode_value.get.return_value = "empty"
+        dialog._content_mode_value = Mock()
+        dialog._content_mode_value.get.return_value = "empty"
         dialog._cli_command_value = Mock()
 
         TemplateGenerationDialog._refresh_cli_command(dialog)
@@ -2109,12 +2207,12 @@ class GuiTest(unittest.TestCase):
             "uv run krizovkar template",
         )
 
-    def test_template_dialog_shows_generation_controls_only_when_generated(
+    def test_template_dialog_shows_generation_controls_for_nonempty_content(
         self,
     ) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
-        dialog._creation_mode_value = Mock()
-        dialog._creation_mode_value.get.side_effect = ("empty", "generated")
+        dialog._content_mode_value = Mock()
+        dialog._content_mode_value.get.side_effect = ("empty", "secret")
         dialog._generation_controls = Mock()
 
         TemplateGenerationDialog._update_generation_controls(dialog)
@@ -2189,7 +2287,7 @@ class GuiTest(unittest.TestCase):
         )
         master.columnconfigure.assert_not_called()
 
-    def test_template_dialog_validates_selected_generated_layout(self) -> None:
+    def test_template_dialog_validates_secret_only_content(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
         dialog._width_value = Mock()
         dialog._width_value.get.return_value = "7"
@@ -2197,8 +2295,8 @@ class GuiTest(unittest.TestCase):
         dialog._height_value.get.return_value = "6"
         dialog._layout_value = Mock()
         dialog._layout_value.get.return_value = "numbered"
-        dialog._creation_mode_value = Mock()
-        dialog._creation_mode_value.get.return_value = "generated"
+        dialog._content_mode_value = Mock()
+        dialog._content_mode_value.get.return_value = "secret"
         dialog._seed_value = Mock()
         dialog._seed_value.get.return_value = "123"
         dialog._secret_value = Mock()
@@ -2212,19 +2310,19 @@ class GuiTest(unittest.TestCase):
         with (
             patch("krizovkar.gui.load_dictionary") as load,
             patch(
-                "krizovkar.gui.create_new_template",
+                "krizovkar.gui.create_initial_crossword",
                 return_value=template,
-            ) as create_template,
+            ) as create_crossword,
         ):
             valid = TemplateGenerationDialog.validate(dialog)
             TemplateGenerationDialog.apply(dialog)
 
         self.assertTrue(valid)
         load.assert_not_called()
-        create_template.assert_called_once_with(
+        create_crossword.assert_called_once_with(
             CrosswordSettings(width=7, height=6),
             "numbered",
-            "generated",
+            "secret",
             seed=123,
             secret=SecretRequirement(words=("KOMU", "SE", "NELENÍ")),
             dictionary=None,
@@ -2244,8 +2342,8 @@ class GuiTest(unittest.TestCase):
         dialog._height_value.get.return_value = "3"
         dialog._layout_value = Mock()
         dialog._layout_value.get.return_value = "swedish"
-        dialog._creation_mode_value = Mock()
-        dialog._creation_mode_value.get.return_value = "empty"
+        dialog._content_mode_value = Mock()
+        dialog._content_mode_value.get.return_value = "empty"
         dialog._seed_value = Mock()
         dialog._seed_value.get.return_value = "neplatné"
         dialog._secret_value = Mock()
@@ -2255,13 +2353,13 @@ class GuiTest(unittest.TestCase):
         template = create_empty_template(CrosswordSettings(4, 3), "swedish")
 
         with patch(
-            "krizovkar.gui.create_new_template",
+            "krizovkar.gui.create_initial_crossword",
             return_value=template,
-        ) as create_template:
+        ) as create_crossword:
             valid = TemplateGenerationDialog.validate(dialog)
 
         self.assertTrue(valid)
-        create_template.assert_called_once_with(
+        create_crossword.assert_called_once_with(
             CrosswordSettings(width=4, height=3),
             "swedish",
             "empty",
@@ -2270,7 +2368,9 @@ class GuiTest(unittest.TestCase):
             dictionary=None,
         )
 
-    def test_template_dialog_loads_selected_dictionary(self) -> None:
+    def test_template_dialog_requires_secret_for_secret_only_content(
+        self,
+    ) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
         dialog._width_value = Mock()
         dialog._width_value.get.return_value = "7"
@@ -2278,8 +2378,86 @@ class GuiTest(unittest.TestCase):
         dialog._height_value.get.return_value = "6"
         dialog._layout_value = Mock()
         dialog._layout_value.get.return_value = "numbered"
-        dialog._creation_mode_value = Mock()
-        dialog._creation_mode_value.get.return_value = "generated"
+        dialog._content_mode_value = Mock()
+        dialog._content_mode_value.get.return_value = "secret"
+        dialog._seed_value = Mock()
+        dialog._seed_value.get.return_value = "123"
+        dialog._secret_value = Mock()
+        dialog._secret_value.get.return_value = "  "
+        dialog._dictionary_value = Mock()
+        dialog._dictionary_value.get.return_value = ""
+        dialog._dictionary_editor = Mock()
+        dialog._secret_editor = Mock()
+        dialog._width_editor = Mock()
+        dialog._new_template = Mock()
+
+        with (
+            patch("krizovkar.gui.create_initial_crossword") as create,
+            patch("krizovkar.gui.messagebox.showerror") as show_error,
+        ):
+            valid = TemplateGenerationDialog.validate(dialog)
+
+        self.assertFalse(valid)
+        self.assertIsNone(dialog._new_template)
+        show_error.assert_called_once_with(
+            "Křížovku nelze vytvořit",
+            "Vyplňte tajenku.",
+            parent=dialog,
+        )
+        create.assert_not_called()
+        dialog._secret_editor.focus_set.assert_called_once_with()
+        dialog._dictionary_editor.focus_set.assert_not_called()
+
+    def test_template_dialog_requires_dictionary_for_filled_content(
+        self,
+    ) -> None:
+        dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
+        dialog._width_value = Mock()
+        dialog._width_value.get.return_value = "7"
+        dialog._height_value = Mock()
+        dialog._height_value.get.return_value = "6"
+        dialog._layout_value = Mock()
+        dialog._layout_value.get.return_value = "numbered"
+        dialog._content_mode_value = Mock()
+        dialog._content_mode_value.get.return_value = "filled"
+        dialog._seed_value = Mock()
+        dialog._seed_value.get.return_value = "123"
+        dialog._secret_value = Mock()
+        dialog._secret_value.get.return_value = ""
+        dialog._dictionary_value = Mock()
+        dialog._dictionary_value.get.return_value = "  "
+        dialog._dictionary_editor = Mock()
+        dialog._secret_editor = Mock()
+        dialog._width_editor = Mock()
+        dialog._new_template = Mock()
+
+        with (
+            patch("krizovkar.gui.create_initial_crossword") as create,
+            patch("krizovkar.gui.messagebox.showerror") as show_error,
+        ):
+            valid = TemplateGenerationDialog.validate(dialog)
+
+        self.assertFalse(valid)
+        self.assertIsNone(dialog._new_template)
+        show_error.assert_called_once_with(
+            "Křížovku nelze vytvořit",
+            "Vyberte slovník.",
+            parent=dialog,
+        )
+        create.assert_not_called()
+        dialog._dictionary_editor.focus_set.assert_called_once_with()
+        dialog._secret_editor.focus_set.assert_not_called()
+
+    def test_template_dialog_loads_dictionary_for_filled_content(self) -> None:
+        dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
+        dialog._width_value = Mock()
+        dialog._width_value.get.return_value = "7"
+        dialog._height_value = Mock()
+        dialog._height_value.get.return_value = "6"
+        dialog._layout_value = Mock()
+        dialog._layout_value.get.return_value = "numbered"
+        dialog._content_mode_value = Mock()
+        dialog._content_mode_value.get.return_value = "filled"
         dialog._seed_value = Mock()
         dialog._seed_value.get.return_value = "123"
         dialog._secret_value = Mock()
@@ -2297,18 +2475,18 @@ class GuiTest(unittest.TestCase):
                 return_value=TEST_DICTIONARY,
             ) as load,
             patch(
-                "krizovkar.gui.create_new_template",
+                "krizovkar.gui.create_initial_crossword",
                 return_value=template,
-            ) as create_template,
+            ) as create_crossword,
         ):
             valid = TemplateGenerationDialog.validate(dialog)
 
         self.assertTrue(valid)
         load.assert_called_once_with(Path("slovník.json"))
-        create_template.assert_called_once_with(
+        create_crossword.assert_called_once_with(
             CrosswordSettings(width=7, height=6),
             "numbered",
-            "generated",
+            "filled",
             seed=123,
             secret=SecretRequirement(words=("TAJENKA",)),
             dictionary=TEST_DICTIONARY,
@@ -2323,12 +2501,12 @@ class GuiTest(unittest.TestCase):
         dialog._height_value.get.return_value = "2"
         dialog._layout_value = Mock()
         dialog._layout_value.get.return_value = "swedish"
-        dialog._creation_mode_value = Mock()
-        dialog._creation_mode_value.get.return_value = "generated"
+        dialog._content_mode_value = Mock()
+        dialog._content_mode_value.get.return_value = "secret"
         dialog._seed_value = Mock()
         dialog._seed_value.get.return_value = "123"
         dialog._secret_value = Mock()
-        dialog._secret_value.get.return_value = ""
+        dialog._secret_value.get.return_value = "Tajenka"
         dialog._dictionary_value = Mock()
         dialog._dictionary_value.get.return_value = ""
         dialog._dictionary_editor = Mock()
@@ -2337,7 +2515,7 @@ class GuiTest(unittest.TestCase):
 
         with (
             patch(
-                "krizovkar.gui.create_new_template",
+                "krizovkar.gui.create_initial_crossword",
                 side_effect=GuiInputError("rozměr nelze rozdělit"),
             ),
             patch("krizovkar.gui.messagebox.showerror") as show_error,
@@ -2479,6 +2657,105 @@ class GuiTest(unittest.TestCase):
             )
             self.assertTrue(all(isinstance(cell, SecretCell) for cell in cells))
             self.assertEqual(answer, "".join(cell.value or "" for cell in cells))
+
+    def test_initial_secret_content_creates_generated_template_only(
+        self,
+    ) -> None:
+        settings = CrosswordSettings(width=7, height=6)
+        secret = SecretRequirement(words=("TAJENKA",))
+        template = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+
+        with (
+            patch(
+                "krizovkar.gui.create_new_template",
+                return_value=template,
+            ) as create_template,
+            patch("krizovkar.gui.generate_filled_crossword") as fill,
+        ):
+            result = create_initial_crossword(
+                settings,
+                "numbered",
+                "secret",
+                seed=123,
+                secret=secret,
+                dictionary=TEST_DICTIONARY,
+            )
+
+        self.assertIs(template, result)
+        create_template.assert_called_once_with(
+            settings,
+            "numbered",
+            "generated",
+            seed=123,
+            secret=secret,
+            dictionary=TEST_DICTIONARY,
+        )
+        fill.assert_not_called()
+
+    def test_initial_filled_content_generates_all_words(self) -> None:
+        settings = CrosswordSettings(width=7, height=6)
+        template = create_blank_template(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+        )
+        filled = _filled_numbered_crossword()
+
+        with (
+            patch(
+                "krizovkar.gui.create_new_template",
+                return_value=template,
+            ) as create_template,
+            patch(
+                "krizovkar.gui.generate_filled_crossword",
+                return_value=filled,
+            ) as fill,
+        ):
+            result = create_initial_crossword(
+                settings,
+                "numbered",
+                "filled",
+                seed=123,
+                dictionary=TEST_DICTIONARY,
+            )
+
+        self.assertIs(filled, result)
+        create_template.assert_called_once_with(
+            settings,
+            "numbered",
+            "generated",
+            seed=123,
+            secret=None,
+            dictionary=TEST_DICTIONARY,
+        )
+        fill.assert_called_once_with(template, TEST_DICTIONARY, seed=123)
+
+    def test_initial_filled_content_returns_complete_crossword(self) -> None:
+        answers = ("ABC", "DEF", "GHI", "ADG", "BEH", "CFI")
+        dictionary = CrosswordDictionary(
+            entries=tuple(
+                DictionaryEntry(answer=answer, clues=(answer,))
+                for answer in answers
+            )
+        )
+
+        crossword = create_initial_crossword(
+            CrosswordSettings(width=3, height=3),
+            "numbered",
+            "filled",
+            seed=123,
+            dictionary=dictionary,
+        )
+
+        self.assertTrue(
+            all(
+                slot.answer is not None and slot.clue is not None
+                for slot in crossword.slots
+            )
+        )
+        self.assertEqual(set(answers), {slot.answer for slot in crossword.slots})
 
     def test_recognizes_unchanged_empty_template_after_opening(self) -> None:
         empty = create_empty_template(CrosswordSettings(4, 3), "swedish")
@@ -4839,7 +5116,7 @@ class GuiTest(unittest.TestCase):
             parent,
             initial_settings=CrosswordSettings(15, 10),
             initial_layout="swedish",
-            initial_creation_mode="empty",
+            initial_content_mode="empty",
         )
         application._no_document_dialog_parent.assert_called_once_with()
         application._open_window.assert_called_once_with(

@@ -1916,6 +1916,40 @@ class CommandTest(unittest.TestCase):
             self.assertEqual("ZELENÍ", crossword.slots[0].answer)
             self.assertEqual("Tajenka", crossword.slots[0].clue)
 
+    def test_fill_can_replace_blocking_content(self) -> None:
+        document = load_crossword_document(TEMPLATE_SECRET_EXAMPLE)
+        with tempfile.TemporaryDirectory() as directory:
+            dictionary = Path(directory) / "dictionary.json"
+            dictionary.write_text(
+                json.dumps({"LES": ["Porost stromů"]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            stdout = io.StringIO()
+
+            with (
+                patch(
+                    "krizovkar.cli.generate_filled_crossword",
+                    return_value=document,
+                ) as generate,
+                redirect_stdout(stdout),
+                redirect_stderr(io.StringIO()),
+            ):
+                result = main(
+                    [
+                        "fill",
+                        str(TEMPLATE_SECRET_EXAMPLE),
+                        str(dictionary),
+                        "--seed",
+                        "42",
+                        "--replace-blocking",
+                    ]
+                )
+
+        self.assertEqual(0, result)
+        self.assertIn("kind: crossword\n", stdout.getvalue())
+        generate.assert_called_once()
+        self.assertEqual(42, generate.call_args.kwargs["seed"])
+        self.assertIsNone(generate.call_args.kwargs["secret"])
 
     def test_template_fills_known_secret_and_keeps_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -38,14 +38,19 @@ uv run krizovkar-gui examples/template-unfilled.yaml \
 
 Volba **Soubor → Nová křížovka…** otevře dialog pro zadání počtu sloupců
 a řádků, pro volbu švédské nebo číslované křížovky a pro volbu
-počátečního obsahu. Prázdná varianta vytvoří jednoduchý základ bez
-vnitřních předělů; vygenerovaná varianta rozvrhne místa pro hesla
-pseudonáhodně. Po jejím zvolení se zobrazí pole **Sémě**, předvyplněné
-náhodným celým číslem, které lze pro opakování konkrétního rozvržení
-změnit, a volitelná pole **Tajenka** a **Slovník**. Generátor rozvržení
-přizpůsobí tak, aby se do něj zadaná tajenka vešla, a její části v novém
-dokumentu rovnou vyplní. Je-li vybraný slovník, ověří proti němu budoucí
-křížení tajenky; bez slovníku tuto kontrolu vynechá. Tajenku může rozdělit
+počátečního obsahu: **Prázdná**, **Pouze tajenka** nebo **Vyplněná**.
+Prázdná varianta vytvoří jednoduchý základ bez vnitřních předělů.
+Pouze tajenka pseudonáhodně rozvrhne místa pro hesla, vyžaduje text
+**Tajenky** a vyplní jen její části; **Slovník** je u ní volitelný pro kontrolu
+budoucích křížení. Vyplněná varianta vyžaduje **Slovník**, doplní z něj
+všechna běžná hesla a může navíc obsahovat volitelnou tajenku. Pokud první
+umístění tajenky brání úplnému vyplnění, generátor ji zkusí jinak
+rozdělit, přesunout nebo otočit.
+
+U obou neprázdných variant se zobrazí pole **Sémě**, předvyplněné
+náhodným celým číslem, které lze pro opakování konkrétního výsledku
+změnit. Generátor rozvržení přizpůsobí tak, aby se do něj zadaná tajenka
+vešla. Tajenku může rozdělit
 pouze mezi celými slovy a nejvýše na tolik dílů, kolik obsahuje slov. Stejně
 jako při zalamování legend přitom neoddělí
 jednopísmennou souhláskovou předložku `k`, `s`, `v` nebo `z` od následujícího
@@ -57,8 +62,9 @@ otevřený k opravě. Tlačítko-přepínač **CLI** vlevo dole rozbalí ve spod
 části dialogu kopírovatelný příkaz, který na příkazové řádce vytvoří
 totožnou křížovku. Text používá písmo s pevnou šířkou, podle
 dostupného místa se zalamuje a otevře se pod tlačítky, aniž změní šířku
-dialogu. U vygenerované varianty obsahuje také konkrétní seed a případnou
-tajenku, takže zachová stejné pseudonáhodné rozvržení.
+dialogu. U neprázdné varianty obsahuje také konkrétní seed a případnou
+tajenku, takže zachová stejné pseudonáhodné rozvržení. Pro vyplněnou
+variantu zobrazí rouru příkazů `template` a `fill` se stejným slovníkem a seedem.
 
 Každé viditelné okno představuje právě jeden YAML soubor a v titulku ukazuje
 jeho název, případně **Nová křížovka**. Hvězdička
@@ -648,8 +654,11 @@ uv run krizovkar fill build/template.yaml slovnik.json \
 ```
 
 Plnění funguje pro prázdné, ručně vytvořené, částečně vyplněné i hotové křížovky.
-Doplněná hesla zachová; pro každé zbývající místo vybere heslo odpovídající délky,
-zachová shodná písmena na kříženích a stejnou odpověď nepoužije dvakrát.
+Ve výchozím režimu doplněná hesla zachová; pro každé zbývající místo
+vybere heslo odpovídající délky, zachová shodná písmena na kříženích
+a stejnou odpověď nepoužije dvakrát. Volba `--replace-blocking` smí po
+neúspěchu nahradit blokující běžná hesla a známou tajenku jinak rozdělit,
+přesunout nebo otočit stejně jako grafické rozhraní.
 Odpověď a legendu uloží přímo do původního slotu. Vstupem i výsledkem je
 tentýž druh editovatelného dokumentu `kind: crossword`. Ten lze dál upravovat,
 znovu použít jako základ nebo převést na cílovou mřížku:

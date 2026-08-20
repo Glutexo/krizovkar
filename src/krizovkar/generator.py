@@ -2385,15 +2385,21 @@ def generate_filled_crossword(
     dictionary: CrosswordDictionary,
     *,
     seed: int = DEFAULT_SEED,
+    secret: SecretRequirement | None = None,
 ) -> CrosswordDocument:
     """Vyplní křížovku i za cenu náhrady hesel nebo přesunu tajenky."""
 
     try:
-        return fill_crossword(crossword, dictionary, seed=seed)
+        return fill_crossword(
+            crossword,
+            dictionary,
+            seed=seed,
+            secret=secret,
+        )
     except FillingError:
         pass
 
-    crossword = _resolve_crossword_secrets(crossword, None, seed)
+    crossword = _resolve_crossword_secrets(crossword, secret, seed)
     secret_assignments, ordinary_assignments = (
         _crossword_filling_assignments(crossword)
     )
