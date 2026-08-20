@@ -46,8 +46,9 @@ aby se do něj zadaná tajenka vešla, a její části v novém dokumentu rovnou
 vyplní. Může ji rozdělit pouze mezi celými slovy a nejvýše na tolik dílů,
 kolik obsahuje slov. Stejně jako při zalamování legend přitom neoddělí
 jednopísmennou souhláskovou předložku `k`, `s`, `v` nebo `z` od následujícího
-slova. Více po sobě jdoucích slov ve stejném dílu spojí bez mezer. Tlačítko
-**Vytvořit** otevře výsledek jako nový samostatný dokument.
+slova. Nerozdělí ji ani v místě pevné mezery. Více po sobě jdoucích slov ve
+stejném dílu spojí bez mezer. Tlačítko **Vytvořit** otevře výsledek jako nový
+samostatný dokument.
 Neplatný nebo nerozvrhnutelný rozměr či tajenku dialog vysvětlí a ponechá
 otevřený k opravě. Tlačítko-přepínač **CLI** vlevo dole rozbalí ve spodní
 části dialogu kopírovatelný příkaz, který na příkazové řádce vytvoří
@@ -138,13 +139,14 @@ změna po návratu do staršího stavu zahodí dosavadní kroky **Vpřed**.
 Volba **Úpravy → Dogenerovat tajenku…** doplní konkrétní text tajenky do
 otevřené křížovky. Tajenku může rozdělit pouze mezi celými slovy a zachová
 nezalomitelné spojení jednopísmenných souhláskových předložek s následujícím
-slovem. Nejprve vyhledá vyhovující prázdná místa, aniž zasáhne do vyplněných
-hesel. Pokud to nejde, zvolí umístění vyžadující odstranění nejmenšího počtu
-stávajících hesel včetně rozporných křížení. Když tajenka nepasuje do
-současných míst, vytvoří nové rozvržení se stejným rozměrem; teprve pokud
-nestačí ani to, křížovku co nejméně zvětší, nejvýše na 50 × 50 polí. Při
-novém rozvržení nahradí dosavadní obsah bez potvrzení. Celé dogenerování je
-jeden krok historie, takže je lze vrátit jediným **Zpět**.
+slovem. Pevná mezera výslovně zakáže rozdělení v daném místě. Nejprve vyhledá
+vyhovující prázdná místa, aniž zasáhne do vyplněných hesel. Pokud to nejde,
+zvolí umístění vyžadující odstranění nejmenšího počtu stávajících hesel včetně
+rozporných křížení. Když tajenka nepasuje do současných míst, vytvoří nové
+rozvržení se stejným rozměrem; teprve pokud nestačí ani to, křížovku co
+nejméně zvětší, nejvýše na 50 × 50 polí. Při novém rozvržení nahradí dosavadní
+obsah bez potvrzení. Celé dogenerování je jeden krok historie, takže je lze
+vrátit jediným **Zpět**.
 
 Nabídka **Zobrazení** obsahuje volbu **Zdroj YAML**, která pro zvolený dokument
 otevře vlastní běžné okno s jeho upravitelnou YAML podobou. Každá změna
@@ -262,8 +264,10 @@ legendovou buňku; její souřadnice se odvodí ze začátku a směru. Vynechan�
 Šablona může navíc rezervovat jedno nebo více míst pro části tajenky.
 Známá tajenka se ukládá jako seznam slov bez mezer a interpunkce, aby se
 neztratila povolená místa budoucího rozdělení. `word_count` u každé části
-určuje, kolik po sobě jdoucích slov se spojí do příslušného místa. Ukazuje
-to [šablona s tajenkou](examples/template-secret.yaml). Pokud konkrétní znění
+určuje, kolik po sobě jdoucích slov se spojí do příslušného místa. Výrazy
+spojené ve vstupu pevnou mezerou se uloží jako jedna položka, protože mezi
+nimi není povolený šev. Ukazuje to
+[šablona s tajenkou](examples/template-secret.yaml). Pokud konkrétní znění
 zatím není známé, `words` i `word_count` se vynechají a zůstanou jen
 připravená místa. Při převodu do cílové mřížky dostane první pole každé
 slotové části tajenky zobáček ve směru hesla.
@@ -567,10 +571,11 @@ velikost písmen sjednotí, mezery a interpunkce se do buněk nezapisují a
 seznam slov zachová všechny povolené švy. Vybrané sloty generátor rovnou
 vyplní textem tajenky a popiskem příslušné části. Automatické dělení nikdy
 nerozdělí slovo ani neoddělí jednopísmennou souhláskovou předložku od
-následujícího slova. Generátor podle potřeby změní jinak vyvážené délky
-běžných slotů tak, aby maska obsahovala požadované délky tajenky od 3 do 8
-polí; pokud se požadavek do zadaného rozměru nevejde, skončí s chybou.
-Volitelné `--secret-prompt` doplní zadání; jeho pozici a zarovnání určují
+následujícího slova; pevná mezera zakáže dělení ve svém místě. Generátor podle
+potřeby změní jinak vyvážené délky běžných slotů tak, aby maska obsahovala
+požadované délky tajenky od 3 do 8 polí; pokud se požadavek do zadaného
+rozměru nevejde, skončí s chybou. Volitelné `--secret-prompt` doplní zadání;
+jeho pozici a zarovnání určují
 `--secret-prompt-placement` a `--secret-prompt-alignment`. Seed ovlivňuje
 výběr vhodných slotů.
 

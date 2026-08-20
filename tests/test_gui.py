@@ -1241,6 +1241,10 @@ class GuiTest(unittest.TestCase):
             SecretRequirement(words=("KOMU", "SE", "NELENÍ")),
             parse_template_secret(" Komu se nelení. "),
         )
+        self.assertEqual(
+            SecretRequirement(words=("DÁREKRADOST",)),
+            parse_template_secret("Dárek\N{NO-BREAK SPACE}radost"),
+        )
 
     def test_rejects_unsupported_template_secret_character(self) -> None:
         with self.assertRaisesRegex(

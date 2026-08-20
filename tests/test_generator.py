@@ -342,6 +342,22 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
             ),
         )
 
+    def test_fixed_space_creates_unbreakable_secret_group(self) -> None:
+        self.assertEqual(
+            ("JDU", "V", "LESE"),
+            normalize_secret_text("Jdu v lese"),
+        )
+        self.assertEqual(
+            ("DÁREKRADOST", "A", "PŘÁNÍ"),
+            normalize_secret_text(
+                "Dárek,\N{NO-BREAK SPACE}„radost“ a přání"
+            ),
+        )
+        self.assertEqual(
+            ("JDUVLESE",),
+            normalize_secret_text("Jdu\N{NO-BREAK SPACE}v lese"),
+        )
+
     def test_secret_normalization_rejects_nonletter_content(self) -> None:
         with self.assertRaisesRegex(GenerationError, "nepodporovaný znak '1'"):
             normalize_secret_text("TAJENKA 1")
@@ -562,6 +578,47 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
                 if isinstance(part, CrosswordSecretSlotPart)
             ),
         )
+
+    def test_fixed_space_prevents_multiple_generated_secret_parts(
+        self,
+    ) -> None:
+        crossword = generate_empty_template(
+            width=3,
+            height=2,
+            layout="numbered",
+        )
+
+        regular = generate_secret_in_crossword(
+            crossword,
+            SecretRequirement(words=normalize_secret_text("ABC DEF")),
+            layout="numbered",
+            maximum_width=6,
+            maximum_height=6,
+        )
+        fixed = generate_secret_in_crossword(
+            crossword,
+            SecretRequirement(
+                words=normalize_secret_text(
+                    "ABC\N{NO-BREAK SPACE}DEF"
+                )
+            ),
+            layout="numbered",
+            maximum_width=6,
+            maximum_height=6,
+        )
+
+        self.assertEqual(2, len(regular.document.secrets[-1].parts))
+        self.assertEqual(1, len(fixed.document.secrets[-1].parts))
+        self.assertEqual(("ABCDEF",), fixed.document.secrets[-1].words)
+        fixed_part = fixed.document.secrets[-1].parts[0]
+        assert isinstance(fixed_part, CrosswordSecretSlotPart)
+        self.assertEqual(1, fixed_part.word_count)
+        fixed_slot = next(
+            slot
+            for slot in fixed.document.slots
+            if slot.identifier == fixed_part.slot_identifier
+        )
+        self.assertEqual("ABCDEF", fixed_slot.answer)
 
     def test_generates_secret_in_empty_slot_with_matching_crossings(
         self,

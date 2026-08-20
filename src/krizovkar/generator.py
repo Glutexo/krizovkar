@@ -63,6 +63,9 @@ MAX_CLUE_LENGTH = 48
 FILLING_ATTEMPTS = 4
 MAX_SEARCH_NODES = 250_000
 PREFERRED_SECRET_PART_LENGTH = 4
+_NON_BREAKING_SPACES = frozenset(
+    ("\N{NO-BREAK SPACE}", "\N{NARROW NO-BREAK SPACE}")
+)
 
 GridCoordinate = tuple[int, int]
 SpecificationLayout = Literal["swedish", "numbered"]
@@ -143,30 +146,69 @@ class _SpecificationSlot:
     order: int
 
 
+def _merge_unbreakable_secret_words(
+    words: list[str],
+    fixed_boundaries: set[int],
+) -> tuple[str, ...]:
+    """Spojí skupiny určené pevnými mezerami bez porušení jazyka."""
+
+    merged_boundaries = set(fixed_boundaries)
+    language_boundaries = unbreakable_word_boundaries(words)
+    while True:
+        additions = {
+            boundary
+            for boundary in language_boundaries
+            if boundary - 1 in merged_boundaries
+        }
+        if additions <= merged_boundaries:
+            break
+        merged_boundaries.update(additions)
+
+    merged = [words[0]]
+    for word_index, word in enumerate(words[1:], start=1):
+        if word_index in merged_boundaries:
+            merged[-1] += word
+        else:
+            merged.append(word)
+    return tuple(merged)
+
+
 def normalize_secret_text(text: str) -> tuple[str, ...]:
-    """Převede text tajenky na velká slova bez mezer a interpunkce."""
+    """Převede tajenku na velké, samostatně dělitelné slovní skupiny."""
 
     normalized = unicodedata.normalize("NFC", text).upper()
     supported = frozenset(SUPPORTED_SINGLE_LETTERS)
-    words = []
-    current = []
+    words: list[str] = []
+    current: list[str] = []
+    fixed_boundaries: set[int] = set()
+    fixed_before_current = False
+
+    def finish_word() -> None:
+        nonlocal fixed_before_current
+        if not current:
+            return
+        if fixed_before_current and words:
+            fixed_boundaries.add(len(words))
+        words.append("".join(current))
+        current.clear()
+        fixed_before_current = False
+
     for character in normalized:
         if character in supported:
             current.append(character)
             continue
         if character.isspace() or unicodedata.category(character).startswith("P"):
-            if current:
-                words.append("".join(current))
-                current = []
+            finish_word()
+            if character in _NON_BREAKING_SPACES and words:
+                fixed_before_current = True
             continue
         raise GenerationError(
             f"tajenka obsahuje nepodporovaný znak {character!r}"
         )
-    if current:
-        words.append("".join(current))
+    finish_word()
     if not words:
         raise GenerationError("tajenka musí obsahovat alespoň jedno slovo")
-    return tuple(words)
+    return _merge_unbreakable_secret_words(words, fixed_boundaries)
 
 
 def _validate_secret_requirement(requirement: SecretRequirement) -> None:
