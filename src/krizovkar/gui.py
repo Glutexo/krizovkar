@@ -78,6 +78,7 @@ from krizovkar.renderer import (
 
 _MAX_CROSSWORD_DIMENSION = 50
 _GENERATION_CONTROLS_INDENT = 24
+# Až devatenáct číslic výchozího semene a malá rezerva.
 _GENERATION_ENTRY_WIDTH = 22
 _MAX_DOCUMENT_HISTORY = 200
 _MAX_RECENT_DOCUMENTS = 10
@@ -1244,13 +1245,13 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         )
         ttk.Radiobutton(
             master,
-            text="Švédská – nápovědy přímo v mřížce",
+            text="Švédská",
             variable=self._layout_value,
             value="swedish",
         ).grid(row=2, column=0, sticky="w", pady=(5, 0))
         ttk.Radiobutton(
             master,
-            text="Číslovaná – nápovědy pod mřížkou",
+            text="Číslovaná",
             variable=self._layout_value,
             value="numbered",
         ).grid(row=3, column=0, sticky="w", pady=(4, 0))
@@ -1366,10 +1367,15 @@ class TemplateGenerationDialog(simpledialog.Dialog):
     def _fit_generation_controls_width(self, master: tk.Frame) -> None:
         master.update_idletasks()
         base_width = max(
-            child.winfo_reqwidth()
-            for child in master.winfo_children()
-            if child is not self._generation_controls
+            self._generation_controls.winfo_reqwidth()
+            + _GENERATION_CONTROLS_INDENT,
+            *(
+                child.winfo_reqwidth()
+                for child in master.winfo_children()
+                if child is not self._generation_controls
+            ),
         )
+        master.columnconfigure(0, minsize=base_width)
         self._generation_controls.configure(
             width=max(base_width - _GENERATION_CONTROLS_INDENT, 1),
             height=self._generation_controls.winfo_reqheight(),

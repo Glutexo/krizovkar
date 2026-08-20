@@ -1468,7 +1468,9 @@ class GuiTest(unittest.TestCase):
         initialize.assert_called_once_with(parent, "Nová křížovka")
         self.assertIsNone(dialog._new_template)
 
-    def test_template_dialog_offers_three_initial_content_choices(self) -> None:
+    def test_template_dialog_uses_short_layout_and_content_choices(
+        self,
+    ) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
         dialog._initial_settings = CrosswordSettings(15, 10)
         dialog._initial_layout = "swedish"
@@ -1482,6 +1484,7 @@ class GuiTest(unittest.TestCase):
         generation_controls = Mock()
         dictionary_row = Mock()
         variables = tuple(Mock() for _ in range(8))
+        layout_value = variables[2]
         content_value = variables[3]
         width_editor = Mock()
 
@@ -1526,6 +1529,18 @@ class GuiTest(unittest.TestCase):
             [
                 call(
                     master,
+                    text="Švédská",
+                    variable=layout_value,
+                    value="swedish",
+                ),
+                call(
+                    master,
+                    text="Číslovaná",
+                    variable=layout_value,
+                    value="numbered",
+                ),
+                call(
+                    master,
                     text="Prázdná",
                     variable=content_value,
                     value="empty",
@@ -1543,7 +1558,7 @@ class GuiTest(unittest.TestCase):
                     value="filled",
                 ),
             ],
-            radio_type.call_args_list[2:],
+            radio_type.call_args_list,
         )
 
     def test_parses_template_settings(self) -> None:
@@ -2258,16 +2273,17 @@ class GuiTest(unittest.TestCase):
             pady=(8, 0),
         )
 
-    def test_template_dialog_fits_generation_controls_to_base_width(
+    def test_template_dialog_width_fits_generation_controls(
         self,
     ) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
         dialog._generation_controls = Mock()
+        dialog._generation_controls.winfo_reqwidth.return_value = 289
         dialog._generation_controls.winfo_reqheight.return_value = 96
         shorter_child = Mock()
         shorter_child.winfo_reqwidth.return_value = 239
         longest_child = Mock()
-        longest_child.winfo_reqwidth.return_value = 337
+        longest_child.winfo_reqwidth.return_value = 263
         master = Mock()
         master.winfo_children.return_value = (
             shorter_child,
@@ -2278,14 +2294,14 @@ class GuiTest(unittest.TestCase):
         dialog._fit_generation_controls_width(master)
 
         master.update_idletasks.assert_called_once_with()
+        master.columnconfigure.assert_called_once_with(0, minsize=313)
         dialog._generation_controls.configure.assert_called_once_with(
-            width=313,
+            width=289,
             height=96,
         )
         dialog._generation_controls.grid_propagate.assert_called_once_with(
             False
         )
-        master.columnconfigure.assert_not_called()
 
     def test_template_dialog_validates_secret_only_content(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
