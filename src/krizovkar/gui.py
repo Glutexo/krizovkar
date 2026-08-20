@@ -24,12 +24,14 @@ from krizovkar.generator import (
     DEFAULT_GRID_WIDTH,
     DEFAULT_SEED,
     GenerationError,
+    SecretGenerationResult,
     SecretRequirement,
     SpecificationLayout,
     create_grid_from_crossword,
     crossword_external_slot_numbers,
     generate_empty_template,
     generate_numbered_template,
+    generate_secret_in_crossword,
     generate_swedish_template,
     normalize_secret_text,
 )
@@ -747,6 +749,75 @@ def _template_cli_command(
         )
     )
     return shlex.join(arguments)
+
+
+class SecretGenerationDialog(simpledialog.Dialog):
+    """Načte konkrétní text tajenky pro otevřenou křížovku."""
+
+    def __init__(self, parent: tk.Misc) -> None:
+        self._secret_value: tk.StringVar
+        self._secret_editor: ttk.Entry
+        self._requirement: SecretRequirement | None = None
+        super().__init__(parent, "Dogenerovat tajenku")
+
+    def body(self, master: tk.Frame) -> tk.Widget:
+        _inherit_macos_menu_bar(self)
+        master.configure(padx=16, pady=12)
+        master.columnconfigure(0, weight=1)
+        ttk.Label(
+            master,
+            text=(
+                "Zadejte text tajenky. Rozdělit ji lze pouze mezi "
+                "celými slovy."
+            ),
+            wraplength=360,
+        ).grid(row=0, column=0, sticky="w")
+        self._secret_value = tk.StringVar(master=master)
+        self._secret_editor = ttk.Entry(
+            master,
+            width=36,
+            textvariable=self._secret_value,
+        )
+        self._secret_editor.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        _bind_text_entry_context_menu(self._secret_editor)
+        return self._secret_editor
+
+    def buttonbox(self) -> None:
+        buttons = ttk.Frame(self, padding=(16, 0, 16, 16))
+        ttk.Button(
+            buttons,
+            text="Dogenerovat",
+            command=self.ok,
+            default="active",
+        ).pack(side="right")
+        ttk.Button(
+            buttons,
+            text="Zrušit",
+            command=self.cancel,
+        ).pack(side="right", padx=(0, 8))
+        buttons.pack(fill="x")
+        self.bind("<Return>", self.ok)
+        self.bind("<Escape>", self.cancel)
+
+    def validate(self) -> bool:
+        try:
+            requirement = parse_template_secret(self._secret_value.get())
+            if requirement is None:
+                raise GuiInputError("Vyplňte tajenku.")
+        except GuiInputError as error:
+            self._requirement = None
+            messagebox.showerror(
+                "Tajenku nelze dogenerovat",
+                str(error),
+                parent=self,
+            )
+            self._secret_editor.focus_set()
+            return False
+        self._requirement = requirement
+        return True
+
+    def apply(self) -> None:
+        self.result = self._requirement
 
 
 class TemplateGenerationDialog(simpledialog.Dialog):
@@ -3195,6 +3266,11 @@ class CrosswordApplication:
             accelerator=redo_shortcut.accelerator,
             state="disabled",
         )
+        self.edit_menu.add_separator()
+        self.edit_menu.add_command(
+            label="Dogenerovat tajenku…",
+            state="disabled",
+        )
         menu.add_cascade(label="Úpravy", menu=self.edit_menu)
         self.view_menu = _create_view_menu(menu, None)
         self.view_menu.add_separator()
@@ -3601,6 +3677,15 @@ class CrosswordDocumentWindow(ttk.Frame):
             command=self.redo_document,
         )
         self._redo_menu_index = cast(int, self.edit_menu.index("end"))
+        self.edit_menu.add_separator()
+        self.edit_menu.add_command(
+            label="Dogenerovat tajenku…",
+            command=self.generate_crossword_secret,
+        )
+        self._generate_secret_menu_index = cast(
+            int,
+            self.edit_menu.index("end"),
+        )
         menu.add_cascade(label="Úpravy", menu=self.edit_menu)
         self.view_menu = _create_view_menu(
             menu,
@@ -3748,6 +3833,10 @@ class CrosswordDocumentWindow(ttk.Frame):
                 if self._history_index + 1 < len(self._history)
                 else "disabled"
             ),
+        )
+        self.edit_menu.entryconfigure(
+            self._generate_secret_menu_index,
+            state="normal" if self._crossword is not None else "disabled",
         )
 
     def _bind_history_shortcuts(self, widget: tk.Misc) -> None:
@@ -4028,6 +4117,58 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._crossword = template
         self._template_layout = layout
         self._selected_slot_identifier = None
+        self._set_dirty(True)
+        self._rebuild_slot_tree()
+        self._refresh_crossword_view()
+
+    def generate_crossword_secret(self) -> None:
+        """Dogeneruje konkrétní tajenku do otevřeného dokumentu."""
+
+        if not self._save_inline_slot_edit():
+            return
+        crossword = self._crossword
+        if crossword is None:
+            return
+
+        dialog = SecretGenerationDialog(self.root)
+        requirement = cast(SecretRequirement | None, dialog.result)
+        if requirement is None:
+            return
+
+        layout = self._template_layout or _template_generation_layout(
+            crossword
+        )
+        self.root.configure(cursor="watch")
+        self.root.update_idletasks()
+        try:
+            result: SecretGenerationResult = generate_secret_in_crossword(
+                crossword,
+                requirement,
+                layout=layout,
+                maximum_width=_MAX_CROSSWORD_DIMENSION,
+                maximum_height=_MAX_CROSSWORD_DIMENSION,
+            )
+        except GenerationError as error:
+            self._show_action_error(
+                "Tajenku nelze dogenerovat",
+                str(error),
+            )
+            return
+        finally:
+            self.root.configure(cursor="")
+
+        self._crossword = result.document
+        self._template_layout = layout
+        if result.strategy in {"changed_layout", "changed_size"}:
+            self._template_creation_mode = "generated"
+        self._selected_slot_identifier = next(
+            (
+                part.slot_identifier
+                for part in result.document.secrets[-1].parts
+                if isinstance(part, CrosswordSecretSlotPart)
+            ),
+            None,
+        )
         self._set_dirty(True)
         self._rebuild_slot_tree()
         self._refresh_crossword_view()
@@ -4898,6 +5039,10 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._selected_slot_identifier = entry.selected_slot_identifier
         if self._crossword is not None:
             self._template_layout = _template_generation_layout(self._crossword)
+            self._template_creation_mode = _template_creation_mode(
+                self._crossword,
+                self._template_layout,
+            )
         self._dirty = (
             self._saved_history_index is None
             or self._history_index != self._saved_history_index

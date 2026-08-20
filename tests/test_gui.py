@@ -13,6 +13,8 @@ from pathlib import Path
 from unittest.mock import Mock, call, patch
 
 from krizovkar.generator import (
+    GenerationError,
+    SecretGenerationResult,
     SecretRequirement,
     create_grid_from_crossword,
 )
@@ -24,6 +26,7 @@ from krizovkar.gui import (
     CrosswordSourceWindow,
     GuiInputError,
     NewTemplateResult,
+    SecretGenerationDialog,
     TemplateGenerationDialog,
     _answer_conflicts_with_crossing,
     _bind_text_entry_context_menu,
@@ -262,8 +265,10 @@ class GuiTest(unittest.TestCase):
         window = Mock()
         window._undo_menu_index = 0
         window._redo_menu_index = 1
+        window._generate_secret_menu_index = 3
         window._history = [object(), object()]
         window._history_index = 0
+        window._crossword = object()
 
         CrosswordDocumentWindow._refresh_edit_menu(window)
 
@@ -271,18 +276,21 @@ class GuiTest(unittest.TestCase):
             [
                 call(0, state="disabled"),
                 call(1, state="normal"),
+                call(3, state="normal"),
             ],
             window.edit_menu.entryconfigure.call_args_list,
         )
 
         window.edit_menu.reset_mock()
         window._history_index = 1
+        window._crossword = None
         CrosswordDocumentWindow._refresh_edit_menu(window)
 
         self.assertEqual(
             [
                 call(0, state="normal"),
                 call(1, state="disabled"),
+                call(3, state="disabled"),
             ],
             window.edit_menu.entryconfigure.call_args_list,
         )
@@ -377,7 +385,7 @@ class GuiTest(unittest.TestCase):
             menu=print_menu,
         )
         self.assertEqual(
-            ["Zpět", "Vpřed"],
+            ["Zpět", "Vpřed", "Dogenerovat tajenku…"],
             [
                 item.kwargs["label"]
                 for item in edit_menu.add_command.call_args_list
@@ -387,8 +395,13 @@ class GuiTest(unittest.TestCase):
             ["Command-Z", "Command-Shift-Z"],
             [
                 item.kwargs["accelerator"]
-                for item in edit_menu.add_command.call_args_list
+                for item in edit_menu.add_command.call_args_list[:2]
             ],
+        )
+        self.assertEqual(1, edit_menu.add_separator.call_count)
+        self.assertIs(
+            window.generate_crossword_secret,
+            edit_menu.add_command.call_args_list[2].kwargs["command"],
         )
         window._bind_history_shortcuts.assert_called_once_with(window.root)
         menu_type.assert_any_call(menu, name="window")
@@ -561,7 +574,7 @@ class GuiTest(unittest.TestCase):
                 )
             )
         self.assertEqual(
-            ["Zpět", "Vpřed"],
+            ["Zpět", "Vpřed", "Dogenerovat tajenku…"],
             [
                 item.kwargs["label"]
                 for item in edit_menu.add_command.call_args_list
@@ -571,7 +584,7 @@ class GuiTest(unittest.TestCase):
             ["Command-Z", "Command-Shift-Z"],
             [
                 item.kwargs["accelerator"]
-                for item in edit_menu.add_command.call_args_list
+                for item in edit_menu.add_command.call_args_list[:2]
             ],
         )
         self.assertTrue(
@@ -580,6 +593,7 @@ class GuiTest(unittest.TestCase):
                 for item in edit_menu.add_command.call_args_list
             )
         )
+        edit_menu.add_separator.assert_called_once_with()
         menu_type.assert_any_call(menu, name="window")
         menu_type.assert_any_call(menu, name="help")
         view_menu.add_command.assert_called_once_with(
@@ -1234,6 +1248,44 @@ class GuiTest(unittest.TestCase):
             "nepodporovaný znak '1'",
         ):
             parse_template_secret("Tajenka 1")
+
+    def test_secret_generation_dialog_returns_normalized_requirement(
+        self,
+    ) -> None:
+        dialog = SecretGenerationDialog.__new__(SecretGenerationDialog)
+        dialog._secret_value = Mock()
+        dialog._secret_value.get.return_value = " Komu se nelení. "
+        dialog._secret_editor = Mock()
+        dialog._requirement = None
+
+        valid = SecretGenerationDialog.validate(dialog)
+        SecretGenerationDialog.apply(dialog)
+
+        self.assertTrue(valid)
+        self.assertEqual(
+            SecretRequirement(words=("KOMU", "SE", "NELENÍ")),
+            dialog.result,
+        )
+        dialog._secret_editor.focus_set.assert_not_called()
+
+    def test_secret_generation_dialog_keeps_blank_secret_open(self) -> None:
+        dialog = SecretGenerationDialog.__new__(SecretGenerationDialog)
+        dialog._secret_value = Mock()
+        dialog._secret_value.get.return_value = "  "
+        dialog._secret_editor = Mock()
+        dialog._requirement = Mock()
+
+        with patch("krizovkar.gui.messagebox.showerror") as show_error:
+            valid = SecretGenerationDialog.validate(dialog)
+
+        self.assertFalse(valid)
+        self.assertIsNone(dialog._requirement)
+        show_error.assert_called_once_with(
+            "Tajenku nelze dogenerovat",
+            "Vyplňte tajenku.",
+            parent=dialog,
+        )
+        dialog._secret_editor.focus_set.assert_called_once_with()
 
     def test_builds_cli_command_for_empty_template(self) -> None:
         self.assertEqual(
@@ -3635,6 +3687,124 @@ class GuiTest(unittest.TestCase):
         )
         self.assertIs(new_template, window._crossword)
         window._set_dirty.assert_called_once_with(True)
+
+    def test_menu_action_generates_secret_as_one_undoable_change(self) -> None:
+        original = create_empty_template(
+            CrosswordSettings(4, 4),
+            "numbered",
+        )
+        requirement = SecretRequirement(words=("ABC",))
+        generated = create_new_template(
+            CrosswordSettings(7, 7),
+            "numbered",
+            "generated",
+            secret=requirement,
+        )
+        result = SecretGenerationResult(
+            document=generated,
+            strategy="changed_size",
+        )
+        window = _document_history_window(original)
+        window.root = Mock()
+        window._template_creation_mode = "empty"
+
+        with (
+            patch("krizovkar.gui.SecretGenerationDialog") as dialog_type,
+            patch(
+                "krizovkar.gui.generate_secret_in_crossword",
+                return_value=result,
+            ) as generate_secret,
+            patch("krizovkar.gui.messagebox.askyesno") as ask,
+            patch.object(
+                window,
+                "_set_dirty",
+                wraps=window._set_dirty,
+            ) as set_dirty,
+        ):
+            dialog_type.return_value.result = requirement
+            CrosswordDocumentWindow.generate_crossword_secret(window)
+
+        dialog_type.assert_called_once_with(window.root)
+        generate_secret.assert_called_once_with(
+            original,
+            requirement,
+            layout="numbered",
+            maximum_width=50,
+            maximum_height=50,
+        )
+        ask.assert_not_called()
+        self.assertEqual(generated, window._crossword)
+        self.assertEqual("generated", window._template_creation_mode)
+        self.assertEqual(
+            generated.secrets[-1].parts[0].slot_identifier,
+            window._selected_slot_identifier,
+        )
+        set_dirty.assert_called_once_with(True)
+        self.assertEqual(2, len(window._history))
+        window._rebuild_slot_tree.assert_called_once_with()
+        window._refresh_crossword_view.assert_called_once_with()
+        window.root.configure.assert_has_calls(
+            [call(cursor="watch"), call(cursor="")]
+        )
+
+        self.assertTrue(window.undo_document())
+        self.assertEqual(original, window._crossword)
+        self.assertEqual("empty", window._template_creation_mode)
+
+    def test_menu_action_stops_after_cancelled_secret_dialog(self) -> None:
+        window = Mock()
+        window._save_inline_slot_edit.return_value = True
+        window._crossword = create_empty_template(
+            CrosswordSettings(4, 4),
+            "numbered",
+        )
+
+        with (
+            patch("krizovkar.gui.SecretGenerationDialog") as dialog_type,
+            patch(
+                "krizovkar.gui.generate_secret_in_crossword"
+            ) as generate_secret,
+        ):
+            dialog_type.return_value.result = None
+            CrosswordDocumentWindow.generate_crossword_secret(window)
+
+        dialog_type.assert_called_once_with(window.root)
+        generate_secret.assert_not_called()
+        window._set_dirty.assert_not_called()
+
+    def test_menu_action_reports_secret_generation_failure(self) -> None:
+        original = create_empty_template(
+            CrosswordSettings(4, 4),
+            "numbered",
+        )
+        requirement = SecretRequirement(words=("ABC",))
+        window = Mock()
+        window._save_inline_slot_edit.return_value = True
+        window._crossword = original
+        window._template_layout = "numbered"
+        window._template_creation_mode = "empty"
+
+        with (
+            patch("krizovkar.gui.SecretGenerationDialog") as dialog_type,
+            patch(
+                "krizovkar.gui.generate_secret_in_crossword",
+                side_effect=GenerationError("tajenku nelze umístit"),
+            ),
+        ):
+            dialog_type.return_value.result = requirement
+            CrosswordDocumentWindow.generate_crossword_secret(window)
+
+        self.assertIs(original, window._crossword)
+        window._show_action_error.assert_called_once_with(
+            "Tajenku nelze dogenerovat",
+            "tajenku nelze umístit",
+        )
+        window.root.configure.assert_has_calls(
+            [call(cursor="watch"), call(cursor="")]
+        )
+        window._set_dirty.assert_not_called()
+        window._rebuild_slot_tree.assert_not_called()
+        window._refresh_crossword_view.assert_not_called()
 
     def test_preview_cell_role_change_updates_selected_cells_in_its_document(
         self,

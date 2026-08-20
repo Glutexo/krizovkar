@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from itertools import product
 from pathlib import Path
 
@@ -15,7 +16,9 @@ from krizovkar.generator import (
     create_grid_from_crossword,
     create_template_from_specification,
     fill_crossword,
+    generate_empty_template,
     generate_numbered_template,
+    generate_secret_in_crossword,
     generate_swedish_template,
     normalize_secret_text,
     place_secret_in_template,
@@ -442,6 +445,192 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
             ("1. část tajenky", "2. část tajenky"),
             tuple(slot.clue for slot in prepared.slots),
         )
+
+    def test_generates_secret_in_empty_slots_before_replacing_answers(
+        self,
+    ) -> None:
+        crossword = generate_numbered_template(width=4, height=4)
+        first = crossword.slots[0]
+        crossword = replace(
+            crossword,
+            slots=(
+                replace(first, answer="WXYZ", clue="Pevné heslo"),
+                *crossword.slots[1:],
+            ),
+        )
+
+        generated = generate_secret_in_crossword(
+            crossword,
+            SecretRequirement(words=("ABCD",)),
+            layout="numbered",
+        )
+
+        self.assertEqual("empty_slots", generated.strategy)
+        self.assertEqual(0, generated.replaced_answer_count)
+        self.assertEqual("WXYZ", generated.document.slots[0].answer)
+        self.assertIn(
+            "ABCD",
+            tuple(slot.answer for slot in generated.document.slots),
+        )
+
+    def test_generates_secret_in_empty_slot_with_matching_crossings(
+        self,
+    ) -> None:
+        crossword = generate_numbered_template(width=3, height=3)
+        answers = {
+            "h2": "XXX",
+            "h3": "XXX",
+            "v1": "AXX",
+            "v2": "BXX",
+            "v3": "CXX",
+        }
+        crossword = replace(
+            crossword,
+            slots=tuple(
+                replace(
+                    slot,
+                    answer=answers.get(slot.identifier),
+                    clue=(
+                        slot.identifier
+                        if slot.identifier in answers
+                        else None
+                    ),
+                )
+                for slot in crossword.slots
+            ),
+        )
+
+        generated = generate_secret_in_crossword(
+            crossword,
+            SecretRequirement(words=("ABC",)),
+            layout="numbered",
+        )
+
+        self.assertEqual("empty_slots", generated.strategy)
+        self.assertEqual(
+            answers,
+            {
+                slot.identifier: slot.answer
+                for slot in generated.document.slots
+                if slot.identifier in answers
+            },
+        )
+        self.assertEqual(
+            "ABC",
+            next(
+                slot.answer
+                for slot in generated.document.slots
+                if slot.identifier == "h1"
+            ),
+        )
+        create_grid_from_crossword(generated.document)
+
+    def test_generates_secret_with_minimum_replaced_crossings(self) -> None:
+        crossword = generate_numbered_template(width=3, height=3)
+        answers = {
+            "h1": "ABC",
+            "h2": "DEF",
+            "h3": "GHI",
+            "v1": "ADG",
+            "v2": "BEH",
+            "v3": "CFI",
+        }
+        crossword = replace(
+            crossword,
+            slots=tuple(
+                replace(
+                    slot,
+                    answer=answers[slot.identifier],
+                    clue=slot.identifier,
+                )
+                for slot in crossword.slots
+            ),
+        )
+
+        generated = generate_secret_in_crossword(
+            crossword,
+            SecretRequirement(words=("XYZ",)),
+            layout="numbered",
+        )
+
+        self.assertEqual("replaced_answers", generated.strategy)
+        self.assertEqual(4, generated.replaced_answer_count)
+        self.assertEqual(
+            3,
+            sum(slot.answer is not None for slot in generated.document.slots),
+        )
+        secret_slot = next(
+            slot for slot in generated.document.slots if slot.answer == "XYZ"
+        )
+        self.assertEqual("Tajenka", secret_slot.clue)
+        create_grid_from_crossword(generated.document)
+
+    def test_regenerates_layout_when_current_slots_do_not_fit_secret(
+        self,
+    ) -> None:
+        crossword = generate_empty_template(
+            width=7,
+            height=7,
+            layout="numbered",
+        )
+
+        generated = generate_secret_in_crossword(
+            crossword,
+            SecretRequirement(words=("ABC",)),
+            layout="numbered",
+        )
+
+        self.assertEqual("changed_layout", generated.strategy)
+        self.assertEqual(7, generated.document.grid.width)
+        self.assertEqual(7, generated.document.grid.height)
+        self.assertIn(
+            "ABC",
+            tuple(slot.answer for slot in generated.document.slots),
+        )
+
+    def test_enlarges_grid_when_same_size_cannot_fit_secret(self) -> None:
+        crossword = generate_empty_template(
+            width=4,
+            height=4,
+            layout="numbered",
+        )
+
+        generated = generate_secret_in_crossword(
+            crossword,
+            SecretRequirement(words=("ABC",)),
+            layout="numbered",
+            maximum_width=8,
+            maximum_height=8,
+        )
+
+        self.assertEqual("changed_size", generated.strategy)
+        self.assertEqual((4, 6), (
+            generated.document.grid.width,
+            generated.document.grid.height,
+        ))
+        self.assertIn(
+            "ABC",
+            tuple(slot.answer for slot in generated.document.slots),
+        )
+
+    def test_secret_generation_fails_after_maximum_size(self) -> None:
+        crossword = generate_empty_template(
+            width=4,
+            height=4,
+            layout="numbered",
+        )
+
+        with self.assertRaisesRegex(
+            GenerationError,
+            "ani po změně rozvržení a zvětšení",
+        ):
+            generate_secret_in_crossword(
+                crossword,
+                SecretRequirement(words=("ABC",)),
+                layout="numbered",
+                maximum_width=4,
+                maximum_height=4,
+            )
 
     def test_fills_known_secret_and_propagates_prompt(self) -> None:
         prompt = SecretPrompt(text="Dokončete rčení")

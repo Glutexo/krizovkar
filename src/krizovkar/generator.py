@@ -91,10 +91,42 @@ class SecretRequirement:
 
 
 @dataclass(frozen=True, slots=True)
+class SecretGenerationResult:
+    """Křížovka s tajenkou a způsob jejího dogenerování."""
+
+    document: CrosswordDocument
+    strategy: Literal[
+        "empty_slots",
+        "replaced_answers",
+        "changed_layout",
+        "changed_size",
+    ]
+    replaced_answer_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class _Entry:
     answer: str
     clue: str
     letters: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _SecretSlotOption:
+    """Jeden slot použitelný pro konkrétní část tajenky."""
+
+    slot: WordSlot
+    replacements: frozenset[str]
+    coordinates: frozenset[GridCoordinate]
+
+
+@dataclass(frozen=True, slots=True)
+class _ExistingSecretPlacement:
+    """Vybrané sloty tajenky a hesla, která je nutné odstranit."""
+
+    slots: tuple[WordSlot, ...]
+    word_counts: tuple[int, ...]
+    replacements: frozenset[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -991,6 +1023,421 @@ def _secret_slot_assignments(
             letters=split_answer_letters(answer),
         )
     return assignments
+
+
+def _existing_secret_coordinates(
+    crossword: CrosswordDocument,
+) -> frozenset[GridCoordinate]:
+    slots = {slot.identifier: slot for slot in crossword.slots}
+    coordinates: set[GridCoordinate] = set()
+    for secret in crossword.secrets:
+        for part in secret.parts:
+            if isinstance(part, CrosswordSecretSlotPart):
+                coordinates.update(
+                    _slot_coordinates(slots[part.slot_identifier])
+                )
+            else:
+                coordinates.update(
+                    (cell.row - 1, cell.column - 1) for cell in part.cells
+                )
+    return frozenset(coordinates)
+
+
+def _protected_secret_slots(
+    crossword: CrosswordDocument,
+    secret_coordinates: frozenset[GridCoordinate],
+) -> frozenset[str]:
+    return frozenset(
+        slot.identifier
+        for slot in crossword.slots
+        if secret_coordinates.intersection(_slot_coordinates(slot))
+    )
+
+
+def _secret_slot_option(
+    crossword: CrosswordDocument,
+    slot: WordSlot,
+    answer: str,
+    *,
+    secret_coordinates: frozenset[GridCoordinate],
+    protected_slots: frozenset[str],
+) -> _SecretSlotOption | None:
+    ordered_coordinates = _slot_coordinates(slot)
+    coordinates = frozenset(ordered_coordinates)
+    if slot.identifier in protected_slots or coordinates & secret_coordinates:
+        return None
+
+    desired_letters = dict(
+        zip(ordered_coordinates, split_answer_letters(answer), strict=True)
+    )
+    replacements = set()
+    if slot.answer is not None and slot.answer != answer:
+        replacements.add(slot.identifier)
+
+    for crossing in crossword.slots:
+        if crossing.identifier == slot.identifier or crossing.answer is None:
+            continue
+        for coordinate, letter in zip(
+            _slot_coordinates(crossing),
+            split_answer_letters(crossing.answer),
+            strict=True,
+        ):
+            desired = desired_letters.get(coordinate)
+            if desired is not None and desired != letter:
+                replacements.add(crossing.identifier)
+                break
+
+    if replacements & protected_slots:
+        return None
+    return _SecretSlotOption(
+        slot=slot,
+        replacements=frozenset(replacements),
+        coordinates=coordinates,
+    )
+
+
+def _secret_partitions_for_slots(
+    requirement: SecretRequirement,
+    slots: tuple[WordSlot, ...],
+) -> tuple[tuple[tuple[int, ...], tuple[int, ...]], ...]:
+    if requirement.part_word_counts:
+        lengths = _part_lengths_from_word_counts(
+            requirement.words,
+            requirement.part_word_counts,
+        )
+        return ((lengths, requirement.part_word_counts),)
+    return _word_partitions(
+        requirement.words,
+        frozenset(slot.length for slot in slots),
+    )
+
+
+def _part_answers(
+    words: tuple[str, ...],
+    word_counts: tuple[int, ...],
+) -> tuple[str, ...]:
+    answers = []
+    offset = 0
+    for count in word_counts:
+        answers.append("".join(words[offset : offset + count]))
+        offset += count
+    return tuple(answers)
+
+
+def _find_existing_secret_placement(
+    crossword: CrosswordDocument,
+    requirement: SecretRequirement,
+    *,
+    empty_only: bool,
+    seed: int,
+) -> _ExistingSecretPlacement | None:
+    slots = list(crossword.slots)
+    random.Random(seed).shuffle(slots)
+    slot_tuple = tuple(slots)
+    secret_coordinates = _existing_secret_coordinates(crossword)
+    protected_slots = _protected_secret_slots(
+        crossword,
+        secret_coordinates,
+    )
+    best: _ExistingSecretPlacement | None = None
+
+    for lengths, word_counts in _secret_partitions_for_slots(
+        requirement,
+        slot_tuple,
+    ):
+        answers = _part_answers(requirement.words, word_counts)
+        options_by_part = []
+        for length, answer in zip(lengths, answers, strict=True):
+            options = []
+            for slot in slot_tuple:
+                if slot.length != length:
+                    continue
+                if empty_only and slot.answer is not None:
+                    continue
+                option = _secret_slot_option(
+                    crossword,
+                    slot,
+                    answer,
+                    secret_coordinates=secret_coordinates,
+                    protected_slots=protected_slots,
+                )
+                if option is None:
+                    continue
+                if empty_only and option.replacements:
+                    continue
+                options.append(option)
+            options.sort(key=lambda option: len(option.replacements))
+            if not options:
+                break
+            options_by_part.append(tuple(options))
+        if len(options_by_part) != len(lengths):
+            continue
+
+        def search(
+            part_index: int,
+            used_coordinates: frozenset[GridCoordinate],
+            replacements: frozenset[str],
+            selected_slots: tuple[WordSlot, ...],
+            options: tuple[tuple[_SecretSlotOption, ...], ...] = tuple(
+                options_by_part
+            ),
+            counts: tuple[int, ...] = word_counts,
+        ) -> None:
+            nonlocal best
+            if best is not None and len(replacements) >= len(
+                best.replacements
+            ):
+                return
+            if part_index == len(options):
+                best = _ExistingSecretPlacement(
+                    slots=selected_slots,
+                    word_counts=counts,
+                    replacements=replacements,
+                )
+                return
+            for option in options[part_index]:
+                if option.coordinates & used_coordinates:
+                    continue
+                search(
+                    part_index + 1,
+                    used_coordinates | option.coordinates,
+                    replacements | option.replacements,
+                    (*selected_slots, option.slot),
+                )
+                if empty_only and best is not None:
+                    return
+
+        search(0, frozenset(), frozenset(), ())
+        if empty_only and best is not None:
+            return best
+        if best is not None and not best.replacements:
+            return best
+    return best
+
+
+def _remove_unused_help_cell(
+    crossword: CrosswordDocument,
+) -> CrosswordDocument:
+    if any(slot.in_help for slot in crossword.slots):
+        return crossword
+    rows = tuple(
+        tuple(
+            EmptyCellRole() if isinstance(cell, HelpCellRole) else cell
+            for cell in row
+        )
+        for row in crossword.grid.cells
+    )
+    if rows == crossword.grid.cells:
+        return crossword
+    return replace(
+        crossword,
+        grid=replace(crossword.grid, cells=rows),
+    )
+
+
+def _apply_existing_secret_placement(
+    crossword: CrosswordDocument,
+    requirement: SecretRequirement,
+    placement: _ExistingSecretPlacement,
+) -> CrosswordDocument:
+    parts = tuple(
+        CrosswordSecretSlotPart(
+            slot_identifier=slot.identifier,
+            word_count=placement.word_counts[index],
+        )
+        for index, slot in enumerate(placement.slots)
+    )
+    secret = CrosswordSecret(
+        parts=parts,
+        words=requirement.words,
+        prompt=requirement.prompt,
+    )
+    assignments = _secret_slot_assignments(secret)
+    slots = []
+    for slot in crossword.slots:
+        assignment = assignments.get(slot.identifier)
+        if assignment is not None:
+            slots.append(
+                replace(
+                    slot,
+                    answer=assignment.answer,
+                    clue=assignment.clue,
+                    in_help=False,
+                )
+            )
+        elif slot.identifier in placement.replacements:
+            slots.append(
+                replace(
+                    slot,
+                    answer=None,
+                    clue=None,
+                    in_help=False,
+                )
+            )
+        else:
+            slots.append(slot)
+    return _remove_unused_help_cell(
+        replace(
+            crossword,
+            slots=tuple(slots),
+            secrets=(*crossword.secrets, secret),
+        )
+    )
+
+
+def _generated_template_with_secret(
+    layout: SpecificationLayout,
+    width: int,
+    height: int,
+    requirement: SecretRequirement,
+    *,
+    seed: int,
+) -> CrosswordDocument:
+    generator = (
+        generate_numbered_template
+        if layout == "numbered"
+        else generate_swedish_template
+    )
+    return generator(
+        width=width,
+        height=height,
+        seed=seed,
+        secret=requirement,
+    )
+
+
+def _expanded_dimensions(
+    width: int,
+    height: int,
+    maximum_width: int,
+    maximum_height: int,
+) -> tuple[tuple[int, int], ...]:
+    sizes = []
+    maximum_growth = maximum_width - width + maximum_height - height
+    for growth in range(1, maximum_growth + 1):
+        candidates = []
+        for width_growth in range(growth + 1):
+            height_growth = growth - width_growth
+            candidate_width = width + width_growth
+            candidate_height = height + height_growth
+            if (
+                candidate_width > maximum_width
+                or candidate_height > maximum_height
+            ):
+                continue
+            candidates.append((candidate_width, candidate_height))
+        candidates.sort(
+            key=lambda size: (
+                size[0] * size[1],
+                abs(size[0] * height - size[1] * width),
+                size,
+            )
+        )
+        sizes.extend(candidates)
+    return tuple(sizes)
+
+
+def generate_secret_in_crossword(
+    crossword: CrosswordDocument,
+    requirement: SecretRequirement,
+    *,
+    layout: SpecificationLayout,
+    seed: int = DEFAULT_SEED,
+    maximum_width: int = 50,
+    maximum_height: int = 50,
+) -> SecretGenerationResult:
+    """Dogeneruje známou tajenku s postupně invazivnějšími fallbacky."""
+
+    _validate_secret_requirement(requirement)
+    if not requirement.words:
+        raise GenerationError("dogenerování vyžaduje konkrétní text tajenky")
+    if layout not in {"swedish", "numbered"}:
+        raise GenerationError(f"nepodporované rozvržení {layout!r}")
+
+    placement = _find_existing_secret_placement(
+        crossword,
+        requirement,
+        empty_only=True,
+        seed=seed,
+    )
+    if placement is not None:
+        return SecretGenerationResult(
+            document=_apply_existing_secret_placement(
+                crossword,
+                requirement,
+                placement,
+            ),
+            strategy="empty_slots",
+        )
+
+    placement = _find_existing_secret_placement(
+        crossword,
+        requirement,
+        empty_only=False,
+        seed=seed,
+    )
+    if placement is not None:
+        return SecretGenerationResult(
+            document=_apply_existing_secret_placement(
+                crossword,
+                requirement,
+                placement,
+            ),
+            strategy="replaced_answers",
+            replaced_answer_count=len(placement.replacements),
+        )
+
+    width = crossword.grid.width
+    height = crossword.grid.height
+    try:
+        regenerated = _generated_template_with_secret(
+            layout,
+            width,
+            height,
+            requirement,
+            seed=seed,
+        )
+    except GenerationError:
+        pass
+    else:
+        return SecretGenerationResult(
+            document=regenerated,
+            strategy="changed_layout",
+            replaced_answer_count=sum(
+                slot.answer is not None for slot in crossword.slots
+            ),
+        )
+
+    maximum_width = max(width, maximum_width)
+    maximum_height = max(height, maximum_height)
+    for candidate_width, candidate_height in _expanded_dimensions(
+        width,
+        height,
+        maximum_width,
+        maximum_height,
+    ):
+        try:
+            regenerated = _generated_template_with_secret(
+                layout,
+                candidate_width,
+                candidate_height,
+                requirement,
+                seed=seed,
+            )
+        except GenerationError:
+            continue
+        return SecretGenerationResult(
+            document=regenerated,
+            strategy="changed_size",
+            replaced_answer_count=sum(
+                slot.answer is not None for slot in crossword.slots
+            ),
+        )
+
+    raise GenerationError(
+        "tajenku nelze dogenerovat ani po změně rozvržení a zvětšení "
+        f"křížovky nejvýše na {maximum_width} × {maximum_height}"
+    )
 
 
 def place_secret_in_template(

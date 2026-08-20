@@ -11,7 +11,7 @@ výsledku do upravitelného LaTeXového dokumentu, jeho překlad do PDF a grafic
 rozhraní se samostatnými okny YAML křížovek z vlastních hesel, které lze
 uložit v libovolném stavu a znovu používat jako šablony.
 Další rozšíření editoru budou postupně zpřístupňovat například vlastní
-zadání tajenky a automatické plnění.
+text zadání tajenky a automatické plnění.
 
 ## Grafické rozhraní
 
@@ -132,6 +132,16 @@ Nabídka **Úpravy** obsahuje **Zpět** a **Vpřed**. Na macOS používají zkra
 samostatná pro každý dokument a zahrnuje doplnění hesel, změny rozměru, rolí
 a začátků hesel i úpravy YAML zdroje včetně dočasně neplatného zápisu. Nová
 změna po návratu do staršího stavu zahodí dosavadní kroky **Vpřed**.
+
+Volba **Úpravy → Dogenerovat tajenku…** doplní konkrétní text tajenky do
+otevřené křížovky. Tajenku může rozdělit pouze mezi celými slovy. Nejprve
+vyhledá vyhovující prázdná místa, aniž zasáhne do vyplněných hesel. Pokud to
+nejde, zvolí umístění vyžadující odstranění nejmenšího počtu stávajících
+hesel včetně rozporných křížení. Když tajenka nepasuje do současných míst,
+vytvoří nové rozvržení se stejným rozměrem; teprve pokud nestačí ani to,
+křížovku co nejméně zvětší, nejvýše na 50 × 50 polí. Při novém rozvržení
+nahradí dosavadní obsah bez potvrzení. Celé dogenerování je jeden krok historie,
+takže je lze vrátit jediným **Zpět**.
 
 Nabídka **Zobrazení** obsahuje volbu **Zdroj YAML**, která pro zvolený dokument
 otevře vlastní běžné okno s jeho upravitelnou YAML podobou. Každá změna
