@@ -35,8 +35,8 @@ from krizovkar.generator import (
     SpecificationLayout,
     create_grid_from_crossword,
     crossword_external_slot_numbers,
-    fill_crossword,
     generate_empty_template,
+    generate_filled_crossword,
     generate_numbered_template,
     generate_secret_in_crossword,
     generate_swedish_template,
@@ -4602,7 +4602,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self.root.configure(cursor="watch")
         self.root.update_idletasks()
         try:
-            filled = fill_crossword(
+            filled = generate_filled_crossword(
                 crossword,
                 filling_input.dictionary,
                 seed=filling_input.seed,

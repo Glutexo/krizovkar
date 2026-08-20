@@ -17,6 +17,7 @@ from krizovkar.generator import (
     create_template_from_specification,
     fill_crossword,
     generate_empty_template,
+    generate_filled_crossword,
     generate_numbered_template,
     generate_secret_in_crossword,
     generate_swedish_template,
@@ -335,6 +336,169 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         self.assertEqual(
             ("X", "B", "X"),
             tuple(grid.grid.cells[row][1].value for row in range(3)),
+        )
+
+    def test_flexible_fill_replaces_only_blocking_fixed_answer(self) -> None:
+        crossword = CrosswordDocument(
+            format_name="krizovkar",
+            kind="crossword",
+            version=1,
+            grid=CrosswordLayout(
+                width=2,
+                height=2,
+                cells=((LetterCellRole(),) * 2,) * 2,
+            ),
+            slots=(
+                WordSlot(
+                    "h1",
+                    Coordinate(1, 1),
+                    "horizontal",
+                    2,
+                    answer="AX",
+                    clue="Blokující heslo",
+                ),
+                WordSlot(
+                    "h2",
+                    Coordinate(2, 1),
+                    "horizontal",
+                    2,
+                    answer="CD",
+                    clue="Zachované heslo",
+                ),
+                WordSlot("v1", Coordinate(1, 1), "vertical", 2),
+                WordSlot("v2", Coordinate(1, 2), "vertical", 2),
+            ),
+        )
+        dictionary = CrosswordDictionary(
+            entries=tuple(
+                DictionaryEntry(answer=answer, clues=(answer,))
+                for answer in ("AB", "CD", "AC", "BD")
+            )
+        )
+
+        with self.assertRaises(FillingError):
+            fill_crossword(crossword, dictionary)
+        filled = generate_filled_crossword(crossword, dictionary)
+
+        slots = {slot.identifier: slot for slot in filled.slots}
+        answers = {
+            identifier: slot.answer for identifier, slot in slots.items()
+        }
+        self.assertEqual("AB", answers["h1"])
+        self.assertEqual("CD", answers["h2"])
+        self.assertEqual("AC", answers["v1"])
+        self.assertEqual("BD", answers["v2"])
+        self.assertEqual("AB", slots["h1"].clue)
+        self.assertEqual("Zachované heslo", slots["h2"].clue)
+
+    def test_flexible_fill_moves_secret_when_its_slot_blocks_solution(
+        self,
+    ) -> None:
+        crossword = CrosswordDocument(
+            format_name="krizovkar",
+            kind="crossword",
+            version=1,
+            grid=CrosswordLayout(
+                width=2,
+                height=2,
+                cells=((LetterCellRole(),) * 2,) * 2,
+            ),
+            slots=(
+                WordSlot(
+                    "h1",
+                    Coordinate(1, 1),
+                    "horizontal",
+                    2,
+                    answer="AX",
+                    clue="Tajenka",
+                ),
+                WordSlot("h2", Coordinate(2, 1), "horizontal", 2),
+                WordSlot("v1", Coordinate(1, 1), "vertical", 2),
+            ),
+            secrets=(
+                CrosswordSecret(
+                    parts=(CrosswordSecretSlotPart("h1", word_count=1),),
+                    words=("AX",),
+                ),
+            ),
+        )
+        dictionary = CrosswordDictionary(
+            entries=(
+                DictionaryEntry(answer="AB", clues=("První",)),
+                DictionaryEntry(answer="XC", clues=("Druhé",)),
+            )
+        )
+
+        with self.assertRaises(FillingError):
+            fill_crossword(crossword, dictionary)
+        filled = generate_filled_crossword(crossword, dictionary)
+
+        secret_part = filled.secrets[0].parts[0]
+        self.assertIsInstance(secret_part, CrosswordSecretSlotPart)
+        assert isinstance(secret_part, CrosswordSecretSlotPart)
+        self.assertEqual("v1", secret_part.slot_identifier)
+        self.assertEqual(
+            {"h1": "AB", "h2": "XC", "v1": "AX"},
+            {slot.identifier: slot.answer for slot in filled.slots},
+        )
+
+    def test_flexible_fill_can_repartition_secret(self) -> None:
+        crossword = CrosswordDocument(
+            format_name="krizovkar",
+            kind="crossword",
+            version=1,
+            grid=CrosswordLayout(
+                width=4,
+                height=3,
+                cells=((LetterCellRole(),) * 4,) * 3,
+            ),
+            slots=(
+                WordSlot(
+                    "h1",
+                    Coordinate(1, 1),
+                    "horizontal",
+                    2,
+                    answer="AB",
+                    clue="1. část tajenky",
+                ),
+                WordSlot(
+                    "h2",
+                    Coordinate(2, 1),
+                    "horizontal",
+                    2,
+                    answer="CD",
+                    clue="2. část tajenky",
+                ),
+                WordSlot("h3", Coordinate(3, 1), "horizontal", 4),
+            ),
+            secrets=(
+                CrosswordSecret(
+                    parts=(
+                        CrosswordSecretSlotPart("h1", word_count=1),
+                        CrosswordSecretSlotPart("h2", word_count=1),
+                    ),
+                    words=("AB", "CD"),
+                ),
+            ),
+        )
+        dictionary = CrosswordDictionary(
+            entries=(
+                DictionaryEntry(answer="EF", clues=("První",)),
+                DictionaryEntry(answer="GH", clues=("Druhé",)),
+            )
+        )
+
+        filled = generate_filled_crossword(crossword, dictionary)
+
+        self.assertEqual(1, len(filled.secrets[0].parts))
+        secret_part = filled.secrets[0].parts[0]
+        self.assertIsInstance(secret_part, CrosswordSecretSlotPart)
+        assert isinstance(secret_part, CrosswordSecretSlotPart)
+        self.assertEqual("h3", secret_part.slot_identifier)
+        self.assertEqual(2, secret_part.word_count)
+        self.assertEqual(
+            {"EF", "GH", "ABCD"},
+            {slot.answer for slot in filled.slots},
         )
 
     def test_normalizes_secret_words_and_discards_punctuation(self) -> None:

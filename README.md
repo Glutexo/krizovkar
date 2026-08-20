@@ -161,13 +161,17 @@ obsah bez potvrzení. Celé přidání je jeden krok historie, takže je lze
 vrátit jediným **Zpět**.
 
 Volba **Úpravy → Vygenerovat křížovku…** doplní ze slovníku všechna dosud
-prázdná hesla. Zachová tajenku i ručně zadaná hesla a jejich legendy; známou
-tajenku uloženou pouze v nastavení zároveň doplní do jejích připravených míst.
-Dialog vyžaduje slovník a nabízí předvyplněné náhodné **Sémě**, které lze
-změnit nebo si je poznamenat pro zopakování stejného výsledku. Pokud slovník
-neobsahuje potřebné délky hesel nebo z něj nelze sestavit všechna křížení,
-editor vysvětlí chybu a dokument nezmění. Celé automatické doplnění je jeden
-krok historie.
+prázdná hesla. Nejprve se pokusí zachovat tajenku i všechna ručně zadaná
+hesla a jejich legendy. Pokud s nimi úplné řešení neexistuje, použije běžná
+vložená hesla jen jako přednostní kandidáty a nahradí ta, která vyplnění
+blokují. Když nestačí ani to, zkusí známou slovní tajenku jinak rozdělit mezi
+části, přesunout do jiných stávajících míst nebo změnit její směr. Rozměr,
+pole ani předěly mřížky přitom nemění. Dialog vyžaduje slovník a nabízí
+předvyplněné náhodné **Sémě**,
+které lze změnit nebo si je poznamenat pro zopakování stejného výsledku. Pokud
+slovník neobsahuje potřebné délky hesel nebo z něj ani po těchto krocích nelze
+sestavit všechna křížení, editor vysvětlí chybu a dokument nezmění. Celé
+automatické doplnění je jeden krok historie.
 
 Dialogy se slovníkem nabízejí soubory nalezené v uživatelské datové složce
 Křížovkáře. Na macOS je to

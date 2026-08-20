@@ -1854,6 +1854,7 @@ def _fill_crossword_slots(
     entries_by_length: dict[int, tuple[_Entry, ...]],
     randomizer: random.Random,
     fixed_assignments: dict[str, _Entry] | None = None,
+    preferred_assignments: dict[str, _Entry] | None = None,
 ) -> dict[str, _Entry]:
     candidates_by_length = {
         length: list(entries)
@@ -1885,9 +1886,24 @@ def _fill_crossword_slots(
 
     def compatible_entries(slot: WordSlot) -> list[_Entry]:
         slot_coordinates = coordinates[slot.identifier]
+        candidates = candidates_by_length.get(slot.length, ())
+        preferred = (
+            preferred_assignments.get(slot.identifier)
+            if preferred_assignments is not None
+            else None
+        )
+        if preferred is not None and len(preferred.letters) == slot.length:
+            candidates = (
+                preferred,
+                *(
+                    entry
+                    for entry in candidates
+                    if entry.answer != preferred.answer
+                ),
+            )
         return [
             entry
-            for entry in candidates_by_length.get(slot.length, ())
+            for entry in candidates
             if entry.answer not in used_answers
             and all(
                 coordinate not in letters or letters[coordinate] == letter
@@ -2232,33 +2248,53 @@ def create_grid_from_crossword(crossword: CrosswordDocument) -> CrosswordGrid:
     )
 
 
-def fill_crossword(
+def _crossword_filling_assignments(
+    crossword: CrosswordDocument,
+) -> tuple[dict[str, _Entry], dict[str, _Entry]]:
+    """Rozdělí pevnou tajenku a dříve vložená běžná hesla."""
+
+    secret_assignments = _secret_assignments(crossword)
+    current_assignments = _fixed_crossword_assignments(crossword)
+    fixed_secret_assignments: dict[str, _Entry] = {}
+    for identifier, assignment in secret_assignments.items():
+        current = current_assignments.get(identifier)
+        if current is not None:
+            if current.answer != assignment.answer:
+                raise FillingError(
+                    f"pevné heslo {current.answer!r} ve slotu {identifier!r} "
+                    f"neodpovídá tajence {assignment.answer!r}"
+                )
+            fixed_secret_assignments[identifier] = current
+        else:
+            fixed_secret_assignments[identifier] = assignment
+    return (
+        fixed_secret_assignments,
+        {
+            identifier: assignment
+            for identifier, assignment in current_assignments.items()
+            if identifier not in secret_assignments
+        },
+    )
+
+
+def _fill_crossword_from_assignments(
     crossword: CrosswordDocument,
     dictionary: CrosswordDictionary,
     *,
-    seed: int = DEFAULT_SEED,
-    secret: SecretRequirement | None = None,
+    seed: int,
+    fixed_assignments: dict[str, _Entry],
+    preferred_assignments: dict[str, _Entry] | None = None,
 ) -> CrosswordDocument:
-    """Doplní ze slovníku všechna prázdná místa křížovky."""
-
-    crossword = _resolve_crossword_secrets(crossword, secret, seed)
-    secret_assignments = _secret_assignments(crossword)
-    fixed_assignments = _fixed_crossword_assignments(crossword)
-    for identifier, assignment in secret_assignments.items():
-        fixed = fixed_assignments.get(identifier)
-        if fixed is not None:
-            if fixed.answer != assignment.answer:
-                raise FillingError(
-                    f"pevné heslo {fixed.answer!r} ve slotu {identifier!r} "
-                    f"neodpovídá tajence {assignment.answer!r}"
-                )
-            continue
-        fixed_assignments[identifier] = assignment
     entries_by_length = _usable_entries(dictionary)
+    assigned_identifiers = fixed_assignments.keys() | (
+        preferred_assignments.keys()
+        if preferred_assignments is not None
+        else set()
+    )
     required_lengths = {
         slot.length
         for slot in crossword.slots
-        if slot.identifier not in fixed_assignments
+        if slot.identifier not in assigned_identifiers
     }
     missing_lengths = sorted(required_lengths - entries_by_length.keys())
     if missing_lengths:
@@ -2275,6 +2311,7 @@ def fill_crossword(
                 entries_by_length,
                 random.Random(attempt_seed),
                 fixed_assignments,
+                preferred_assignments,
             )
             return replace(
                 crossword,
@@ -2285,7 +2322,7 @@ def fill_crossword(
                         clue=assignments[slot.identifier].clue,
                     )
                     for slot in crossword.slots
-                )
+                ),
             )
         except _SearchFailed:
             continue
@@ -2293,3 +2330,130 @@ def fill_crossword(
     raise FillingError(
         "nepodařilo se vyplnit všechny sloty platnými křížícími se hesly"
     )
+
+
+def fill_crossword(
+    crossword: CrosswordDocument,
+    dictionary: CrosswordDictionary,
+    *,
+    seed: int = DEFAULT_SEED,
+    secret: SecretRequirement | None = None,
+) -> CrosswordDocument:
+    """Doplní ze slovníku všechna prázdná místa křížovky."""
+
+    crossword = _resolve_crossword_secrets(crossword, secret, seed)
+    secret_assignments, ordinary_assignments = (
+        _crossword_filling_assignments(crossword)
+    )
+    return _fill_crossword_from_assignments(
+        crossword,
+        dictionary,
+        seed=seed,
+        fixed_assignments={
+            **ordinary_assignments,
+            **secret_assignments,
+        },
+    )
+
+
+def _movable_secret_requirement(
+    crossword: CrosswordDocument,
+) -> tuple[SecretRequirement, tuple[str, ...]] | None:
+    if len(crossword.secrets) != 1:
+        return None
+    secret = crossword.secrets[0]
+    if not secret.words or any(
+        not isinstance(part, CrosswordSecretSlotPart) for part in secret.parts
+    ):
+        return None
+    slot_parts = tuple(
+        part
+        for part in secret.parts
+        if isinstance(part, CrosswordSecretSlotPart)
+    )
+    return (
+        SecretRequirement(
+            words=secret.words,
+            prompt=secret.prompt,
+        ),
+        tuple(part.slot_identifier for part in slot_parts),
+    )
+
+
+def generate_filled_crossword(
+    crossword: CrosswordDocument,
+    dictionary: CrosswordDictionary,
+    *,
+    seed: int = DEFAULT_SEED,
+) -> CrosswordDocument:
+    """Vyplní křížovku i za cenu náhrady hesel nebo přesunu tajenky."""
+
+    try:
+        return fill_crossword(crossword, dictionary, seed=seed)
+    except FillingError:
+        pass
+
+    crossword = _resolve_crossword_secrets(crossword, None, seed)
+    secret_assignments, ordinary_assignments = (
+        _crossword_filling_assignments(crossword)
+    )
+    last_error: FillingError
+    try:
+        return _fill_crossword_from_assignments(
+            crossword,
+            dictionary,
+            seed=seed,
+            fixed_assignments=secret_assignments,
+            preferred_assignments=ordinary_assignments,
+        )
+    except FillingError as error:
+        last_error = error
+
+    movable_secret = _movable_secret_requirement(crossword)
+    if movable_secret is None:
+        raise last_error
+    requirement, original_placement = movable_secret
+    empty_template = replace(
+        crossword,
+        slots=tuple(
+            replace(slot, answer=None, clue=None) for slot in crossword.slots
+        ),
+        secrets=(),
+    )
+    attempted_placements = {original_placement}
+    relocation_attempts = min(max(len(crossword.slots) * 2, 8), 64)
+    for attempt in range(relocation_attempts):
+        attempt_seed = seed + attempt * 1_000_003
+        try:
+            candidate = place_secret_in_template(
+                empty_template,
+                requirement,
+                seed=attempt_seed,
+                dictionary=dictionary,
+            )
+        except GenerationError:
+            continue
+        candidate_parts = candidate.secrets[0].parts
+        placement = tuple(
+            part.slot_identifier
+            for part in candidate_parts
+            if isinstance(part, CrosswordSecretSlotPart)
+        )
+        if placement in attempted_placements:
+            continue
+        attempted_placements.add(placement)
+        candidate_secret_assignments, _ = _crossword_filling_assignments(
+            candidate
+        )
+        try:
+            return _fill_crossword_from_assignments(
+                candidate,
+                dictionary,
+                seed=attempt_seed,
+                fixed_assignments=candidate_secret_assignments,
+                preferred_assignments=ordinary_assignments,
+            )
+        except FillingError as error:
+            last_error = error
+
+    raise last_error

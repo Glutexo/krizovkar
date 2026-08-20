@@ -4543,9 +4543,9 @@ class GuiTest(unittest.TestCase):
         with (
             patch("krizovkar.gui.CrosswordFillDialog") as dialog_type,
             patch(
-                "krizovkar.gui.fill_crossword",
+                "krizovkar.gui.generate_filled_crossword",
                 return_value=filled,
-            ) as fill,
+            ) as generate,
             patch.object(
                 window,
                 "_set_dirty",
@@ -4556,7 +4556,7 @@ class GuiTest(unittest.TestCase):
             CrosswordDocumentWindow.generate_complete_crossword(window)
 
         dialog_type.assert_called_once_with(window.root)
-        fill.assert_called_once_with(
+        generate.assert_called_once_with(
             original,
             TEST_DICTIONARY,
             seed=42,
@@ -4585,13 +4585,13 @@ class GuiTest(unittest.TestCase):
 
         with (
             patch("krizovkar.gui.CrosswordFillDialog") as dialog_type,
-            patch("krizovkar.gui.fill_crossword") as fill,
+            patch("krizovkar.gui.generate_filled_crossword") as generate,
         ):
             dialog_type.return_value.result = None
             CrosswordDocumentWindow.generate_complete_crossword(window)
 
         dialog_type.assert_called_once_with(window.root)
-        fill.assert_not_called()
+        generate.assert_not_called()
         window._set_dirty.assert_not_called()
 
     def test_menu_action_reports_crossword_filling_failure(self) -> None:
@@ -4606,7 +4606,7 @@ class GuiTest(unittest.TestCase):
         with (
             patch("krizovkar.gui.CrosswordFillDialog") as dialog_type,
             patch(
-                "krizovkar.gui.fill_crossword",
+                "krizovkar.gui.generate_filled_crossword",
                 side_effect=FillingError("křížovku nelze vyplnit"),
             ),
         ):
