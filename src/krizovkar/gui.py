@@ -97,10 +97,17 @@ _NO_DOCUMENT_SLOT_LIST_PLACEMENT_VARIABLE = (
 _EXPORT_ACTION_LABELS = (
     "Křížovku bez písmen (PDF)…",
     "Řešení s písmeny (PDF)…",
-    "Mřížku bez písmen (YAML)…",
-    "Mřížku s písmeny (YAML)…",
     "Křížovku bez písmen (LaTeX)…",
     "Řešení s písmeny (LaTeX)…",
+    "Mřížku bez písmen (YAML)…",
+    "Mřížku s písmeny (YAML)…",
+)
+_EXPORT_MENU_ITEMS = (
+    *_EXPORT_ACTION_LABELS[:2],
+    None,
+    *_EXPORT_ACTION_LABELS[2:4],
+    None,
+    *_EXPORT_ACTION_LABELS[4:],
 )
 _OPEN_PDF_ACTION_LABELS = (
     "Křížovku bez písmen…",
@@ -565,11 +572,14 @@ def _create_slot_list_placement_menu(
 
 def _create_disabled_command_menu(
     parent: tk.Menu,
-    labels: Sequence[str],
+    labels: Sequence[str | None],
 ) -> tk.Menu:
     menu = tk.Menu(parent)
     for label in labels:
-        menu.add_command(label=label, state="disabled")
+        if label is None:
+            menu.add_separator()
+        else:
+            menu.add_command(label=label, state="disabled")
     return menu
 
 
@@ -3478,7 +3488,7 @@ class CrosswordApplication:
         self.file_menu.add_separator()
         self.export_menu = _create_disabled_command_menu(
             self.file_menu,
-            _EXPORT_ACTION_LABELS,
+            _EXPORT_MENU_ITEMS,
         )
         self.file_menu.add_cascade(
             label="Exportovat",
@@ -3974,7 +3984,9 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._bind_history_shortcuts(self.root)
 
     def _add_export_actions(self) -> None:
-        for action in self._export_actions():
+        for index, action in enumerate(self._export_actions()):
+            if index > 0 and index % 2 == 0:
+                self.export_menu.add_separator()
             self.export_menu.add_command(
                 label=action.label,
                 command=action.command,
@@ -4013,24 +4025,24 @@ class CrosswordDocumentWindow(ttk.Frame):
                 self.save_solution_pdf,
             ),
             _ExportAction(
-                "blank-grid-yaml",
-                _EXPORT_ACTION_LABELS[2],
-                self.save_crossword_grid_yaml,
-            ),
-            _ExportAction(
-                "solution-grid-yaml",
-                _EXPORT_ACTION_LABELS[3],
-                self.save_solution_grid_yaml,
-            ),
-            _ExportAction(
                 "blank-latex",
-                _EXPORT_ACTION_LABELS[4],
+                _EXPORT_ACTION_LABELS[2],
                 self.save_crossword_latex,
             ),
             _ExportAction(
                 "solution-latex",
-                _EXPORT_ACTION_LABELS[5],
+                _EXPORT_ACTION_LABELS[3],
                 self.save_solution_latex,
+            ),
+            _ExportAction(
+                "blank-grid-yaml",
+                _EXPORT_ACTION_LABELS[4],
+                self.save_crossword_grid_yaml,
+            ),
+            _ExportAction(
+                "solution-grid-yaml",
+                _EXPORT_ACTION_LABELS[5],
+                self.save_solution_grid_yaml,
             ),
         )
 
@@ -4460,11 +4472,12 @@ class CrosswordDocumentWindow(ttk.Frame):
             label="Uložit jako…",
             state=document_state,
         )
-        for index in range(len(_EXPORT_ACTION_LABELS)):
-            self.export_menu.entryconfigure(
-                index,
-                state=document_state,
-            )
+        for index, label in enumerate(_EXPORT_MENU_ITEMS):
+            if label is not None:
+                self.export_menu.entryconfigure(
+                    index,
+                    state=document_state,
+                )
         self.print_menu.entryconfigure(
             0,
             state=document_state,

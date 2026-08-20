@@ -714,10 +714,10 @@ class GuiTest(unittest.TestCase):
                 (
                     "Křížovku bez písmen (PDF)…",
                     "Řešení s písmeny (PDF)…",
-                    "Mřížku bez písmen (YAML)…",
-                    "Mřížku s písmeny (YAML)…",
                     "Křížovku bez písmen (LaTeX)…",
                     "Řešení s písmeny (LaTeX)…",
+                    "Mřížku bez písmen (YAML)…",
+                    "Mřížku s písmeny (YAML)…",
                 ),
             ),
             (
@@ -742,6 +742,7 @@ class GuiTest(unittest.TestCase):
                     for item in submenu.add_command.call_args_list
                 )
             )
+        self.assertEqual(2, export_menu.add_separator.call_count)
         self.assertEqual(
             ["Zpět", "Vpřed", "Přidat tajenku…"],
             [
@@ -5026,32 +5027,34 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                call(
+                call.add_command(
                     label="Křížovku bez písmen (PDF)…",
                     command=crossword_window.save_crossword_pdf,
                 ),
-                call(
+                call.add_command(
                     label="Řešení s písmeny (PDF)…",
                     command=crossword_window.save_solution_pdf,
                 ),
-                call(
-                    label="Mřížku bez písmen (YAML)…",
-                    command=crossword_window.save_crossword_grid_yaml,
-                ),
-                call(
-                    label="Mřížku s písmeny (YAML)…",
-                    command=crossword_window.save_solution_grid_yaml,
-                ),
-                call(
+                call.add_separator(),
+                call.add_command(
                     label="Křížovku bez písmen (LaTeX)…",
                     command=crossword_window.save_crossword_latex,
                 ),
-                call(
+                call.add_command(
                     label="Řešení s písmeny (LaTeX)…",
                     command=crossword_window.save_solution_latex,
                 ),
+                call.add_separator(),
+                call.add_command(
+                    label="Mřížku bez písmen (YAML)…",
+                    command=crossword_window.save_crossword_grid_yaml,
+                ),
+                call.add_command(
+                    label="Mřížku s písmeny (YAML)…",
+                    command=crossword_window.save_solution_grid_yaml,
+                ),
             ],
-            crossword_window.export_menu.add_command.call_args_list,
+            crossword_window.export_menu.method_calls,
         )
 
     def test_print_actions_offer_crossword_and_solution(self) -> None:
@@ -5116,10 +5119,10 @@ class GuiTest(unittest.TestCase):
             [
                 call(0, state="normal"),
                 call(1, state="normal"),
-                call(2, state="normal"),
                 call(3, state="normal"),
                 call(4, state="normal"),
-                call(5, state="normal"),
+                call(6, state="normal"),
+                call(7, state="normal"),
             ],
             application.export_menu.entryconfigure.call_args_list,
         )
@@ -5161,10 +5164,10 @@ class GuiTest(unittest.TestCase):
             [
                 call(0, state="normal"),
                 call(1, state="normal"),
-                call(2, state="normal"),
                 call(3, state="normal"),
                 call(4, state="normal"),
-                call(5, state="normal"),
+                call(6, state="normal"),
+                call(7, state="normal"),
             ],
             application.export_menu.entryconfigure.call_args_list,
         )
@@ -5197,10 +5200,10 @@ class GuiTest(unittest.TestCase):
             [
                 call(0, state="disabled"),
                 call(1, state="disabled"),
-                call(2, state="disabled"),
                 call(3, state="disabled"),
                 call(4, state="disabled"),
-                call(5, state="disabled"),
+                call(6, state="disabled"),
+                call(7, state="disabled"),
             ],
             application.export_menu.entryconfigure.call_args_list,
         )
