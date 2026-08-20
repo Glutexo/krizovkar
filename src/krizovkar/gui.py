@@ -913,7 +913,7 @@ class SecretGenerationDialog(simpledialog.Dialog):
         self._secret_editor.grid(row=1, column=0, sticky="ew", pady=(3, 0))
         _bind_text_entry_context_menu(self._secret_editor)
 
-        ttk.Label(master, text="Slovník (volitelný)").grid(
+        ttk.Label(master, text="Slovník").grid(
             row=2,
             column=0,
             sticky="w",
@@ -1136,7 +1136,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         )
         ttk.Label(
             self._generation_controls,
-            text="Tajenka (volitelná)",
+            text="Tajenka",
         ).grid(row=1, column=0, sticky="w", pady=(8, 0))
         self._secret_editor = _create_generation_entry(
             self._generation_controls,
@@ -1146,7 +1146,7 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         _bind_text_entry_context_menu(self._secret_editor)
         ttk.Label(
             self._generation_controls,
-            text="Slovník (volitelný)",
+            text="Slovník",
         ).grid(row=2, column=0, sticky="w", pady=(8, 0))
         dictionary_row = ttk.Frame(self._generation_controls)
         dictionary_row.grid(

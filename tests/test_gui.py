@@ -1478,7 +1478,7 @@ class GuiTest(unittest.TestCase):
         self.assertEqual(
             [
                 call(master, text="Tajenka"),
-                call(master, text="Slovník (volitelný)"),
+                call(master, text="Slovník"),
             ],
             label_type.call_args_list,
         )
