@@ -308,8 +308,8 @@ def _parser() -> argparse.ArgumentParser:
         "--replace-blocking",
         action="store_true",
         help=(
-            "při neúspěchu smí nahradit blokující hesla a přesunout "
-            "známou tajenku"
+            "před plněním smí vyřadit nedoplnitelná hesla, další "
+            "blokující nahradit a přesunout známou tajenku"
         ),
     )
     _add_secret_arguments(fill, allow_lengths=False)

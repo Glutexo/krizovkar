@@ -2657,9 +2657,125 @@ def _crossword_filling_assignments(
     )
 
 
+def _assignments_with_fillable_crossings(
+    crossword: CrosswordDocument,
+    entries_by_length: dict[int, tuple[_Entry, ...]],
+    protected_assignments: dict[str, _Entry],
+    ordinary_assignments: dict[str, _Entry],
+    control: GenerationControl,
+) -> dict[str, _Entry]:
+    """Vyřadí běžná hesla bez kandidáta pro prázdné křížení."""
+
+    coordinates = {
+        slot.identifier: _slot_coordinates(slot) for slot in crossword.slots
+    }
+    protected_letters: dict[GridCoordinate, str] = {}
+    for identifier, entry in protected_assignments.items():
+        for coordinate, letter in zip(
+            coordinates[identifier],
+            entry.letters,
+            strict=True,
+        ):
+            previous = protected_letters.get(coordinate)
+            if previous is not None and previous != letter:
+                return ordinary_assignments
+            protected_letters[coordinate] = letter
+    protected_answers = frozenset(
+        entry.answer for entry in protected_assignments.values()
+    )
+    base_candidate_cache: dict[str, bool] = {}
+
+    def has_candidate(
+        slot: WordSlot,
+        known_letters: dict[GridCoordinate, str],
+        excluded_answers: frozenset[str],
+    ) -> bool:
+        slot_coordinates = coordinates[slot.identifier]
+        for entry_index, entry in enumerate(
+            entries_by_length.get(slot.length, ())
+        ):
+            if entry_index % 1024 == 0:
+                control._check_cancelled()
+            if entry.answer in excluded_answers:
+                continue
+            if all(
+                known_letters.get(coordinate, letter) == letter
+                for coordinate, letter in zip(
+                    slot_coordinates,
+                    entry.letters,
+                    strict=True,
+                )
+            ):
+                return True
+        return False
+
+    def has_base_candidate(slot: WordSlot) -> bool:
+        cached = base_candidate_cache.get(slot.identifier)
+        if cached is None:
+            cached = has_candidate(
+                slot,
+                protected_letters,
+                protected_answers,
+            )
+            base_candidate_cache[slot.identifier] = cached
+        return cached
+
+    retained = dict(ordinary_assignments)
+    while retained:
+        control._check_cancelled()
+        filled_identifiers = protected_assignments.keys() | retained.keys()
+        unfilled_slots = tuple(
+            slot
+            for slot in crossword.slots
+            if slot.identifier not in filled_identifiers
+        )
+        discarded: set[str] = set()
+        for identifier, assignment in retained.items():
+            assignment_letters = dict(
+                zip(
+                    coordinates[identifier],
+                    assignment.letters,
+                    strict=True,
+                )
+            )
+            if assignment.answer in protected_answers or any(
+                coordinate in protected_letters
+                and protected_letters[coordinate] != letter
+                for coordinate, letter in assignment_letters.items()
+            ):
+                discarded.add(identifier)
+                continue
+
+            assignment_coordinates = assignment_letters.keys()
+            for slot in unfilled_slots:
+                slot_coordinates = coordinates[slot.identifier]
+                if assignment_coordinates.isdisjoint(slot_coordinates):
+                    continue
+                if not has_base_candidate(slot):
+                    continue
+                known_letters = dict(protected_letters)
+                known_letters.update(assignment_letters)
+                if not has_candidate(
+                    slot,
+                    known_letters,
+                    protected_answers | {assignment.answer},
+                ):
+                    discarded.add(identifier)
+                    break
+
+        if not discarded:
+            return retained
+        retained = {
+            identifier: assignment
+            for identifier, assignment in retained.items()
+            if identifier not in discarded
+        }
+    return retained
+
+
 def _fill_crossword_from_assignments(
     crossword: CrosswordDocument,
-    dictionary: CrosswordDictionary,
+    entries_by_length: dict[int, tuple[_Entry, ...]],
     *,
     seed: int,
     fixed_assignments: dict[str, _Entry],
@@ -2667,7 +2783,6 @@ def _fill_crossword_from_assignments(
     control: GenerationControl,
 ) -> CrosswordDocument:
     control._check_cancelled()
-    entries_by_length = _usable_entries(dictionary, control)
     assigned_identifiers = fixed_assignments.keys() | (
         preferred_assignments.keys()
         if preferred_assignments is not None
@@ -2738,7 +2853,7 @@ def fill_crossword(
     )
     return _fill_crossword_from_assignments(
         crossword,
-        dictionary,
+        _usable_entries(dictionary, generation_control),
         seed=seed,
         fixed_assignments={
             **ordinary_assignments,
@@ -2784,18 +2899,6 @@ def generate_filled_crossword(
 
     generation_control = control or GenerationControl()
     generation_control._check_cancelled()
-    try:
-        return fill_crossword(
-            crossword,
-            dictionary,
-            seed=seed,
-            secret=secret,
-            control=generation_control,
-        )
-    except FillingError:
-        pass
-
-    generation_control._check_cancelled()
     crossword = _resolve_crossword_secrets(
         crossword,
         secret,
@@ -2805,18 +2908,41 @@ def generate_filled_crossword(
     secret_assignments, ordinary_assignments = (
         _crossword_filling_assignments(crossword)
     )
+    entries_by_length = _usable_entries(dictionary, generation_control)
+    retained_assignments = _assignments_with_fillable_crossings(
+        crossword,
+        entries_by_length,
+        secret_assignments,
+        ordinary_assignments,
+        generation_control,
+    )
     last_error: FillingError
     try:
         return _fill_crossword_from_assignments(
             crossword,
-            dictionary,
+            entries_by_length,
             seed=seed,
-            fixed_assignments=secret_assignments,
-            preferred_assignments=ordinary_assignments,
+            fixed_assignments={
+                **retained_assignments,
+                **secret_assignments,
+            },
             control=generation_control,
         )
     except FillingError as error:
         last_error = error
+
+    if retained_assignments:
+        try:
+            return _fill_crossword_from_assignments(
+                crossword,
+                entries_by_length,
+                seed=seed,
+                fixed_assignments=secret_assignments,
+                preferred_assignments=retained_assignments,
+                control=generation_control,
+            )
+        except FillingError as error:
+            last_error = error
 
     movable_secret = _movable_secret_requirement(crossword)
     if movable_secret is None:
@@ -2859,10 +2985,10 @@ def generate_filled_crossword(
         try:
             return _fill_crossword_from_assignments(
                 candidate,
-                dictionary,
+                entries_by_length,
                 seed=attempt_seed,
                 fixed_assignments=candidate_secret_assignments,
-                preferred_assignments=ordinary_assignments,
+                preferred_assignments=retained_assignments,
                 control=generation_control,
             )
         except FillingError as error:

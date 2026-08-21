@@ -478,6 +478,48 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
         self.assertEqual("AB", slots["h1"].clue)
         self.assertEqual("Zachované heslo", slots["h2"].clue)
 
+    def test_discards_unextendable_answer_before_filling(self) -> None:
+        crossword = CrosswordDocument(
+            format_name="krizovkar",
+            kind="crossword",
+            version=1,
+            grid=CrosswordLayout(
+                width=2,
+                height=2,
+                cells=((LetterCellRole(),) * 2,) * 2,
+            ),
+            slots=(
+                WordSlot(
+                    "h1",
+                    Coordinate(1, 1),
+                    "horizontal",
+                    2,
+                    answer="ZX",
+                    clue="Nedoplnitelné heslo",
+                ),
+                WordSlot("v1", Coordinate(1, 1), "vertical", 2),
+            ),
+        )
+        dictionary = CrosswordDictionary(
+            entries=(DictionaryEntry(answer="AB", clues=("Kandidát",)),)
+        )
+
+        with patch(
+            "krizovkar.generator._fill_crossword_from_assignments",
+            return_value=crossword,
+        ) as fill_from_assignments:
+            generate_filled_crossword(crossword, dictionary)
+
+        fill_from_assignments.assert_called_once()
+        self.assertEqual(
+            {},
+            fill_from_assignments.call_args.kwargs["fixed_assignments"],
+        )
+        self.assertNotIn(
+            "preferred_assignments",
+            fill_from_assignments.call_args.kwargs,
+        )
+
     def test_flexible_fill_resolves_secret_before_replacing_content(
         self,
     ) -> None:

@@ -175,12 +175,15 @@ obsah bez potvrzení. Celé přidání je jeden krok historie, takže je lze
 vrátit jediným **Zpět**.
 
 Volba **Úpravy → Vyplnit křížovku…** doplní ze slovníku všechna dosud
-prázdná hesla. Nejprve se pokusí zachovat tajenku i všechna ručně zadaná
-hesla a jejich legendy. Pokud s nimi úplné řešení neexistuje, použije běžná
-vložená hesla jen jako přednostní kandidáty a nahradí ta, která vyplnění
-blokují. Když nestačí ani to, zkusí známou slovní tajenku jinak rozdělit mezi
-části, přesunout do jiných stávajících míst nebo změnit její směr. Rozměr,
-pole ani předěly mřížky přitom nemění. Dialog vyžaduje slovník a nabízí
+prázdná hesla. Ještě před hledáním vyřadí běžné vložené heslo, pokud
+kvůli jeho písmenům nemá některé prázdné křížení ve slovníku žádného
+kandidáta. Samotná tajenka zůstává chráněná. Ostatní ručně zadaná hesla
+a jejich legendy se nejprve pokusí zachovat. Pokud s nimi úplné řešení
+neexistuje, použije je jen jako přednostní kandidáty a nahradí další hesla,
+která vyplnění blokují. Když nestačí ani to, zkusí známou slovní tajenku
+jinak rozdělit mezi části, přesunout do jiných stávajících míst nebo změnit
+její směr. Rozměr, pole ani předěly mřížky přitom nemění. Dialog vyžaduje
+slovník a nabízí
 předvyplněné náhodné **Sémě**,
 které lze změnit nebo si je poznamenat pro zopakování stejného výsledku. Pokud
 slovník neobsahuje potřebné délky hesel nebo z něj ani po těchto krocích nelze
@@ -672,9 +675,10 @@ uv run krizovkar fill build/template.yaml slovnik.json \
 Plnění funguje pro prázdné, ručně vytvořené, částečně vyplněné i hotové křížovky.
 Ve výchozím režimu doplněná hesla zachová; pro každé zbývající místo
 vybere heslo odpovídající délky, zachová shodná písmena na kříženích
-a stejnou odpověď nepoužije dvakrát. Volba `--replace-blocking` smí po
-neúspěchu nahradit blokující běžná hesla a známou tajenku jinak rozdělit,
-přesunout nebo otočit stejně jako grafické rozhraní.
+a stejnou odpověď nepoužije dvakrát. Volba `--replace-blocking` před hledáním
+vyřadí běžná hesla, jejichž písmena neumožňují doplnit některé prázdné
+křížení. Při neúspěchu smí nahradit další blokující běžná hesla a známou
+tajenku jinak rozdělit, přesunout nebo otočit stejně jako grafické rozhraní.
 Odpověď a legendu uloží přímo do původního slotu. Vstupem i výsledkem je
 tentýž druh editovatelného dokumentu `kind: crossword`. Ten lze dál upravovat,
 znovu použít jako základ nebo převést na cílovou mřížku:
