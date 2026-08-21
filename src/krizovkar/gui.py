@@ -217,6 +217,7 @@ class CrosswordFillInput:
     """Slovník a sémě pro automatické doplnění křížovky."""
 
     dictionary: CrosswordDictionary
+    dictionary_path: Path
     seed: int
 
 
@@ -511,6 +512,15 @@ def _available_dictionary_paths(
     )
 
 
+def _initial_dictionary_path(last_dictionary: Path | None) -> Path | None:
+    """Upřednostní poslední slovník, jinak jediný dostupný."""
+
+    if last_dictionary is not None:
+        return last_dictionary
+    available = _available_dictionary_paths()
+    return available[0] if len(available) == 1 else None
+
+
 def _write_json_file(storage_path: Path, value: object) -> None:
     temporary = storage_path.with_name(f".{storage_path.name}.tmp")
     try:
@@ -528,7 +538,7 @@ def _write_json_file(storage_path: Path, value: object) -> None:
 
 
 class _NewCrosswordPreferences:
-    """Uchovává poslední úspěšně použité volby nové křížovky."""
+    """Uchovává volby nové křížovky a poslední použitý slovník."""
 
     def __init__(self, storage_path: Path | None = None) -> None:
         self._storage_path = (
@@ -576,6 +586,11 @@ class _NewCrosswordPreferences:
                 ),
             },
         )
+
+    def remember_dictionary(self, dictionary: Path) -> None:
+        """Uloží společnou poslední volbu slovníku."""
+
+        self.remember(self._settings, self._layout, dictionary)
 
     def _load(
         self,
@@ -1346,7 +1361,15 @@ class SecretGenerationDialog(simpledialog.Dialog):
 class CrosswordFillDialog(simpledialog.Dialog):
     """Načte slovník a sémě pro automatické doplnění křížovky."""
 
-    def __init__(self, parent: tk.Misc) -> None:
+    def __init__(
+        self,
+        parent: tk.Misc,
+        *,
+        initial_dictionary: Path | None = None,
+    ) -> None:
+        self._initial_dictionary = _initial_dictionary_path(
+            initial_dictionary
+        )
         self._dictionary_value: tk.StringVar
         self._dictionary_editor: ttk.Combobox
         self._seed_value: tk.StringVar
@@ -1367,7 +1390,14 @@ class CrosswordFillDialog(simpledialog.Dialog):
         dictionary_row = ttk.Frame(master)
         dictionary_row.grid(row=1, column=0, sticky="ew", pady=(3, 0))
         dictionary_row.columnconfigure(0, weight=1)
-        self._dictionary_value = tk.StringVar(master=master)
+        self._dictionary_value = tk.StringVar(
+            master=master,
+            value=(
+                str(self._initial_dictionary)
+                if self._initial_dictionary is not None
+                else ""
+            ),
+        )
         self._dictionary_editor = _create_dictionary_editor(
             dictionary_row,
             self._dictionary_value,
@@ -1457,6 +1487,7 @@ class CrosswordFillDialog(simpledialog.Dialog):
 
         self._input = CrosswordFillInput(
             dictionary=dictionary,
+            dictionary_path=dictionary_path,
             seed=seed,
         )
         return True
@@ -1480,7 +1511,9 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._initial_settings = initial_settings
         self._initial_layout = initial_layout
         self._initial_content_mode = initial_content_mode
-        self._initial_dictionary = initial_dictionary
+        self._initial_dictionary = _initial_dictionary_path(
+            initial_dictionary
+        )
         self._width_value: tk.StringVar
         self._height_value: tk.StringVar
         self._layout_value: tk.StringVar
@@ -4856,6 +4889,13 @@ class CrosswordApplication:
     def recent_document_paths(self) -> tuple[Path, ...]:
         return self._recent_documents.paths
 
+    @property
+    def last_dictionary_path(self) -> Path | None:
+        return self._new_crossword_preferences.dictionary
+
+    def remember_dictionary(self, dictionary: Path) -> None:
+        self._new_crossword_preferences.remember_dictionary(dictionary)
+
     def _configure_no_document_window(self) -> None:
         self.root.title("Křížovkář")
         self.root.geometry("560x260")
@@ -5134,11 +5174,7 @@ class CrosswordApplication:
         preferences.remember(
             new_template.settings,
             new_template.layout,
-            (
-                preferences.dictionary
-                if new_template.creation_mode == "empty"
-                else new_template.dictionary
-            ),
+            new_template.dictionary or preferences.dictionary,
         )
         return window
 
@@ -5975,10 +6011,16 @@ class CrosswordDocumentWindow(ttk.Frame):
         if crossword is None:
             return
 
-        dialog = CrosswordFillDialog(self.root)
+        dialog = CrosswordFillDialog(
+            self.root,
+            initial_dictionary=self.application.last_dictionary_path,
+        )
         filling_input = cast(CrosswordFillInput | None, dialog.result)
         if filling_input is None:
             return
+        self.application.remember_dictionary(
+            filling_input.dictionary_path
+        )
 
         try:
             filled = _run_filling_task(

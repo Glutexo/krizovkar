@@ -58,6 +58,7 @@ from krizovkar.gui import (
     _FillingProgressDialog,
     _format_tried_combinations,
     _inherit_macos_menu_bar,
+    _initial_dictionary_path,
     _keyboard_shortcut,
     _multiple_cell_selection_sequence,
     _NewCrosswordPreferences,
@@ -375,6 +376,27 @@ class GuiTest(unittest.TestCase):
 
         self.assertEqual((first, later), paths)
 
+    def test_dictionary_selection_prefers_last_or_only_available(self) -> None:
+        remembered = Path("/slovniky/posledni.json")
+        only = Path("/slovniky/jediny.json")
+
+        with patch(
+            "krizovkar.gui._available_dictionary_paths",
+            return_value=(only,),
+        ) as available:
+            self.assertIs(
+                remembered,
+                _initial_dictionary_path(remembered),
+            )
+            available.assert_not_called()
+            self.assertEqual(only, _initial_dictionary_path(None))
+
+        with patch(
+            "krizovkar.gui._available_dictionary_paths",
+            return_value=(only, Path("/slovniky/druhy.json")),
+        ):
+            self.assertIsNone(_initial_dictionary_path(None))
+
     def test_dictionary_editor_offers_found_paths_and_accepts_text(
         self,
     ) -> None:
@@ -515,11 +537,13 @@ class GuiTest(unittest.TestCase):
                 "numbered",
                 dictionary,
             )
+            next_dictionary = Path(directory) / "nový.json"
+            preferences.remember_dictionary(next_dictionary)
             loaded = _NewCrosswordPreferences(storage_path)
 
         self.assertEqual(CrosswordSettings(12, 8), loaded.settings)
         self.assertEqual("numbered", loaded.layout)
-        self.assertEqual(dictionary, loaded.dictionary)
+        self.assertEqual(next_dictionary, loaded.dictionary)
 
     def test_new_crossword_preferences_ignore_invalid_storage(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1731,10 +1755,17 @@ class GuiTest(unittest.TestCase):
 
     def test_template_generation_dialog_uses_crossword_title(self) -> None:
         parent = Mock()
+        only_dictionary = Path("/slovníky/jediný.json")
 
-        with patch(
-            "krizovkar.gui.simpledialog.Dialog.__init__"
-        ) as initialize:
+        with (
+            patch(
+                "krizovkar.gui._available_dictionary_paths",
+                return_value=(only_dictionary,),
+            ),
+            patch(
+                "krizovkar.gui.simpledialog.Dialog.__init__"
+            ) as initialize,
+        ):
             dialog = TemplateGenerationDialog(
                 parent,
                 initial_settings=CrosswordSettings(15, 10),
@@ -1743,6 +1774,7 @@ class GuiTest(unittest.TestCase):
             )
 
         initialize.assert_called_once_with(parent, "Nová křížovka")
+        self.assertEqual(only_dictionary, dialog._initial_dictionary)
         self.assertIsNone(dialog._new_template)
 
     def test_template_dialog_uses_short_layout_and_content_choices(
@@ -2083,8 +2115,13 @@ class GuiTest(unittest.TestCase):
         self,
     ) -> None:
         parent = Mock()
+        only_dictionary = Path("/slovníky/jediný.json")
 
         with (
+            patch(
+                "krizovkar.gui._available_dictionary_paths",
+                return_value=(only_dictionary,),
+            ),
             patch(
                 "krizovkar.gui.random.randrange",
                 return_value=123,
@@ -2097,11 +2134,13 @@ class GuiTest(unittest.TestCase):
 
         random_seed.assert_called_once_with(2**63)
         initialize.assert_called_once_with(parent, "Vyplnit křížovku")
+        self.assertEqual(only_dictionary, dialog._initial_dictionary)
         self.assertEqual(123, dialog._initial_seed)
         self.assertIsNone(dialog._input)
 
     def test_crossword_fill_dialog_offers_dictionary_and_seed(self) -> None:
         dialog = CrosswordFillDialog.__new__(CrosswordFillDialog)
+        dialog._initial_dictionary = Path("/slovníky/poslední.json")
         dialog._initial_seed = 123
         master = Mock()
         label = Mock()
@@ -2147,7 +2186,10 @@ class GuiTest(unittest.TestCase):
         )
         self.assertEqual(
             [
-                call(master=master),
+                call(
+                    master=master,
+                    value="/slovníky/poslední.json",
+                ),
                 call(master=master, value="123"),
             ],
             variable_type.call_args_list,
@@ -2212,7 +2254,11 @@ class GuiTest(unittest.TestCase):
 
         self.assertTrue(valid)
         self.assertEqual(
-            CrosswordFillInput(dictionary=TEST_DICTIONARY, seed=42),
+            CrosswordFillInput(
+                dictionary=TEST_DICTIONARY,
+                dictionary_path=Path("slovnik.json"),
+                seed=42,
+            ),
             dialog.result,
         )
         load.assert_called_once_with(Path("slovnik.json"))
@@ -5597,12 +5643,16 @@ class GuiTest(unittest.TestCase):
             "numbered",
         )
         filled = _filled_numbered_crossword()
+        previous_dictionary = Path("/slovníky/předchozí.json")
+        dictionary_path = Path("/slovníky/český.json")
         filling_input = CrosswordFillInput(
             dictionary=TEST_DICTIONARY,
+            dictionary_path=dictionary_path,
             seed=42,
         )
         window = _document_history_window(original)
         window.root = Mock()
+        window.application.last_dictionary_path = previous_dictionary
         control = GenerationControl()
 
         with (
@@ -5624,7 +5674,13 @@ class GuiTest(unittest.TestCase):
             dialog_type.return_value.result = filling_input
             CrosswordDocumentWindow.generate_complete_crossword(window)
 
-        dialog_type.assert_called_once_with(window.root)
+        dialog_type.assert_called_once_with(
+            window.root,
+            initial_dictionary=previous_dictionary,
+        )
+        window.application.remember_dictionary.assert_called_once_with(
+            dictionary_path
+        )
         generate.assert_called_once_with(
             original,
             TEST_DICTIONARY,
@@ -5650,6 +5706,8 @@ class GuiTest(unittest.TestCase):
             CrosswordSettings(4, 4),
             "numbered",
         )
+        previous_dictionary = Path("/slovníky/předchozí.json")
+        window.application.last_dictionary_path = previous_dictionary
 
         with (
             patch("krizovkar.gui.CrosswordFillDialog") as dialog_type,
@@ -5659,7 +5717,11 @@ class GuiTest(unittest.TestCase):
             dialog_type.return_value.result = None
             CrosswordDocumentWindow.generate_complete_crossword(window)
 
-        dialog_type.assert_called_once_with(window.root)
+        dialog_type.assert_called_once_with(
+            window.root,
+            initial_dictionary=previous_dictionary,
+        )
+        window.application.remember_dictionary.assert_not_called()
         generate.assert_not_called()
         run_filling.assert_not_called()
         window._set_dirty.assert_not_called()
@@ -5674,6 +5736,9 @@ class GuiTest(unittest.TestCase):
         window = Mock()
         window._save_inline_slot_edit.return_value = True
         window._crossword = original
+        previous_dictionary = Path("/slovníky/předchozí.json")
+        dictionary_path = Path("/slovníky/český.json")
+        window.application.last_dictionary_path = previous_dictionary
 
         with (
             patch("krizovkar.gui.CrosswordFillDialog") as dialog_type,
@@ -5684,10 +5749,18 @@ class GuiTest(unittest.TestCase):
         ):
             dialog_type.return_value.result = CrosswordFillInput(
                 dictionary=TEST_DICTIONARY,
+                dictionary_path=dictionary_path,
                 seed=42,
             )
             CrosswordDocumentWindow.generate_complete_crossword(window)
 
+        dialog_type.assert_called_once_with(
+            window.root,
+            initial_dictionary=previous_dictionary,
+        )
+        window.application.remember_dictionary.assert_called_once_with(
+            dictionary_path
+        )
         run_filling.assert_called_once()
         self.assertIs(original, window._crossword)
         window._show_action_error.assert_not_called()
@@ -5703,6 +5776,9 @@ class GuiTest(unittest.TestCase):
         window = Mock()
         window._save_inline_slot_edit.return_value = True
         window._crossword = original
+        previous_dictionary = Path("/slovníky/předchozí.json")
+        dictionary_path = Path("/slovníky/český.json")
+        window.application.last_dictionary_path = previous_dictionary
         control = GenerationControl()
 
         with (
@@ -5718,10 +5794,18 @@ class GuiTest(unittest.TestCase):
         ):
             dialog_type.return_value.result = CrosswordFillInput(
                 dictionary=TEST_DICTIONARY,
+                dictionary_path=dictionary_path,
                 seed=42,
             )
             CrosswordDocumentWindow.generate_complete_crossword(window)
 
+        dialog_type.assert_called_once_with(
+            window.root,
+            initial_dictionary=previous_dictionary,
+        )
+        window.application.remember_dictionary.assert_called_once_with(
+            dictionary_path
+        )
         self.assertIs(original, window._crossword)
         window._show_action_error.assert_called_once_with(
             "Křížovku nelze vyplnit",
@@ -5974,35 +6058,42 @@ class GuiTest(unittest.TestCase):
         )
         self.assertIs(expected_window, result)
 
-    def test_empty_template_keeps_last_selected_dictionary(self) -> None:
-        application = Mock()
-        template = create_empty_template(CrosswordSettings(4, 3), "swedish")
-        application._open_window.return_value = Mock()
-        preferences = Mock()
-        preferences.settings = CrosswordSettings(12, 8)
-        preferences.layout = "numbered"
-        preferences.dictionary = Path("/slovníky/český.json")
-        application._new_crossword_preferences = preferences
+    def test_template_without_dictionary_keeps_last_selection(self) -> None:
+        for creation_mode in ("empty", "generated"):
+            with self.subTest(creation_mode=creation_mode):
+                application = Mock()
+                template = create_empty_template(
+                    CrosswordSettings(4, 3),
+                    "swedish",
+                )
+                application._open_window.return_value = Mock()
+                preferences = Mock()
+                preferences.settings = CrosswordSettings(12, 8)
+                preferences.layout = "numbered"
+                preferences.dictionary = Path("/slovníky/český.json")
+                application._new_crossword_preferences = preferences
 
-        with patch("krizovkar.gui.TemplateGenerationDialog") as dialog_type:
-            dialog_type.return_value.result = NewTemplateResult(
-                template,
-                "swedish",
-                "empty",
-                CrosswordSettings(4, 3),
-                None,
-            )
+                with patch(
+                    "krizovkar.gui.TemplateGenerationDialog"
+                ) as dialog_type:
+                    dialog_type.return_value.result = NewTemplateResult(
+                        template,
+                        "swedish",
+                        creation_mode,
+                        CrosswordSettings(4, 3),
+                        None,
+                    )
 
-            CrosswordApplication.new_template_document(
-                application,
-                parent=Mock(),
-            )
+                    CrosswordApplication.new_template_document(
+                        application,
+                        parent=Mock(),
+                    )
 
-        preferences.remember.assert_called_once_with(
-            CrosswordSettings(4, 3),
-            "swedish",
-            Path("/slovníky/český.json"),
-        )
+                preferences.remember.assert_called_once_with(
+                    CrosswordSettings(4, 3),
+                    "swedish",
+                    Path("/slovníky/český.json"),
+                )
 
     def test_application_does_not_open_document_after_cancelled_generation(
         self,

@@ -57,9 +57,9 @@ jednopísmennou souhláskovou předložku `k`, `s`, `v` nebo `z` od následujíc
 slova. Nerozdělí ji ani v místě pevné mezery. Více po sobě jdoucích slov ve
 stejném dílu spojí bez mezer. Tlačítko **Vytvořit** otevře výsledek jako nový
 samostatný dokument.
-Po úspěšném vytvoření si aplikace zapamatuje použité rozměry, typ
-křížovky a zvolený slovník a předvyplní je při dalším otevření dialogu
-i po restartu. Prázdná varianta dříve zvolený slovník nesmaže.
+Po úspěšném vytvoření si aplikace zapamatuje použité rozměry a typ
+křížovky a předvyplní je při dalším otevření dialogu i po restartu.
+Varianta bez vybraného slovníku dříve zvolený slovník nesmaže.
 Neplatný nebo nerozvrhnutelný rozměr či tajenku dialog vysvětlí a ponechá
 otevřený k opravě. Tlačítko-přepínač **CLI** vlevo dole rozbalí ve spodní
 části dialogu kopírovatelný příkaz, který na příkazové řádce vytvoří
@@ -196,7 +196,10 @@ ukazuje počet vyzkoušených kombinací a nabízí tlačítko **Přerušit**.
 Přerušení je kooperativní, ponechá dokument beze změny a nevytváří ani
 násilně neukončuje samostatný proces; hledání běží v pracovním vlákně.
 
-Dialogy se slovníkem nabízejí soubory nalezené v uživatelské datové složce
+Dialogy **Nová křížovka** a **Vyplnit křížovku** sdílejí naposledy zvolený
+platný slovník a předvyplní jej také po restartu aplikace. Není-li zatím
+žádný uložený a v uživatelské datové složce je právě jeden slovník, vyberou
+jej automaticky. Dialogy se slovníkem nabízejí soubory nalezené v této složce
 Křížovkáře. Na macOS je to
 `~/Library/Application Support/krizovkar/dictionaries`, ve Windows
 `%APPDATA%\krizovkar\dictionaries` a na Linuxu
