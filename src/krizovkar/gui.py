@@ -45,6 +45,7 @@ from krizovkar.generator import (
     generate_numbered_template,
     generate_secret_in_crossword,
     generate_swedish_template,
+    generate_template_candidates,
     normalize_secret_text,
 )
 from krizovkar.layout import MIN_SEGMENT_LENGTH
@@ -94,6 +95,7 @@ _MINIMUM_TK_VERSION = 9.0
 _GRID_RESIZE_HIT_RADIUS = 7
 _GRID_RESIZE_HANDLE_RADIUS = 3
 _GRID_RESIZE_FEEDBACK_TAG = "grid-resize-feedback"
+_RESIZE_TEMPLATE_CANDIDATE_LIMIT = 64
 _RESIZE_SECRET_SEARCH_LIMIT = 10_000
 _WINDOW_MENU_SELECTION_VARIABLE = "krizovkar_active_window"
 _SHADOW_ANSWER_TAG = "shadow-answer"
@@ -2618,7 +2620,7 @@ def _slot_fits_resized_grid(
     return legend is None or _coordinate_fits_grid(legend, width, height)
 
 
-def _resized_crossword_base(
+def _cropped_crossword_base(
     crossword: CrosswordDocument,
     width: int,
     height: int,
@@ -2689,6 +2691,95 @@ def _resized_crossword_base(
     )
 
 
+def _slot_layout_key(
+    slot: WordSlot,
+) -> tuple[Coordinate, WordDirection, int, CluePlacement]:
+    return (
+        slot.start,
+        slot.direction,
+        slot.length,
+        slot.clue_placement,
+    )
+
+
+def _template_with_resized_content(
+    original: CrosswordDocument,
+    template: CrosswordDocument,
+) -> tuple[CrosswordDocument, frozenset[str]]:
+    original_by_layout = {
+        _slot_layout_key(slot): slot for slot in original.slots
+    }
+    reserved_identifiers = {slot.identifier for slot in original.slots}
+    matched_identifiers: set[str] = set()
+    slots: list[WordSlot] = []
+    for template_slot in template.slots:
+        original_slot = original_by_layout.get(
+            _slot_layout_key(template_slot)
+        )
+        if original_slot is not None:
+            slots.append(original_slot)
+            matched_identifiers.add(original_slot.identifier)
+            continue
+        slots.append(
+            replace(
+                template_slot,
+                identifier=_next_slot_identifier(
+                    reserved_identifiers,
+                    template_slot.direction,
+                ),
+            )
+        )
+
+    help_position = next(
+        (
+            Coordinate(row_index, column_index)
+            for row_index, row in enumerate(original.grid.cells, start=1)
+            for column_index, role in enumerate(row, start=1)
+            if isinstance(role, HelpCellRole)
+            and _coordinate_fits_grid(
+                Coordinate(row_index, column_index),
+                template.grid.width,
+                template.grid.height,
+            )
+        ),
+        None,
+    )
+    keep_help = (
+        help_position is not None
+        and any(slot.in_help for slot in slots)
+        and isinstance(
+            template.grid.cells[help_position.row - 1][
+                help_position.column - 1
+            ],
+            EmptyCellRole,
+        )
+    )
+    if not keep_help:
+        slots = [
+            replace(slot, in_help=False) if slot.in_help else slot
+            for slot in slots
+        ]
+        grid = template.grid
+    else:
+        assert help_position is not None
+        rows = [list(row) for row in template.grid.cells]
+        rows[help_position.row - 1][help_position.column - 1] = HelpCellRole()
+        grid = replace(
+            template.grid,
+            cells=tuple(tuple(row) for row in rows),
+        )
+
+    return (
+        replace(
+            original,
+            grid=grid,
+            slots=tuple(slots),
+            secrets=(),
+        ),
+        frozenset(matched_identifiers),
+    )
+
+
 def _answer_fits_resized_slot(
     crossword: CrosswordDocument,
     slot: WordSlot,
@@ -2727,6 +2818,8 @@ def _resized_secret_slot_candidates(
     layout: SpecificationLayout,
     reserved_identifiers: set[str],
     reserved_coordinates: set[Coordinate],
+    *,
+    allow_new_slots: bool,
 ) -> tuple[_ResizedSecretSlotCandidate, ...]:
     candidates: list[_ResizedSecretSlotCandidate] = []
     direction_order: dict[WordDirection, int] = {
@@ -2735,14 +2828,15 @@ def _resized_secret_slot_candidates(
     }
     for slot in crossword.slots:
         coordinates = set(slot_coordinates(slot))
+        replaces_answer = (
+            missing.answer is not None
+            and slot.answer not in {None, missing.answer}
+        )
         if (
             slot.identifier in reserved_identifiers
             or slot.length != missing.length
             or not coordinates.isdisjoint(reserved_coordinates)
-            or (
-                missing.answer is not None
-                and slot.answer not in {None, missing.answer}
-            )
+            or (replaces_answer and allow_new_slots)
             or not _answer_fits_resized_slot(
                 crossword,
                 slot,
@@ -2753,7 +2847,10 @@ def _resized_secret_slot_candidates(
             continue
         answer_change = int(
             (missing.answer is None and slot.answer is not None)
-            or (missing.answer is not None and slot.answer is None)
+            or (
+                missing.answer is not None
+                and slot.answer != missing.answer
+            )
         )
         candidates.append(
             _ResizedSecretSlotCandidate(
@@ -2772,6 +2869,11 @@ def _resized_secret_slot_candidates(
                     direction_order[slot.direction],
                 ),
             )
+        )
+
+    if not allow_new_slots:
+        return tuple(
+            sorted(candidates, key=lambda candidate: candidate.score)
         )
 
     occupied_by_direction = {
@@ -2921,11 +3023,12 @@ def _apply_resized_secret_slot_candidate(
             if slot.identifier == candidate.existing_identifier
         )
         slot = slots[slot_index]
-        if missing.answer is not None and slot.answer is None:
+        if missing.answer is not None and slot.answer != missing.answer:
             slots[slot_index] = replace(
                 slot,
                 answer=missing.answer,
                 clue=missing.clue or missing.answer,
+                in_help=False,
             )
             crossword = replace(crossword, slots=tuple(slots))
         return crossword, CrosswordSecretSlotPart(
@@ -2973,6 +3076,8 @@ def _recover_resized_secret_slots(
     layout: SpecificationLayout,
     reserved_identifiers: set[str],
     reserved_coordinates: set[Coordinate],
+    *,
+    allow_new_slots: bool,
 ) -> tuple[
     CrosswordDocument,
     dict[int, CrosswordSecretSlotPart],
@@ -3004,6 +3109,7 @@ def _recover_resized_secret_slots(
                     layout,
                     used_identifiers,
                     used_coordinates,
+                    allow_new_slots=allow_new_slots,
                 ),
             )
             for missing in remaining
@@ -3053,6 +3159,8 @@ def _restore_resized_secrets(
     original: CrosswordDocument,
     resized: CrosswordDocument,
     layout: SpecificationLayout,
+    *,
+    allow_new_slots: bool = True,
 ) -> CrosswordDocument:
     original_slots = {slot.identifier: slot for slot in original.slots}
     restored_secrets: list[CrosswordSecret] = []
@@ -3131,6 +3239,7 @@ def _restore_resized_secrets(
                 layout,
                 reserved_identifiers,
                 reserved_coordinates,
+                allow_new_slots=allow_new_slots,
             )
             if recovered is None:
                 continue
@@ -3151,6 +3260,120 @@ def _restore_resized_secrets(
                 globally_reserved_coordinates.update(part.cells)
 
     return replace(current, secrets=tuple(restored_secrets))
+
+
+def _resized_secret_lengths(
+    crossword: CrosswordDocument,
+) -> tuple[int, ...]:
+    slots = {slot.identifier: slot for slot in crossword.slots}
+    return tuple(
+        sorted(
+            {
+                slots[part.slot_identifier].length
+                for secret in crossword.secrets
+                for part in secret.parts
+                if isinstance(part, CrosswordSecretSlotPart)
+            }
+        )
+    )
+
+
+def _resized_template_candidates(
+    crossword: CrosswordDocument,
+    width: int,
+    height: int,
+    layout: SpecificationLayout,
+    creation_mode: TemplateCreationMode,
+) -> tuple[CrosswordDocument, ...]:
+    if creation_mode == "empty":
+        try:
+            return (
+                generate_empty_template(
+                    width=width,
+                    height=height,
+                    layout=layout,
+                ),
+            )
+        except GenerationError:
+            return ()
+
+    required_lengths = _resized_secret_lengths(crossword)
+    try:
+        return generate_template_candidates(
+            width=width,
+            height=height,
+            layout=layout,
+            required_lengths=required_lengths,
+            limit=_RESIZE_TEMPLATE_CANDIDATE_LIMIT,
+        )
+    except GenerationError:
+        if not required_lengths:
+            return ()
+    try:
+        return generate_template_candidates(
+            width=width,
+            height=height,
+            layout=layout,
+            limit=_RESIZE_TEMPLATE_CANDIDATE_LIMIT,
+        )
+    except GenerationError:
+        return ()
+
+
+def _matching_resized_cell_roles(
+    original: CrosswordDocument,
+    candidate: CrosswordDocument,
+) -> int:
+    return sum(
+        type(original.grid.cells[row][column])
+        is type(candidate.grid.cells[row][column])
+        for row in range(min(original.grid.height, candidate.grid.height))
+        for column in range(min(original.grid.width, candidate.grid.width))
+    )
+
+
+def _regenerated_crossword_base(
+    crossword: CrosswordDocument,
+    width: int,
+    height: int,
+    layout: SpecificationLayout,
+    creation_mode: TemplateCreationMode,
+) -> CrosswordDocument | None:
+    candidates = _resized_template_candidates(
+        crossword,
+        width,
+        height,
+        layout,
+        creation_mode,
+    )
+    original_slots = {slot.identifier: slot for slot in crossword.slots}
+    scored: list[tuple[tuple[int, ...], CrosswordDocument]] = []
+    for index, candidate in enumerate(candidates):
+        transferred, matched_identifiers = _template_with_resized_content(
+            crossword,
+            candidate,
+        )
+        restored = _restore_resized_secrets(
+            crossword,
+            transferred,
+            layout,
+            allow_new_slots=False,
+        )
+        score = (
+            len(restored.secrets),
+            sum(len(secret.parts) for secret in restored.secrets),
+            sum(
+                original_slots[identifier].answer is not None
+                for identifier in matched_identifiers
+            ),
+            len(matched_identifiers),
+            _matching_resized_cell_roles(crossword, candidate),
+            -index,
+        )
+        scored.append((score, restored))
+    if not scored:
+        return None
+    return max(scored, key=lambda item: item[0])[1]
 
 
 def _ensure_resized_crossword_has_slot(
@@ -3201,11 +3424,16 @@ def resize_crossword_document(
     height: int,
     *,
     layout: SpecificationLayout,
+    creation_mode: TemplateCreationMode = "generated",
 ) -> CrosswordDocument:
-    """Změní rozměr a zachová všechna stále platná hesla i tajenky."""
+    """Změní rozměr, dogeneruje kostru a přenese shodná hesla i tajenky."""
 
     if layout not in {"swedish", "numbered"}:
         raise GuiInputError(f"Nepodporované rozvržení křížovky {layout!r}.")
+    if creation_mode not in {"empty", "generated"}:
+        raise GuiInputError(
+            f"Nepodporovaný počáteční obsah křížovky {creation_mode!r}."
+        )
     if width < 1 or height < 1:
         raise GuiInputError("Rozměry křížovky musí být kladné.")
     if width > _MAX_CROSSWORD_DIMENSION or height > _MAX_CROSSWORD_DIMENSION:
@@ -3216,9 +3444,17 @@ def resize_crossword_document(
     if crossword.grid.width == width and crossword.grid.height == height:
         return crossword
 
-    resized = _resized_crossword_base(crossword, width, height)
-    resized = _restore_resized_secrets(crossword, resized, layout)
-    resized = _ensure_resized_crossword_has_slot(resized, layout)
+    resized = _regenerated_crossword_base(
+        crossword,
+        width,
+        height,
+        layout,
+        creation_mode,
+    )
+    if resized is None:
+        resized = _cropped_crossword_base(crossword, width, height)
+        resized = _restore_resized_secrets(crossword, resized, layout)
+        resized = _ensure_resized_crossword_has_slot(resized, layout)
     try:
         dump_crossword_document(resized, StringIO())
     except ModelError as error:
@@ -5594,6 +5830,7 @@ class CrosswordDocumentWindow(ttk.Frame):
                 width,
                 height,
                 layout=layout,
+                creation_mode=self._template_creation_mode,
             )
         except GuiInputError:
             return

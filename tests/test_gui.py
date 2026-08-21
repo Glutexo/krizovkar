@@ -26,6 +26,7 @@ from krizovkar.generator import (
     SecretGenerationResult,
     SecretRequirement,
     create_grid_from_crossword,
+    generate_template_candidates,
 )
 from krizovkar.gui import (
     CrosswordApplication,
@@ -141,6 +142,23 @@ def _filled_numbered_crossword():
     for identifier, (answer, clue) in entries.items():
         crossword = fill_crossword_slot(crossword, identifier, answer, clue)
     return crossword
+
+
+def _crossword_layout_signature(
+    crossword: CrosswordDocument,
+) -> tuple[object, ...]:
+    return (
+        crossword.grid.cells,
+        tuple(
+            (
+                slot.start,
+                slot.direction,
+                slot.length,
+                slot.clue_placement,
+            )
+            for slot in crossword.slots
+        ),
+    )
 
 
 def _secret_resize_crossword(layout: str) -> CrosswordDocument:
@@ -3168,7 +3186,7 @@ class GuiTest(unittest.TestCase):
         ))
         dump_crossword_document(resized, StringIO())
 
-    def test_resize_to_larger_grid_preserves_content_and_adds_empty_cells(
+    def test_resize_to_larger_grid_uses_generated_layout_and_keeps_content(
         self,
     ) -> None:
         crossword = _filled_numbered_crossword()
@@ -3176,34 +3194,127 @@ class GuiTest(unittest.TestCase):
         resized = resize_crossword_document(
             crossword,
             5,
-            4,
+            3,
             layout="numbered",
         )
 
-        self.assertEqual(crossword.slots, resized.slots)
+        original_slots = {
+            slot.identifier: slot for slot in crossword.slots
+        }
+        self.assertTrue(
+            all(original_slots[identifier] in resized.slots for identifier in (
+                "v1",
+                "v2",
+                "v3",
+            ))
+        )
         self.assertEqual(crossword.secrets, resized.secrets)
         self.assertTrue(
             all(
                 isinstance(resized.grid.cells[row][column], LetterCellRole)
                 for row in range(3)
-                for column in range(3)
+                for column in range(5)
+            )
+        )
+        candidates = generate_template_candidates(
+            width=5,
+            height=3,
+            layout="numbered",
+        )
+        self.assertIn(
+            _crossword_layout_signature(resized),
+            tuple(_crossword_layout_signature(item) for item in candidates),
+        )
+
+    def test_swedish_resize_does_not_append_an_empty_column(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(10, 15),
+            "swedish",
+        )
+        original = next(
+            slot
+            for slot in crossword.slots
+            if slot.direction == "vertical" and slot.start.column == 2
+        )
+        crossword = fill_crossword_slot(
+            crossword,
+            original.identifier,
+            "ABCD",
+            "Zachované heslo",
+        )
+
+        resized = resize_crossword_document(
+            crossword,
+            11,
+            15,
+            layout="swedish",
+        )
+
+        self.assertFalse(
+            any(
+                all(
+                    isinstance(row[column], EmptyCellRole)
+                    for row in resized.grid.cells
+                )
+                for column in range(resized.grid.width)
             )
         )
         self.assertTrue(
-            all(
-                isinstance(resized.grid.cells[row][column], EmptyCellRole)
-                for row, column in (
-                    *((row, column) for row in range(3) for column in (3, 4)),
-                    *((3, column) for column in range(5)),
-                )
+            any(
+                slot.identifier == original.identifier
+                and slot.answer == "ABCD"
+                and slot.clue == "Zachované heslo"
+                for slot in resized.slots
             )
         )
+        candidates = generate_template_candidates(
+            width=11,
+            height=15,
+            layout="swedish",
+        )
+        self.assertIn(
+            _crossword_layout_signature(resized),
+            tuple(_crossword_layout_signature(item) for item in candidates),
+        )
 
-    def test_numbered_resize_adds_separated_slot_to_preserve_secret(
+    def test_empty_resize_uses_fresh_empty_template_shape(self) -> None:
+        crossword = create_empty_template(
+            CrosswordSettings(4, 4),
+            "swedish",
+        )
+        crossword = fill_crossword_slot(
+            crossword,
+            "v1",
+            "ABC",
+            "Zachované heslo",
+        )
+
+        resized = resize_crossword_document(
+            crossword,
+            5,
+            4,
+            layout="swedish",
+            creation_mode="empty",
+        )
+        expected = create_empty_template(
+            CrosswordSettings(5, 4),
+            "swedish",
+        )
+
+        self.assertEqual(
+            _crossword_layout_signature(expected),
+            _crossword_layout_signature(resized),
+        )
+        preserved = next(
+            slot for slot in resized.slots if slot.identifier == "v1"
+        )
+        self.assertEqual("ABC", preserved.answer)
+        self.assertEqual("Zachované heslo", preserved.clue)
+
+    def test_numbered_resize_moves_secret_to_generated_slot(
         self,
     ) -> None:
         crossword = _secret_resize_crossword("numbered")
-        original_vertical_slots = crossword.slots[:-1]
 
         resized = resize_crossword_document(
             crossword,
@@ -3212,21 +3323,42 @@ class GuiTest(unittest.TestCase):
             layout="numbered",
         )
 
-        self.assertEqual(original_vertical_slots, resized.slots[1:])
-        self.assertEqual(crossword.secrets, resized.secrets)
-        secret_slot = resized.slots[0]
-        self.assertEqual("h1", secret_slot.identifier)
-        self.assertEqual(Coordinate(3, 1), secret_slot.start)
+        self.assertEqual(1, len(resized.secrets))
+        secret_part = resized.secrets[0].parts[0]
+        self.assertIsInstance(secret_part, CrosswordSecretSlotPart)
+        assert isinstance(secret_part, CrosswordSecretSlotPart)
+        secret_slot = next(
+            slot
+            for slot in resized.slots
+            if slot.identifier == secret_part.slot_identifier
+        )
+        self.assertEqual(Coordinate(1, 1), secret_slot.start)
+        self.assertEqual("vertical", secret_slot.direction)
         self.assertEqual("external", secret_slot.clue_placement)
         self.assertEqual("ABC", secret_slot.answer)
+        self.assertEqual(
+            {"YYB", "ZZC", "WWD"},
+            {
+                slot.answer
+                for slot in resized.slots
+                if slot.direction == "vertical" and slot is not secret_slot
+            },
+        )
         grid = create_grid_from_crossword(resized)
         assert grid.grid.cells is not None
-        secret_row = grid.grid.cells[2]
         self.assertTrue(
-            all(isinstance(cell, SecretCell) for cell in secret_row[:3])
+            all(isinstance(row[0], SecretCell) for row in grid.grid.cells)
         )
-        self.assertIsNotNone(secret_row[0].number)
-        self.assertIn("right", secret_row[2].bars)
+        candidates = generate_template_candidates(
+            width=4,
+            height=3,
+            layout="numbered",
+            required_lengths=(3,),
+        )
+        self.assertIn(
+            _crossword_layout_signature(resized),
+            tuple(_crossword_layout_signature(item) for item in candidates),
+        )
 
     def test_swedish_resize_adds_slot_and_legend_to_preserve_secret(
         self,
@@ -5074,6 +5206,7 @@ class GuiTest(unittest.TestCase):
             3,
             3,
             layout="numbered",
+            creation_mode="generated",
         )
         self.assertIs(new_template, window._crossword)
         self.assertEqual("numbered", window._template_layout)
@@ -5107,6 +5240,7 @@ class GuiTest(unittest.TestCase):
             5,
             4,
             layout="swedish",
+            creation_mode="empty",
         )
         self.assertIs(resized, window._crossword)
 
@@ -5152,11 +5286,11 @@ class GuiTest(unittest.TestCase):
     ) -> None:
         window = Mock()
         window._save_inline_slot_edit.return_value = True
-        crossword = create_blank_template(CrosswordSettings(3, 3), "numbered")
+        crossword = create_blank_template(CrosswordSettings(4, 3), "numbered")
         crossword = fill_crossword_slot(
             crossword,
             "h1",
-            "ABC",
+            "ABCD",
             "První řádek",
         )
         window._crossword = crossword
@@ -5173,7 +5307,7 @@ class GuiTest(unittest.TestCase):
             for slot in window._crossword.slots
             if slot.identifier == "h1"
         )
-        self.assertEqual("ABC", resized_slot.answer)
+        self.assertEqual("ABCD", resized_slot.answer)
         self.assertEqual("První řádek", resized_slot.clue)
         self.assertEqual("h1", window._selected_slot_identifier)
         window._set_dirty.assert_called_once_with(True)

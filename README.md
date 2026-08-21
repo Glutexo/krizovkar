@@ -101,14 +101,14 @@ uložit a znovu použít jako základ další práce.
 Rozměr křížovky se mění tažením kteréhokoli okraje náhledu; levý a pravý
 okraj mění počet sloupců, horní a dolní počet řádků a rohy oba rozměry
 současně. Nadpis náhledu uvádí aktuální rozměr jako počet sloupců × počet
-řádků. Nový rozměr se použije po puštění tlačítka. Změna rozměru znovu
-zachová všechna hesla, která se i s případnou vepsanou legendou vejdou do
-nové mřížky, a odebere pouze přesahující hesla. Pokud přesahovalo místo
-tajenky, editor ji zkusí přesunout do vhodného stávajícího nebo nového místa;
-nové švédské místo dostane legendové pole a číslované místo odpovídající
-číslo a potřebný předěl. Při pouhém zvětšení zůstane nově přidaná
-plocha prázdná. Celou změnu lze vrátit pomocí **Zpět**. Mřížkový YAML,
-upravitelný LaTeX i PDF lze kdykoli exportovat
+řádků. Nový rozměr se použije po puštění tlačítka. Pro nový rozměr editor
+vybere jednu z podporovaných kosterních šablon, které by mohl vytvořit také
+při generování nové křížovky. Novou plochu proto řádně dogeneruje a nenechá
+například celý přidaný sloupec prázdný. Obsah zachová v místech, jejichž
+poloha, směr, délka i způsob uvedení legendy se nezměnily. Pokud se změnilo
+místo tajenky, editor ji zkusí přesunout do jiného vhodného místa nové
+šablony; tajenka má přitom přednost před běžným heslem. Celou změnu lze vrátit
+pomocí **Zpět**. Mřížkový YAML, upravitelný LaTeX i PDF lze kdykoli exportovat
 jako křížovku bez písmen nebo řešení se současnými písmeny. Písmenné
 varianty ukážou právě doplněná písmena a ostatní pole ponechají prázdná.
 

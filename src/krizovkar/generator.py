@@ -912,6 +912,49 @@ def _numbered_template_from_layout(
     )
 
 
+def generate_template_candidates(
+    *,
+    width: int,
+    height: int,
+    layout: SpecificationLayout,
+    required_lengths: tuple[int, ...] = (),
+    limit: int | None = None,
+) -> tuple[CrosswordDocument, ...]:
+    """Vytvoří seřazené husté šablony vhodné pro porovnání rozvržení."""
+
+    if layout not in {"swedish", "numbered"}:
+        raise GenerationError(f"nepodporované rozvržení {layout!r}")
+    if limit is not None and limit < 1:
+        raise GenerationError("limit kandidátů musí být kladný")
+    try:
+        if layout == "swedish":
+            layouts = create_dense_swedish_layout_candidates(
+                width,
+                height,
+                required_lengths=required_lengths,
+            )
+            if limit is not None:
+                layouts = layouts[:limit]
+            return tuple(
+                _swedish_template_from_layout(candidate)
+                for candidate in layouts
+            )
+
+        layouts = create_dense_numbered_layout_candidates(
+            width,
+            height,
+            required_lengths=required_lengths,
+        )
+        if limit is not None:
+            layouts = layouts[:limit]
+        return tuple(
+            _numbered_template_from_layout(candidate)
+            for candidate in layouts
+        )
+    except LayoutError as error:
+        raise GenerationError(str(error)) from error
+
+
 def _usable_entries(
     dictionary: CrosswordDictionary,
     control: GenerationControl | None = None,
