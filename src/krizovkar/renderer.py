@@ -30,10 +30,11 @@ from krizovkar.model import (
 
 CELL_SIZE_MM = 12.0
 CELL_PADDING_MM = 0.6
+LEGEND_CELL_PADDING_MM = 0.9
 CELL_TEXT_FONT_SIZE_PT = 6.0
 CELL_TEXT_LINE_HEIGHT_PT = 6.3
-LEGEND_TEXT_FONT_SIZE_PT = 8.0
-LEGEND_TEXT_LINE_HEIGHT_PT = 8.4
+LEGEND_TEXT_FONT_SIZE_PT = 7.5
+LEGEND_TEXT_LINE_HEIGHT_PT = 7.9
 MINIMUM_CLUE_AREA_WIDTH_MM = 100.0
 CLUE_COLUMN_GAP_MM = 6.0
 CLUE_GRID_GAP_MM = 7.0
@@ -337,9 +338,9 @@ def _append_legend_cell(
             rf"{_point(left + 1.0, separator_y)};"
         )
 
-    text_width_mm = CELL_SIZE_MM - 2 * CELL_PADDING_MM
+    text_width_mm = CELL_SIZE_MM - 2 * LEGEND_CELL_PADDING_MM
     text_height_mm = max(
-        section_height * CELL_SIZE_MM - 2 * CELL_PADDING_MM,
+        section_height * CELL_SIZE_MM - 2 * LEGEND_CELL_PADDING_MM,
         0.1,
     )
     for section_index, text in enumerate(cell.texts):

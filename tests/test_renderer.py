@@ -88,7 +88,7 @@ class LatexSourceTest(unittest.TestCase):
         self.assertIn(r"\fill[black!7]", legend)
         self.assertIn(r"\KrizovkarCellText", legend)
         self.assertIn(
-            r"\KrizovkarCellText{10.8mm}{4.8mm}{8pt}{8.4pt}{SA\-VEC}",
+            r"\KrizovkarCellText{10.2mm}{4.2mm}{7.5pt}{7.9pt}{SA\-VEC}",
             legend,
         )
         self.assertIn(r"\textbf{Pomůcka:}", help_source)
