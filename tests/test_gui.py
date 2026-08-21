@@ -1497,7 +1497,7 @@ class GuiTest(unittest.TestCase):
         self.assertEqual("break", result)
         self.assertTrue(dialog._control.cancelled)
         dialog._status_value.set.assert_called_once_with(
-            "Přerušuji generování…"
+            "Přerušuji vyplňování…"
         )
         dialog._cancel_button.state.assert_called_once_with(["disabled"])
 

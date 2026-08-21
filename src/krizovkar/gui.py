@@ -243,7 +243,7 @@ class _ExportAction:
 
 @dataclass(frozen=True, slots=True)
 class _FillingTaskOutcome:
-    """Výsledek generování předaný z pracovního vlákna GUI."""
+    """Výsledek vyplňování předaný z pracovního vlákna GUI."""
 
     document: CrosswordDocument | None = None
     error: Exception | None = None
@@ -745,7 +745,7 @@ class _FillingProgressDialog(tk.Toplevel):
         self._control = control
         self._outcomes = outcomes
         self.outcome: _FillingTaskOutcome | None = None
-        self.title("Generování křížovky")
+        self.title("Vyplňování křížovky")
         self.transient(parent.winfo_toplevel())
         self.resizable(False, False)
         _inherit_macos_menu_bar(self)
@@ -755,7 +755,7 @@ class _FillingProgressDialog(tk.Toplevel):
         content.columnconfigure(0, weight=1)
         self._status_value = tk.StringVar(
             master=self,
-            value="Křížovka se generuje…",
+            value="Křížovka se vyplňuje…",
         )
         ttk.Label(
             content,
@@ -792,7 +792,7 @@ class _FillingProgressDialog(tk.Toplevel):
     def _request_cancel(self, _event: tk.Event[tk.Misc] | None = None) -> str:
         if not self._control.cancelled:
             self._control.cancel()
-            self._status_value.set("Přerušuji generování…")
+            self._status_value.set("Přerušuji vyplňování…")
             self._cancel_button.state(["disabled"])
         return "break"
 
