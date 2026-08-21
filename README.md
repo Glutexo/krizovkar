@@ -182,6 +182,12 @@ slovník neobsahuje potřebné délky hesel nebo z něj ani po těchto krocích 
 sestavit všechna křížení, editor vysvětlí chybu a dokument nezmění. Celé
 automatické doplnění je jeden krok historie.
 
+Při úplném plnění — jak u nové **Vyplněné** křížovky, tak touto
+volbou editoru — zůstává aplikace ovladatelná. Samostatný dialog průběžně
+ukazuje počet vyzkoušených kombinací a nabízí tlačítko **Přerušit**.
+Přerušení je kooperativní, ponechá dokument beze změny a nevytváří ani
+násilně neukončuje samostatný proces; hledání běží v pracovním vlákně.
+
 Dialogy se slovníkem nabízejí soubory nalezené v uživatelské datové složce
 Křížovkáře. Na macOS je to
 `~/Library/Application Support/krizovkar/dictionaries`, ve Windows

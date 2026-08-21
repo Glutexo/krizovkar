@@ -11,6 +11,8 @@ from pathlib import Path
 from krizovkar.dictionary import CrosswordDictionary, DictionaryEntry
 from krizovkar.generator import (
     FillingError,
+    GenerationCancelled,
+    GenerationControl,
     GenerationError,
     SecretRequirement,
     create_grid_from_crossword,
@@ -337,6 +339,45 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
             ("X", "B", "X"),
             tuple(grid.grid.cells[row][1].value for row in range(3)),
         )
+
+    def test_reports_tried_combinations_while_filling(self) -> None:
+        crossword = generate_empty_template(
+            width=2,
+            height=2,
+            layout="numbered",
+        )
+        dictionary = CrosswordDictionary(
+            entries=tuple(
+                DictionaryEntry(answer=answer, clues=(answer,))
+                for answer in ("AB", "CD", "AC", "BD")
+            )
+        )
+        control = GenerationControl()
+
+        filled = generate_filled_crossword(
+            crossword,
+            dictionary,
+            control=control,
+        )
+
+        self.assertTrue(all(slot.answer is not None for slot in filled.slots))
+        self.assertGreater(control.tried_combinations, 0)
+
+    def test_cancelled_filling_stops_cooperatively(self) -> None:
+        crossword = generate_empty_template(
+            width=2,
+            height=2,
+            layout="numbered",
+        )
+        control = GenerationControl()
+        control.cancel()
+
+        with self.assertRaises(GenerationCancelled):
+            generate_filled_crossword(
+                crossword,
+                CrosswordDictionary(entries=()),
+                control=control,
+            )
 
     def test_flexible_fill_replaces_only_blocking_fixed_answer(self) -> None:
         crossword = CrosswordDocument(

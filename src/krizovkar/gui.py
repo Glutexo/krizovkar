@@ -14,7 +14,10 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from io import StringIO
 from pathlib import Path
+from queue import Empty as QueueEmpty
+from queue import Queue
 from tempfile import TemporaryDirectory
+from threading import Thread
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Literal, cast
 
@@ -29,6 +32,8 @@ from krizovkar.generator import (
     DEFAULT_GRID_WIDTH,
     DEFAULT_SEED,
     FillingError,
+    GenerationCancelled,
+    GenerationControl,
     GenerationError,
     SecretGenerationResult,
     SecretRequirement,
@@ -80,6 +85,7 @@ _MAX_CROSSWORD_DIMENSION = 50
 _GENERATION_CONTROLS_INDENT = 24
 # Až devatenáct číslic výchozího semene a malá rezerva.
 _GENERATION_ENTRY_WIDTH = 22
+_GENERATION_PROGRESS_POLL_MS = 50
 _MAX_DOCUMENT_HISTORY = 200
 _MAX_RECENT_DOCUMENTS = 10
 _MINIMUM_TK_VERSION = 9.0
@@ -233,6 +239,15 @@ class _ExportAction:
 
     label: str
     command: Callable[[], None]
+
+
+@dataclass(frozen=True, slots=True)
+class _FillingTaskOutcome:
+    """Výsledek generování předaný z pracovního vlákna GUI."""
+
+    document: CrosswordDocument | None = None
+    error: Exception | None = None
+    cancelled: bool = False
 
 
 def _send_pdf_to_printer(
@@ -711,6 +726,144 @@ def _inherit_macos_menu_bar(window: tk.Toplevel) -> None:
     menu = owner.cget("menu")
     if menu:
         window.configure(menu=menu)
+
+
+def _format_tried_combinations(count: int) -> str:
+    return f"Vyzkoušených kombinací: {count:,}".replace(",", "\N{NO-BREAK SPACE}")
+
+
+class _FillingProgressDialog(tk.Toplevel):
+    """Zobrazuje průběh a kooperativně přerušuje plnění."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        control: GenerationControl,
+        outcomes: Queue[_FillingTaskOutcome],
+    ) -> None:
+        super().__init__(parent)
+        self._control = control
+        self._outcomes = outcomes
+        self.outcome: _FillingTaskOutcome | None = None
+        self.title("Generování křížovky")
+        self.transient(parent.winfo_toplevel())
+        self.resizable(False, False)
+        _inherit_macos_menu_bar(self)
+
+        content = ttk.Frame(self, padding=16)
+        content.grid(row=0, column=0, sticky="nsew")
+        content.columnconfigure(0, weight=1)
+        self._status_value = tk.StringVar(
+            master=self,
+            value="Křížovka se generuje…",
+        )
+        ttk.Label(
+            content,
+            textvariable=self._status_value,
+        ).grid(row=0, column=0, sticky="w")
+        self._combination_value = tk.StringVar(
+            master=self,
+            value=_format_tried_combinations(0),
+        )
+        ttk.Label(
+            content,
+            textvariable=self._combination_value,
+        ).grid(row=1, column=0, sticky="w", pady=(10, 0))
+        self._progress = ttk.Progressbar(
+            content,
+            mode="indeterminate",
+            length=320,
+        )
+        self._progress.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        self._cancel_button = ttk.Button(
+            content,
+            text="Přerušit",
+            command=self._request_cancel,
+        )
+        self._cancel_button.grid(row=3, column=0, sticky="e", pady=(16, 0))
+
+        self.protocol("WM_DELETE_WINDOW", self._request_cancel)
+        self.bind("<Escape>", self._request_cancel)
+        self.wait_visibility()
+        self.grab_set()
+        self._progress.start()
+        self.after(0, self._poll)
+
+    def _request_cancel(self, _event: tk.Event[tk.Misc] | None = None) -> str:
+        if not self._control.cancelled:
+            self._control.cancel()
+            self._status_value.set("Přerušuji generování…")
+            self._cancel_button.state(["disabled"])
+        return "break"
+
+    def _poll(self) -> None:
+        self._combination_value.set(
+            _format_tried_combinations(self._control.tried_combinations)
+        )
+        try:
+            outcome = self._outcomes.get_nowait()
+        except QueueEmpty:
+            self.after(_GENERATION_PROGRESS_POLL_MS, self._poll)
+            return
+        self.outcome = outcome
+        self._progress.stop()
+        self.grab_release()
+        self.destroy()
+
+
+def _run_filling_task(
+    parent: tk.Misc,
+    operation: Callable[[GenerationControl], CrosswordDocument],
+) -> CrosswordDocument | None:
+    """Spustí plnění ve vlákně a obsluhuje jeho modální průběh."""
+
+    control = GenerationControl()
+    outcomes: Queue[_FillingTaskOutcome] = Queue(maxsize=1)
+    previous_grab = parent.grab_current()
+    dialog = _FillingProgressDialog(parent, control, outcomes)
+
+    def work() -> None:
+        try:
+            document = operation(control)
+        except GenerationCancelled:
+            outcome = _FillingTaskOutcome(cancelled=True)
+        # Všechny chyby musí přejít zpět do vlákna Tk; jinak by
+        # dialog po neočekávané výjimce zůstal otevřený navždy.
+        except Exception as error:  # noqa: BLE001
+            outcome = (
+                _FillingTaskOutcome(cancelled=True)
+                if control.cancelled
+                else _FillingTaskOutcome(error=error)
+            )
+        else:
+            outcome = (
+                _FillingTaskOutcome(cancelled=True)
+                if control.cancelled
+                else _FillingTaskOutcome(document=document)
+            )
+        outcomes.put(outcome)
+
+    Thread(
+        target=work,
+        name="krizovkar-filling",
+        daemon=True,
+    ).start()
+    dialog.wait_window()
+    if previous_grab is not None:
+        try:
+            if previous_grab.winfo_exists():
+                previous_grab.grab_set()
+        except tk.TclError:
+            pass
+
+    outcome = dialog.outcome
+    if outcome is None or outcome.cancelled or control.cancelled:
+        control.cancel()
+        return None
+    if outcome.error is not None:
+        raise outcome.error
+    assert outcome.document is not None
+    return outcome.document
 
 
 def _bind_text_entry_context_menu(
@@ -1637,15 +1790,33 @@ class TemplateGenerationDialog(simpledialog.Dialog):
                 if dictionary_path is not None
                 else None
             )
-            self._new_template = NewTemplateResult(
-                document=create_initial_crossword(
+            if content_mode == "filled":
+                document = _run_filling_task(
+                    self,
+                    lambda control: create_initial_crossword(
+                        settings,
+                        layout,
+                        content_mode,
+                        seed=seed,
+                        secret=secret,
+                        dictionary=dictionary,
+                        control=control,
+                    ),
+                )
+                if document is None:
+                    self._new_template = None
+                    return False
+            else:
+                document = create_initial_crossword(
                     settings,
                     layout,
                     content_mode,
                     seed=seed,
                     secret=secret,
                     dictionary=dictionary,
-                ),
+                )
+            self._new_template = NewTemplateResult(
+                document=document,
                 layout=layout,
                 creation_mode=(
                     "empty" if content_mode == "empty" else "generated"
@@ -1719,6 +1890,7 @@ def create_blank_template(
     randomize_layout: bool = False,
     secret: SecretRequirement | None = None,
     dictionary: CrosswordDictionary | None = None,
+    control: GenerationControl | None = None,
 ) -> CrosswordDocument:
     """Vygeneruje hustou prázdnou křížovku z rozvržení a rozměru."""
 
@@ -1737,6 +1909,7 @@ def create_blank_template(
             randomize_layout=randomize_layout,
             secret=secret,
             dictionary=dictionary,
+            control=control,
         )
     except GenerationError as error:
         raise GuiInputError(str(error)) from error
@@ -1750,6 +1923,7 @@ def create_new_template(
     seed: int | None = None,
     secret: SecretRequirement | None = None,
     dictionary: CrosswordDictionary | None = None,
+    control: GenerationControl | None = None,
 ) -> CrosswordDocument:
     """Vytvoří prázdnou nebo pseudonáhodně rozvrženou křížovku."""
 
@@ -1770,6 +1944,7 @@ def create_new_template(
         randomize_layout=True,
         secret=secret,
         dictionary=dictionary,
+        control=control,
     )
 
 
@@ -1781,6 +1956,7 @@ def create_initial_crossword(
     seed: int | None = None,
     secret: SecretRequirement | None = None,
     dictionary: CrosswordDictionary | None = None,
+    control: GenerationControl | None = None,
 ) -> CrosswordDocument:
     """Vytvoří křížovku s obsahem vybraným v novém dialogu."""
 
@@ -1808,12 +1984,18 @@ def create_initial_crossword(
         seed=seed,
         secret=secret,
         dictionary=dictionary,
+        control=control,
     )
     if content_mode == "secret":
         return crossword
     assert dictionary is not None
     try:
-        return generate_filled_crossword(crossword, dictionary, seed=seed)
+        return generate_filled_crossword(
+            crossword,
+            dictionary,
+            seed=seed,
+            control=control,
+        )
     except FillingError as error:
         raise GuiInputError(str(error)) from error
 
@@ -4815,13 +4997,15 @@ class CrosswordDocumentWindow(ttk.Frame):
         if filling_input is None:
             return
 
-        self.root.configure(cursor="watch")
-        self.root.update_idletasks()
         try:
-            filled = generate_filled_crossword(
-                crossword,
-                filling_input.dictionary,
-                seed=filling_input.seed,
+            filled = _run_filling_task(
+                self.root,
+                lambda control: generate_filled_crossword(
+                    crossword,
+                    filling_input.dictionary,
+                    seed=filling_input.seed,
+                    control=control,
+                ),
             )
         except FillingError as error:
             self._show_action_error(
@@ -4829,8 +5013,9 @@ class CrosswordDocumentWindow(ttk.Frame):
                 str(error),
             )
             return
-        finally:
-            self.root.configure(cursor="")
+
+        if filled is None:
+            return
 
         if filled == crossword:
             return

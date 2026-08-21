@@ -7,6 +7,7 @@ import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from itertools import pairwise
+from threading import Event, Lock
 from typing import Literal
 
 from krizovkar.alphabet import SUPPORTED_SINGLE_LETTERS, split_answer_letters
@@ -77,6 +78,40 @@ class GenerationError(RuntimeError):
 
 class FillingError(RuntimeError):
     """Křížovku se nepodařilo vyplnit."""
+
+
+class GenerationCancelled(RuntimeError):
+    """Probíhající generování bylo kooperativně přerušeno."""
+
+
+class GenerationControl:
+    """Sdílí počet kombinací a požadavek na přerušení generování."""
+
+    def __init__(self) -> None:
+        self._cancelled = Event()
+        self._combination_lock = Lock()
+        self._tried_combinations = 0
+
+    @property
+    def tried_combinations(self) -> int:
+        with self._combination_lock:
+            return self._tried_combinations
+
+    @property
+    def cancelled(self) -> bool:
+        return self._cancelled.is_set()
+
+    def cancel(self) -> None:
+        self._cancelled.set()
+
+    def _check_cancelled(self) -> None:
+        if self.cancelled:
+            raise GenerationCancelled
+
+    def _try_combination(self) -> None:
+        self._check_cancelled()
+        with self._combination_lock:
+            self._tried_combinations += 1
 
 
 class _SearchFailed(RuntimeError):
@@ -528,9 +563,12 @@ def generate_swedish_template(
     secret: SecretRequirement | None = None,
     randomize_layout: bool = False,
     dictionary: CrosswordDictionary | None = None,
+    control: GenerationControl | None = None,
 ) -> CrosswordDocument:
     """Vytvoří nevyplněnou křížovku s vepsanými legendami."""
 
+    if control is not None:
+        control._check_cancelled()
     if secret is None:
         try:
             layout = (
@@ -546,10 +584,14 @@ def generate_swedish_template(
 
     _validate_secret_requirement(secret)
     entries_by_length = (
-        _usable_entries(dictionary) if dictionary is not None else None
+        _usable_entries(dictionary, control)
+        if dictionary is not None
+        else None
     )
     last_error: Exception | None = None
-    for part_lengths in _secret_length_options(secret):
+    for part_lengths in _secret_length_options(secret, control):
+        if control is not None:
+            control._check_cancelled()
         try:
             layouts = create_dense_swedish_layout_candidates(
                 width,
@@ -563,12 +605,15 @@ def generate_swedish_template(
             layouts = list(layouts)
             random.Random(seed).shuffle(layouts)
         for layout in layouts:
+            if control is not None:
+                control._check_cancelled()
             try:
                 return _place_secret_in_template(
                     _swedish_template_from_layout(layout),
                     secret,
                     seed=seed,
                     entries_by_length=entries_by_length,
+                    control=control,
                 )
             except GenerationError as error:
                 last_error = error
@@ -687,9 +732,12 @@ def generate_numbered_template(
     secret: SecretRequirement | None = None,
     randomize_layout: bool = False,
     dictionary: CrosswordDictionary | None = None,
+    control: GenerationControl | None = None,
 ) -> CrosswordDocument:
     """Vytvoří nevyplněnou křížovku s vnějšími legendami."""
 
+    if control is not None:
+        control._check_cancelled()
     if secret is None:
         try:
             layout = (
@@ -705,10 +753,14 @@ def generate_numbered_template(
 
     _validate_secret_requirement(secret)
     entries_by_length = (
-        _usable_entries(dictionary) if dictionary is not None else None
+        _usable_entries(dictionary, control)
+        if dictionary is not None
+        else None
     )
     last_error: Exception | None = None
-    for part_lengths in _secret_length_options(secret):
+    for part_lengths in _secret_length_options(secret, control):
+        if control is not None:
+            control._check_cancelled()
         try:
             layouts = create_dense_numbered_layout_candidates(
                 width,
@@ -722,12 +774,15 @@ def generate_numbered_template(
             layouts = list(layouts)
             random.Random(seed).shuffle(layouts)
         for layout in layouts:
+            if control is not None:
+                control._check_cancelled()
             try:
                 return _place_secret_in_template(
                     _numbered_template_from_layout(layout),
                     secret,
                     seed=seed,
                     entries_by_length=entries_by_length,
+                    control=control,
                 )
             except GenerationError as error:
                 last_error = error
@@ -859,9 +914,12 @@ def _numbered_template_from_layout(
 
 def _usable_entries(
     dictionary: CrosswordDictionary,
+    control: GenerationControl | None = None,
 ) -> dict[int, tuple[_Entry, ...]]:
     entries: dict[int, list[_Entry]] = defaultdict(list)
-    for entry in dictionary.entries:
+    for index, entry in enumerate(dictionary.entries):
+        if control is not None and index % 1024 == 0:
+            control._check_cancelled()
         letters = split_answer_letters(entry.answer)
         clue = next(
             (clue for clue in entry.clues if len(clue) <= MAX_CLUE_LENGTH),
@@ -871,6 +929,8 @@ def _usable_entries(
             entries[len(letters)].append(
                 _Entry(answer=entry.answer, clue=clue, letters=letters)
             )
+    if control is not None:
+        control._check_cancelled()
     return {length: tuple(values) for length, values in entries.items()}
 
 
@@ -902,6 +962,7 @@ def _part_lengths_from_word_counts(
 def _word_partitions(
     words: tuple[str, ...],
     available_lengths: frozenset[int],
+    control: GenerationControl | None = None,
 ) -> tuple[tuple[tuple[int, ...], tuple[int, ...]], ...]:
     results: list[tuple[tuple[int, ...], tuple[int, ...]]] = []
     unbreakable_boundaries = unbreakable_word_boundaries(words)
@@ -911,10 +972,14 @@ def _word_partitions(
         lengths: tuple[int, ...],
         counts: tuple[int, ...],
     ) -> None:
+        if control is not None:
+            control._check_cancelled()
         if word_index == len(words):
             results.append((lengths, counts))
             return
         for following_index in range(word_index + 1, len(words) + 1):
+            if control is not None:
+                control._try_combination()
             if following_index in unbreakable_boundaries:
                 continue
             part = "".join(words[word_index:following_index])
@@ -930,7 +995,10 @@ def _word_partitions(
     return tuple(sorted(results, key=lambda partition: len(partition[0])))
 
 
-def _total_length_partitions(total_length: int) -> tuple[tuple[int, ...], ...]:
+def _total_length_partitions(
+    total_length: int,
+    control: GenerationControl | None = None,
+) -> tuple[tuple[int, ...], ...]:
     results = []
 
     def search(
@@ -938,6 +1006,8 @@ def _total_length_partitions(total_length: int) -> tuple[tuple[int, ...], ...]:
         minimum: int,
         lengths: tuple[int, ...],
     ) -> None:
+        if control is not None:
+            control._check_cancelled()
         if remaining == 0:
             results.append(lengths)
             return
@@ -945,6 +1015,8 @@ def _total_length_partitions(total_length: int) -> tuple[tuple[int, ...], ...]:
             minimum,
             min(MAX_SEGMENT_LENGTH, remaining) + 1,
         ):
+            if control is not None:
+                control._try_combination()
             search(remaining - length, length, (*lengths, length))
 
     search(total_length, MIN_SEGMENT_LENGTH, ())
@@ -965,9 +1037,10 @@ def _total_length_partitions(total_length: int) -> tuple[tuple[int, ...], ...]:
 
 def _secret_length_options(
     requirement: SecretRequirement,
+    control: GenerationControl | None = None,
 ) -> tuple[tuple[int, ...], ...]:
     if requirement.total_length is not None:
-        return _total_length_partitions(requirement.total_length)
+        return _total_length_partitions(requirement.total_length, control)
     if requirement.part_lengths:
         return (requirement.part_lengths,)
     if requirement.part_word_counts:
@@ -980,6 +1053,7 @@ def _secret_length_options(
     partitions = _word_partitions(
         requirement.words,
         frozenset(range(MIN_SEGMENT_LENGTH, MAX_SEGMENT_LENGTH + 1)),
+        control,
     )
     return tuple(lengths for lengths, _ in partitions)
 
@@ -987,12 +1061,15 @@ def _secret_length_options(
 def _select_slots_for_lengths(
     slots: list[WordSlot],
     lengths: tuple[int, ...],
+    control: GenerationControl | None = None,
 ) -> tuple[WordSlot, ...] | None:
     selected: list[WordSlot] = []
     used_identifiers: set[str] = set()
     used_coordinates: set[GridCoordinate] = set()
 
     def search(part_index: int) -> bool:
+        if control is not None:
+            control._check_cancelled()
         if part_index == len(lengths):
             return True
         for slot in slots:
@@ -1004,6 +1081,8 @@ def _select_slots_for_lengths(
             coordinates = set(_slot_coordinates(slot))
             if coordinates & used_coordinates:
                 continue
+            if control is not None:
+                control._try_combination()
             selected.append(slot)
             used_identifiers.add(slot.identifier)
             used_coordinates.update(coordinates)
@@ -1021,11 +1100,14 @@ def _select_slot_count_for_total_length(
     slots: list[WordSlot],
     total_length: int,
     part_count: int,
+    control: GenerationControl | None = None,
 ) -> tuple[WordSlot, ...] | None:
     selected: list[WordSlot] = []
     used_coordinates: set[GridCoordinate] = set()
 
     def search(start_index: int, remaining: int) -> bool:
+        if control is not None:
+            control._check_cancelled()
         if len(selected) == part_count:
             return remaining == 0
         if remaining <= 0:
@@ -1037,6 +1119,8 @@ def _select_slot_count_for_total_length(
             coordinates = set(_slot_coordinates(slot))
             if coordinates & used_coordinates:
                 continue
+            if control is not None:
+                control._try_combination()
             selected.append(slot)
             used_coordinates.update(coordinates)
             if search(slot_index + 1, remaining - slot.length):
@@ -1051,14 +1135,18 @@ def _select_slot_count_for_total_length(
 def _select_slots_for_total_length(
     slots: list[WordSlot],
     total_length: int,
+    control: GenerationControl | None = None,
 ) -> tuple[WordSlot, ...] | None:
     minimum_length = min(slot.length for slot in slots)
     maximum_parts = min(len(slots), total_length // minimum_length)
     for part_count in range(1, maximum_parts + 1):
+        if control is not None:
+            control._check_cancelled()
         selected = _select_slot_count_for_total_length(
             slots,
             total_length,
             part_count,
+            control,
         )
         if selected is not None:
             return selected
@@ -1165,6 +1253,7 @@ def _secret_slot_option(
 def _secret_partitions_for_slots(
     requirement: SecretRequirement,
     slots: tuple[WordSlot, ...],
+    control: GenerationControl | None = None,
 ) -> tuple[tuple[tuple[int, ...], tuple[int, ...]], ...]:
     if requirement.part_word_counts:
         lengths = _part_lengths_from_word_counts(
@@ -1175,6 +1264,7 @@ def _secret_partitions_for_slots(
     return _word_partitions(
         requirement.words,
         frozenset(slot.length for slot in slots),
+        control,
     )
 
 
@@ -1195,6 +1285,7 @@ def _secret_placement_has_dictionary_candidates(
     requirement: SecretRequirement,
     placement: _ExistingSecretPlacement,
     entries_by_length: dict[int, tuple[_Entry, ...]],
+    control: GenerationControl | None = None,
 ) -> bool:
     """Ověří kandidáty pro prázdné sloty dotčené celou tajenkou."""
 
@@ -1237,23 +1328,30 @@ def _secret_placement_has_dictionary_candidates(
     )
     used_answers = frozenset(fixed_answers.values())
     for slot in crossword.slots:
+        if control is not None:
+            control._check_cancelled()
         if slot.identifier in fixed_answers:
             continue
         coordinates = _slot_coordinates(slot)
         if secret_coordinates.isdisjoint(coordinates):
             continue
-        if not any(
-            entry.answer not in used_answers
-            and all(
+        has_candidate = False
+        for index, entry in enumerate(entries_by_length.get(slot.length, ())):
+            if control is not None and index % 1024 == 0:
+                control._check_cancelled()
+            if entry.answer in used_answers:
+                continue
+            if all(
                 fixed_letters.get(coordinate, letter) == letter
                 for coordinate, letter in zip(
                     coordinates,
                     entry.letters,
                     strict=True,
                 )
-            )
-            for entry in entries_by_length.get(slot.length, ())
-        ):
+            ):
+                has_candidate = True
+                break
+        if not has_candidate:
             return False
     return True
 
@@ -1265,7 +1363,10 @@ def _find_existing_secret_placement(
     empty_only: bool,
     seed: int,
     entries_by_length: dict[int, tuple[_Entry, ...]] | None = None,
+    control: GenerationControl | None = None,
 ) -> _ExistingSecretPlacement | None:
+    if control is not None:
+        control._check_cancelled()
     slots = list(crossword.slots)
     random.Random(seed).shuffle(slots)
     slot_tuple = tuple(slots)
@@ -1279,7 +1380,10 @@ def _find_existing_secret_placement(
     for lengths, word_counts in _secret_partitions_for_slots(
         requirement,
         slot_tuple,
+        control,
     ):
+        if control is not None:
+            control._check_cancelled()
         answers = _part_answers(requirement.words, word_counts)
         options_by_part = []
         for length, answer in zip(lengths, answers, strict=True):
@@ -1319,6 +1423,8 @@ def _find_existing_secret_placement(
             counts: tuple[int, ...] = word_counts,
         ) -> None:
             nonlocal best
+            if control is not None:
+                control._check_cancelled()
             if best is not None and len(replacements) >= len(
                 best.replacements
             ):
@@ -1335,6 +1441,7 @@ def _find_existing_secret_placement(
                         requirement,
                         candidate,
                         entries_by_length,
+                        control,
                     )
                 ):
                     return
@@ -1343,6 +1450,8 @@ def _find_existing_secret_placement(
             for option in options[part_index]:
                 if option.coordinates & used_coordinates:
                     continue
+                if control is not None:
+                    control._try_combination()
                 search(
                     part_index + 1,
                     used_coordinates | option.coordinates,
@@ -1601,9 +1710,12 @@ def _place_secret_in_template(
     *,
     seed: int,
     entries_by_length: dict[int, tuple[_Entry, ...]] | None,
+    control: GenerationControl | None = None,
 ) -> CrosswordDocument:
     """Umístí tajenku do nepřekrývajících se slotů křížovky."""
 
+    if control is not None:
+        control._check_cancelled()
     if template.secrets:
         raise GenerationError("křížovka už obsahuje připravenou tajenku")
     _validate_secret_requirement(requirement)
@@ -1614,6 +1726,7 @@ def _place_secret_in_template(
             empty_only=False,
             seed=seed,
             entries_by_length=entries_by_length,
+            control=control,
         )
         if placement is None or placement.replacements:
             raise GenerationError(
@@ -1635,23 +1748,31 @@ def _place_secret_in_template(
         selected = _select_slots_for_total_length(
             slots,
             requirement.total_length,
+            control,
         )
     elif requirement.part_lengths:
-        selected = _select_slots_for_lengths(slots, requirement.part_lengths)
+        selected = _select_slots_for_lengths(
+            slots,
+            requirement.part_lengths,
+            control,
+        )
     elif requirement.part_word_counts:
         lengths = _part_lengths_from_word_counts(
             requirement.words,
             requirement.part_word_counts,
         )
-        selected = _select_slots_for_lengths(slots, lengths)
+        selected = _select_slots_for_lengths(slots, lengths, control)
         word_counts = requirement.part_word_counts
     else:
         available_lengths = frozenset(slot.length for slot in slots)
         for lengths, counts in _word_partitions(
             requirement.words,
             available_lengths,
+            control,
         ):
-            selected = _select_slots_for_lengths(slots, lengths)
+            if control is not None:
+                control._check_cancelled()
+            selected = _select_slots_for_lengths(slots, lengths, control)
             if selected is not None:
                 word_counts = counts
                 break
@@ -1708,6 +1829,7 @@ def place_secret_in_template(
     *,
     seed: int = DEFAULT_SEED,
     dictionary: CrosswordDictionary | None = None,
+    control: GenerationControl | None = None,
 ) -> CrosswordDocument:
     """Umístí tajenku do nepřekrývajících se slotů křížovky."""
 
@@ -1716,18 +1838,23 @@ def place_secret_in_template(
         requirement,
         seed=seed,
         entries_by_length=(
-            _usable_entries(dictionary) if dictionary is not None else None
+            _usable_entries(dictionary, control)
+            if dictionary is not None
+            else None
         ),
+        control=control,
     )
 
 
 def _word_counts_for_exact_lengths(
     words: tuple[str, ...],
     lengths: tuple[int, ...],
+    control: GenerationControl | None = None,
 ) -> tuple[int, ...] | None:
     for partition_lengths, counts in _word_partitions(
         words,
         frozenset(lengths),
+        control,
     ):
         if partition_lengths == lengths:
             return counts
@@ -1738,7 +1865,10 @@ def _resolve_crossword_secrets(
     crossword: CrosswordDocument,
     requirement: SecretRequirement | None,
     seed: int,
+    control: GenerationControl | None = None,
 ) -> CrosswordDocument:
+    if control is not None:
+        control._check_cancelled()
     unknown_indices = tuple(
         index
         for index, secret in enumerate(crossword.secrets)
@@ -1766,7 +1896,12 @@ def _resolve_crossword_secrets(
         )
     if not crossword.secrets:
         try:
-            return place_secret_in_template(crossword, requirement, seed=seed)
+            return place_secret_in_template(
+                crossword,
+                requirement,
+                seed=seed,
+                control=control,
+            )
         except GenerationError as error:
             raise FillingError(str(error)) from error
     if not unknown_indices:
@@ -1797,7 +1932,11 @@ def _resolve_crossword_secrets(
                 "připravených slotů"
             )
     else:
-        counts = _word_counts_for_exact_lengths(requirement.words, lengths)
+        counts = _word_counts_for_exact_lengths(
+            requirement.words,
+            lengths,
+            control,
+        )
         if counts is None:
             raise FillingError(
                 "tajenku nelze rozdělit na hranicích slov podle délek "
@@ -1853,9 +1992,11 @@ def _fill_crossword_slots(
     crossword: CrosswordDocument,
     entries_by_length: dict[int, tuple[_Entry, ...]],
     randomizer: random.Random,
+    control: GenerationControl,
     fixed_assignments: dict[str, _Entry] | None = None,
     preferred_assignments: dict[str, _Entry] | None = None,
 ) -> dict[str, _Entry]:
+    control._check_cancelled()
     candidates_by_length = {
         length: list(entries)
         for length, entries in entries_by_length.items()
@@ -1901,18 +2042,22 @@ def _fill_crossword_slots(
                     if entry.answer != preferred.answer
                 ),
             )
-        return [
-            entry
-            for entry in candidates
-            if entry.answer not in used_answers
-            and all(
+        compatible = []
+        for index, entry in enumerate(candidates):
+            if index % 1024 == 0:
+                control._check_cancelled()
+            if entry.answer in used_answers:
+                continue
+            if all(
                 coordinate not in letters or letters[coordinate] == letter
                 for coordinate, letter in zip(slot_coordinates, entry.letters)
-            )
-        ]
+            ):
+                compatible.append(entry)
+        return compatible
 
     def search() -> dict[str, _Entry] | None:
         nonlocal search_nodes
+        control._check_cancelled()
         if len(assigned) == len(crossword.slots):
             return dict(assigned)
 
@@ -1935,6 +2080,7 @@ def _fill_crossword_slots(
         assert selected_candidates is not None
         slot_coordinates = coordinates[selected_slot.identifier]
         for entry in selected_candidates:
+            control._try_combination()
             search_nodes += 1
             if search_nodes > MAX_SEARCH_NODES:
                 raise _SearchFailed
@@ -2284,8 +2430,10 @@ def _fill_crossword_from_assignments(
     seed: int,
     fixed_assignments: dict[str, _Entry],
     preferred_assignments: dict[str, _Entry] | None = None,
+    control: GenerationControl,
 ) -> CrosswordDocument:
-    entries_by_length = _usable_entries(dictionary)
+    control._check_cancelled()
+    entries_by_length = _usable_entries(dictionary, control)
     assigned_identifiers = fixed_assignments.keys() | (
         preferred_assignments.keys()
         if preferred_assignments is not None
@@ -2304,12 +2452,14 @@ def _fill_crossword_from_assignments(
         )
 
     for attempt in range(FILLING_ATTEMPTS):
+        control._check_cancelled()
         attempt_seed = seed + attempt * 1_000_003
         try:
             assignments = _fill_crossword_slots(
                 crossword,
                 entries_by_length,
                 random.Random(attempt_seed),
+                control,
                 fixed_assignments,
                 preferred_assignments,
             )
@@ -2338,10 +2488,17 @@ def fill_crossword(
     *,
     seed: int = DEFAULT_SEED,
     secret: SecretRequirement | None = None,
+    control: GenerationControl | None = None,
 ) -> CrosswordDocument:
     """Doplní ze slovníku všechna prázdná místa křížovky."""
 
-    crossword = _resolve_crossword_secrets(crossword, secret, seed)
+    generation_control = control or GenerationControl()
+    crossword = _resolve_crossword_secrets(
+        crossword,
+        secret,
+        seed,
+        generation_control,
+    )
     secret_assignments, ordinary_assignments = (
         _crossword_filling_assignments(crossword)
     )
@@ -2353,6 +2510,7 @@ def fill_crossword(
             **ordinary_assignments,
             **secret_assignments,
         },
+        control=generation_control,
     )
 
 
@@ -2386,20 +2544,30 @@ def generate_filled_crossword(
     *,
     seed: int = DEFAULT_SEED,
     secret: SecretRequirement | None = None,
+    control: GenerationControl | None = None,
 ) -> CrosswordDocument:
     """Vyplní křížovku i za cenu náhrady hesel nebo přesunu tajenky."""
 
+    generation_control = control or GenerationControl()
+    generation_control._check_cancelled()
     try:
         return fill_crossword(
             crossword,
             dictionary,
             seed=seed,
             secret=secret,
+            control=generation_control,
         )
     except FillingError:
         pass
 
-    crossword = _resolve_crossword_secrets(crossword, secret, seed)
+    generation_control._check_cancelled()
+    crossword = _resolve_crossword_secrets(
+        crossword,
+        secret,
+        seed,
+        generation_control,
+    )
     secret_assignments, ordinary_assignments = (
         _crossword_filling_assignments(crossword)
     )
@@ -2411,6 +2579,7 @@ def generate_filled_crossword(
             seed=seed,
             fixed_assignments=secret_assignments,
             preferred_assignments=ordinary_assignments,
+            control=generation_control,
         )
     except FillingError as error:
         last_error = error
@@ -2429,6 +2598,7 @@ def generate_filled_crossword(
     attempted_placements = {original_placement}
     relocation_attempts = min(max(len(crossword.slots) * 2, 8), 64)
     for attempt in range(relocation_attempts):
+        generation_control._check_cancelled()
         attempt_seed = seed + attempt * 1_000_003
         try:
             candidate = place_secret_in_template(
@@ -2436,6 +2606,7 @@ def generate_filled_crossword(
                 requirement,
                 seed=attempt_seed,
                 dictionary=dictionary,
+                control=generation_control,
             )
         except GenerationError:
             continue
@@ -2458,6 +2629,7 @@ def generate_filled_crossword(
                 seed=attempt_seed,
                 fixed_assignments=candidate_secret_assignments,
                 preferred_assignments=ordinary_assignments,
+                control=generation_control,
             )
         except FillingError as error:
             last_error = error

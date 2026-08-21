@@ -10,6 +10,7 @@ import unittest
 from contextlib import redirect_stderr
 from io import StringIO
 from pathlib import Path
+from threading import current_thread
 from unittest.mock import Mock, call, patch
 
 from krizovkar.dictionary import (
@@ -19,6 +20,8 @@ from krizovkar.dictionary import (
 )
 from krizovkar.generator import (
     FillingError,
+    GenerationCancelled,
+    GenerationControl,
     GenerationError,
     SecretGenerationResult,
     SecretRequirement,
@@ -49,6 +52,8 @@ from krizovkar.gui import (
     _create_view_menu,
     _create_window_menu,
     _dictionary_directory,
+    _FillingProgressDialog,
+    _format_tried_combinations,
     _inherit_macos_menu_bar,
     _keyboard_shortcut,
     _multiple_cell_selection_sequence,
@@ -59,6 +64,7 @@ from krizovkar.gui import (
     _recent_document_label,
     _recent_documents_storage_path,
     _RecentDocuments,
+    _run_filling_task,
     _send_pdf_to_printer,
     _template_cli_command,
     _template_creation_mode,
@@ -1473,6 +1479,82 @@ class GuiTest(unittest.TestCase):
                 self.assertEqual(str(tcl_library), os.environ["TCL_LIBRARY"])
                 self.assertEqual(str(tk_library), os.environ["TK_LIBRARY"])
 
+    def test_formats_generation_combination_count(self) -> None:
+        self.assertEqual(
+            "Vyzkoušených kombinací: 12\N{NO-BREAK SPACE}345",
+            _format_tried_combinations(12_345),
+        )
+
+    def test_progress_dialog_requests_cooperative_cancellation(self) -> None:
+        dialog = _FillingProgressDialog.__new__(_FillingProgressDialog)
+        dialog._control = GenerationControl()
+        dialog._status_value = Mock()
+        dialog._cancel_button = Mock()
+
+        result = _FillingProgressDialog._request_cancel(dialog)
+        _FillingProgressDialog._request_cancel(dialog)
+
+        self.assertEqual("break", result)
+        self.assertTrue(dialog._control.cancelled)
+        dialog._status_value.set.assert_called_once_with(
+            "Přerušuji generování…"
+        )
+        dialog._cancel_button.state.assert_called_once_with(["disabled"])
+
+    def test_runs_filling_in_worker_thread(self) -> None:
+        document = create_empty_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        worker_names: list[str] = []
+        parent = Mock()
+        parent.grab_current.return_value = None
+
+        class WaitingProgressDialog:
+            def __init__(self, _parent, _control, outcomes) -> None:
+                self._outcomes = outcomes
+                self.outcome = None
+
+            def wait_window(self) -> None:
+                self.outcome = self._outcomes.get(timeout=2)
+
+        def operation(_control: GenerationControl) -> CrosswordDocument:
+            worker_names.append(current_thread().name)
+            return document
+
+        with patch(
+            "krizovkar.gui._FillingProgressDialog",
+            WaitingProgressDialog,
+        ):
+            result = _run_filling_task(parent, operation)
+
+        self.assertIs(document, result)
+        self.assertEqual(["krizovkar-filling"], worker_names)
+
+    def test_worker_cancellation_returns_no_document(self) -> None:
+        parent = Mock()
+        parent.grab_current.return_value = None
+
+        class WaitingProgressDialog:
+            def __init__(self, _parent, _control, outcomes) -> None:
+                self._outcomes = outcomes
+                self.outcome = None
+
+            def wait_window(self) -> None:
+                self.outcome = self._outcomes.get(timeout=2)
+
+        def operation(control: GenerationControl) -> CrosswordDocument:
+            control.cancel()
+            raise GenerationCancelled
+
+        with patch(
+            "krizovkar.gui._FillingProgressDialog",
+            WaitingProgressDialog,
+        ):
+            result = _run_filling_task(parent, operation)
+
+        self.assertIsNone(result)
+
     def test_parses_and_normalizes_slot_content(self) -> None:
         self.assertEqual(
             ("CHATA", "Stavení"),
@@ -2535,6 +2617,7 @@ class GuiTest(unittest.TestCase):
         dialog._width_editor = Mock()
         dialog._new_template = None
         template = create_blank_template(CrosswordSettings(3, 3), "numbered")
+        control = GenerationControl()
 
         with (
             patch(
@@ -2545,6 +2628,10 @@ class GuiTest(unittest.TestCase):
                 "krizovkar.gui.create_initial_crossword",
                 return_value=template,
             ) as create_crossword,
+            patch(
+                "krizovkar.gui._run_filling_task",
+                side_effect=lambda _parent, operation: operation(control),
+            ) as run_filling,
         ):
             valid = TemplateGenerationDialog.validate(dialog)
 
@@ -2557,8 +2644,48 @@ class GuiTest(unittest.TestCase):
             seed=123,
             secret=SecretRequirement(words=("TAJENKA",)),
             dictionary=TEST_DICTIONARY,
+            control=control,
         )
+        self.assertIs(dialog, run_filling.call_args.args[0])
         dialog._dictionary_editor.focus_set.assert_not_called()
+
+    def test_template_dialog_stays_open_after_cancelled_filling(self) -> None:
+        dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
+        dialog._width_value = Mock()
+        dialog._width_value.get.return_value = "7"
+        dialog._height_value = Mock()
+        dialog._height_value.get.return_value = "6"
+        dialog._layout_value = Mock()
+        dialog._layout_value.get.return_value = "numbered"
+        dialog._content_mode_value = Mock()
+        dialog._content_mode_value.get.return_value = "filled"
+        dialog._seed_value = Mock()
+        dialog._seed_value.get.return_value = "123"
+        dialog._secret_value = Mock()
+        dialog._secret_value.get.return_value = ""
+        dialog._dictionary_value = Mock()
+        dialog._dictionary_value.get.return_value = "slovník.json"
+        dialog._dictionary_editor = Mock()
+        dialog._width_editor = Mock()
+        dialog._new_template = Mock()
+
+        with (
+            patch(
+                "krizovkar.gui.load_dictionary",
+                return_value=TEST_DICTIONARY,
+            ),
+            patch(
+                "krizovkar.gui._run_filling_task",
+                return_value=None,
+            ) as run_filling,
+            patch("krizovkar.gui.messagebox.showerror") as show_error,
+        ):
+            valid = TemplateGenerationDialog.validate(dialog)
+
+        self.assertFalse(valid)
+        self.assertIsNone(dialog._new_template)
+        run_filling.assert_called_once()
+        show_error.assert_not_called()
 
     def test_template_dialog_keeps_invalid_settings_open(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)
@@ -2759,6 +2886,7 @@ class GuiTest(unittest.TestCase):
             seed=123,
             secret=secret,
             dictionary=TEST_DICTIONARY,
+            control=None,
         )
         fill.assert_not_called()
 
@@ -2769,6 +2897,7 @@ class GuiTest(unittest.TestCase):
             "numbered",
         )
         filled = _filled_numbered_crossword()
+        control = GenerationControl()
 
         with (
             patch(
@@ -2786,6 +2915,7 @@ class GuiTest(unittest.TestCase):
                 "filled",
                 seed=123,
                 dictionary=TEST_DICTIONARY,
+                control=control,
             )
 
         self.assertIs(filled, result)
@@ -2796,8 +2926,14 @@ class GuiTest(unittest.TestCase):
             seed=123,
             secret=None,
             dictionary=TEST_DICTIONARY,
+            control=control,
         )
-        fill.assert_called_once_with(template, TEST_DICTIONARY, seed=123)
+        fill.assert_called_once_with(
+            template,
+            TEST_DICTIONARY,
+            seed=123,
+            control=control,
+        )
 
     def test_initial_filled_content_returns_complete_crossword(self) -> None:
         answers = ("ABC", "DEF", "GHI", "ADG", "BEH", "CFI")
@@ -4883,6 +5019,7 @@ class GuiTest(unittest.TestCase):
         )
         window = _document_history_window(original)
         window.root = Mock()
+        control = GenerationControl()
 
         with (
             patch("krizovkar.gui.CrosswordFillDialog") as dialog_type,
@@ -4890,6 +5027,10 @@ class GuiTest(unittest.TestCase):
                 "krizovkar.gui.generate_filled_crossword",
                 return_value=filled,
             ) as generate,
+            patch(
+                "krizovkar.gui._run_filling_task",
+                side_effect=lambda _parent, operation: operation(control),
+            ) as run_filling,
             patch.object(
                 window,
                 "_set_dirty",
@@ -4904,15 +5045,14 @@ class GuiTest(unittest.TestCase):
             original,
             TEST_DICTIONARY,
             seed=42,
+            control=control,
         )
+        self.assertIs(window.root, run_filling.call_args.args[0])
         self.assertEqual(filled, window._crossword)
         set_dirty.assert_called_once_with(True)
         self.assertEqual(2, len(window._history))
         window._rebuild_slot_tree.assert_called_once_with()
         window._refresh_crossword_view.assert_called_once_with()
-        window.root.configure.assert_has_calls(
-            [call(cursor="watch"), call(cursor="")]
-        )
 
         self.assertTrue(window.undo_document())
         self.assertEqual(original, window._crossword)
@@ -4930,15 +5070,19 @@ class GuiTest(unittest.TestCase):
         with (
             patch("krizovkar.gui.CrosswordFillDialog") as dialog_type,
             patch("krizovkar.gui.generate_filled_crossword") as generate,
+            patch("krizovkar.gui._run_filling_task") as run_filling,
         ):
             dialog_type.return_value.result = None
             CrosswordDocumentWindow.generate_complete_crossword(window)
 
         dialog_type.assert_called_once_with(window.root)
         generate.assert_not_called()
+        run_filling.assert_not_called()
         window._set_dirty.assert_not_called()
 
-    def test_menu_action_reports_crossword_filling_failure(self) -> None:
+    def test_menu_action_keeps_crossword_after_cancelled_generation(
+        self,
+    ) -> None:
         original = create_empty_template(
             CrosswordSettings(4, 4),
             "numbered",
@@ -4950,8 +5094,42 @@ class GuiTest(unittest.TestCase):
         with (
             patch("krizovkar.gui.CrosswordFillDialog") as dialog_type,
             patch(
+                "krizovkar.gui._run_filling_task",
+                return_value=None,
+            ) as run_filling,
+        ):
+            dialog_type.return_value.result = CrosswordFillInput(
+                dictionary=TEST_DICTIONARY,
+                seed=42,
+            )
+            CrosswordDocumentWindow.generate_complete_crossword(window)
+
+        run_filling.assert_called_once()
+        self.assertIs(original, window._crossword)
+        window._show_action_error.assert_not_called()
+        window._set_dirty.assert_not_called()
+        window._rebuild_slot_tree.assert_not_called()
+        window._refresh_crossword_view.assert_not_called()
+
+    def test_menu_action_reports_crossword_filling_failure(self) -> None:
+        original = create_empty_template(
+            CrosswordSettings(4, 4),
+            "numbered",
+        )
+        window = Mock()
+        window._save_inline_slot_edit.return_value = True
+        window._crossword = original
+        control = GenerationControl()
+
+        with (
+            patch("krizovkar.gui.CrosswordFillDialog") as dialog_type,
+            patch(
                 "krizovkar.gui.generate_filled_crossword",
                 side_effect=FillingError("křížovku nelze vyplnit"),
+            ) as generate,
+            patch(
+                "krizovkar.gui._run_filling_task",
+                side_effect=lambda _parent, operation: operation(control),
             ),
         ):
             dialog_type.return_value.result = CrosswordFillInput(
@@ -4965,8 +5143,11 @@ class GuiTest(unittest.TestCase):
             "Křížovku nelze vygenerovat",
             "křížovku nelze vyplnit",
         )
-        window.root.configure.assert_has_calls(
-            [call(cursor="watch"), call(cursor="")]
+        generate.assert_called_once_with(
+            original,
+            TEST_DICTIONARY,
+            seed=42,
+            control=control,
         )
         window._set_dirty.assert_not_called()
         window._rebuild_slot_tree.assert_not_called()
