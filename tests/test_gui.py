@@ -52,6 +52,7 @@ from krizovkar.gui import (
     _create_view_menu,
     _create_window_menu,
     _dictionary_directory,
+    _enable_macos_dialog_close_button,
     _FillingProgressDialog,
     _format_tried_combinations,
     _inherit_macos_menu_bar,
@@ -2301,9 +2302,17 @@ class GuiTest(unittest.TestCase):
                 "krizovkar.gui.tk.BooleanVar",
                 return_value=visible_value,
             ),
+            patch(
+                "krizovkar.gui._enable_macos_dialog_close_button"
+            ) as enable_close_button,
         ):
             TemplateGenerationDialog.buttonbox(dialog)
 
+        enable_close_button.assert_called_once_with(dialog)
+        dialog.protocol.assert_called_once_with(
+            "WM_DELETE_WINDOW",
+            dialog.cancel,
+        )
         checkbutton.assert_called_once_with(
             buttons,
             text="CLI",
@@ -2331,6 +2340,20 @@ class GuiTest(unittest.TestCase):
             dialog._update_cli_command_text,
         )
         dialog._update_cli_command_text.assert_called_once_with()
+
+    def test_macos_dialog_close_button_uses_closable_modal_style(self) -> None:
+        window = Mock()
+
+        with patch("krizovkar.gui.sys.platform", "darwin"):
+            _enable_macos_dialog_close_button(window)
+
+        window.tk.call.assert_called_once_with(
+            "::tk::unsupported::MacWindowStyle",
+            "style",
+            window,
+            "moveableModal",
+            "closeBox",
+        )
 
     def test_template_dialog_updates_copyable_cli_text(self) -> None:
         dialog = TemplateGenerationDialog.__new__(TemplateGenerationDialog)

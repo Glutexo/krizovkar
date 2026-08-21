@@ -728,6 +728,20 @@ def _inherit_macos_menu_bar(window: tk.Toplevel) -> None:
         window.configure(menu=menu)
 
 
+def _enable_macos_dialog_close_button(window: tk.Toplevel) -> None:
+    """Povolí zavírací tlačítko v modálním dialogu na macOS."""
+
+    if sys.platform != "darwin":
+        return
+    window.tk.call(
+        "::tk::unsupported::MacWindowStyle",
+        "style",
+        window,
+        "moveableModal",
+        "closeBox",
+    )
+
+
 def _format_tried_combinations(count: int) -> str:
     return f"Vyzkoušených kombinací: {count:,}".replace(",", "\N{NO-BREAK SPACE}")
 
@@ -1644,6 +1658,8 @@ class TemplateGenerationDialog(simpledialog.Dialog):
         self._generation_controls.grid_propagate(False)
 
     def buttonbox(self) -> None:
+        _enable_macos_dialog_close_button(self)
+        self.protocol("WM_DELETE_WINDOW", self.cancel)
         buttons = ttk.Frame(self, padding=(16, 0, 16, 16))
         self._cli_visible_value = tk.BooleanVar(master=self, value=False)
         ttk.Checkbutton(
