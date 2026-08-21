@@ -16,6 +16,9 @@ Thumbs.db
 # Lokální referenční zdroje
 /reference-sources/
 
+# Lokální dokumenty křížovek
+/*.yaml
+
 # Python
 __pycache__/
 *.py[cod]
