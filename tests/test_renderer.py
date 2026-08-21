@@ -98,6 +98,26 @@ class LatexSourceTest(unittest.TestCase):
         )
         self.assertEqual(20, empty.count(r"\draw[gray!70,line width=0.65pt]"))
 
+    def test_glued_legend_abbreviations_can_break_after_period(self) -> None:
+        crossword = CrosswordGrid(
+            format_name="krizovkar",
+            kind="grid",
+            version=1,
+            grid=Grid(
+                width=1,
+                height=2,
+                cells=(
+                    (LegendCell(texts=("Island.sídlo",)),),
+                    (LegendCell(texts=("Něm.vrchní",)),),
+                ),
+            ),
+        )
+
+        source = create_latex_source(crossword)
+
+        self.assertIn(r"IS\-LAND.\allowbreak{}SÍD\-LO", source)
+        self.assertIn(r"NĚM.\allowbreak{}VRCH\-NÍ", source)
+
     def test_numbered_source_keeps_numbers_bars_and_both_clue_columns(self) -> None:
         crossword = load_crossword_grid(GRID_CLASSIC_EXAMPLE)
 

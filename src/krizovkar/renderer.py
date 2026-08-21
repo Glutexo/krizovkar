@@ -73,6 +73,7 @@ _ARROW_VECTORS: dict[SecretArrow, tuple[float, float]] = {
     "down": (0.0, -1.0),
     "left": (-1.0, 0.0),
 }
+_BREAKABLE_JOINING_PUNCTUATION = frozenset(".,;:/")
 _LATEX_ESCAPES = {
     "\\": r"\textbackslash{}",
     "{": r"\{",
@@ -129,7 +130,17 @@ def _point(x: float, y: float) -> str:
 def _escape_latex(text: str, *, typography: bool = False) -> str:
     if typography:
         text = mark_hyphenation(protect_prepositions(text))
-    return "".join(_LATEX_ESCAPES.get(character, character) for character in text)
+    escaped = []
+    for index, character in enumerate(text):
+        escaped.append(_LATEX_ESCAPES.get(character, character))
+        if (
+            typography
+            and character in _BREAKABLE_JOINING_PUNCTUATION
+            and index + 1 < len(text)
+            and not text[index + 1].isspace()
+        ):
+            escaped.append(r"\allowbreak{}")
+    return "".join(escaped)
 
 
 def _cell_text_command(
