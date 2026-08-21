@@ -927,6 +927,42 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
                 maximum_height=2,
             )
 
+    def test_rejects_secret_crossings_without_shared_solution(self) -> None:
+        crossword = generate_empty_template(
+            width=2,
+            height=2,
+            layout="numbered",
+        )
+        requirement = SecretRequirement(words=("ZZ",))
+        dictionary = CrosswordDictionary(
+            entries=tuple(
+                DictionaryEntry(answer=answer, clues=(answer,))
+                for answer in ("ZA", "ZB")
+            )
+        )
+
+        unchecked = generate_secret_in_crossword(
+            crossword,
+            requirement,
+            layout="numbered",
+            maximum_width=2,
+            maximum_height=2,
+        )
+        self.assertEqual("empty_slots", unchecked.strategy)
+
+        with self.assertRaisesRegex(
+            GenerationError,
+            "tajenku nelze přidat ani po změně rozvržení a zvětšení",
+        ):
+            generate_secret_in_crossword(
+                crossword,
+                requirement,
+                layout="numbered",
+                dictionary=dictionary,
+                maximum_width=2,
+                maximum_height=2,
+            )
+
     def test_enlarges_grid_for_dictionary_compatible_secret_crossings(
         self,
     ) -> None:

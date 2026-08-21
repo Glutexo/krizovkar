@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 import unicodedata
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, replace
 from itertools import pairwise
 from threading import Event, Lock
@@ -1331,7 +1331,7 @@ def _secret_placement_has_dictionary_candidates(
     entries_by_length: dict[int, tuple[_Entry, ...]],
     control: GenerationControl | None = None,
 ) -> bool:
-    """Ověří kandidáty pro prázdné sloty dotčené celou tajenkou."""
+    """Propaguje kandidáty v bloku prázdných slotů dotčeném tajenkou."""
 
     secret_answers = dict(
         zip(
@@ -1371,15 +1371,43 @@ def _secret_placement_has_dictionary_candidates(
         for coordinate in _slot_coordinates(slot)
     )
     used_answers = frozenset(fixed_answers.values())
-    for slot in crossword.slots:
+    unfilled_slots = {
+        slot.identifier: slot
+        for slot in crossword.slots
+        if slot.identifier not in fixed_answers
+    }
+    coordinates = {
+        identifier: _slot_coordinates(slot)
+        for identifier, slot in unfilled_slots.items()
+    }
+    slots_by_coordinate: dict[
+        GridCoordinate,
+        list[tuple[str, int]],
+    ] = defaultdict(list)
+    for identifier, slot_coordinates in coordinates.items():
+        for position, coordinate in enumerate(slot_coordinates):
+            slots_by_coordinate[coordinate].append((identifier, position))
+
+    relevant_identifiers = {
+        identifier
+        for identifier, slot_coordinates in coordinates.items()
+        if not secret_coordinates.isdisjoint(slot_coordinates)
+    }
+    pending_identifiers = list(relevant_identifiers)
+    while pending_identifiers:
         if control is not None:
             control._check_cancelled()
-        if slot.identifier in fixed_answers:
-            continue
-        coordinates = _slot_coordinates(slot)
-        if secret_coordinates.isdisjoint(coordinates):
-            continue
-        has_candidate = False
+        identifier = pending_identifiers.pop()
+        for coordinate in coordinates[identifier]:
+            for other_identifier, _ in slots_by_coordinate[coordinate]:
+                if other_identifier not in relevant_identifiers:
+                    relevant_identifiers.add(other_identifier)
+                    pending_identifiers.append(other_identifier)
+
+    domains: dict[str, tuple[_Entry, ...]] = {}
+    for identifier in relevant_identifiers:
+        slot = unfilled_slots[identifier]
+        candidates = []
         for index, entry in enumerate(entries_by_length.get(slot.length, ())):
             if control is not None and index % 1024 == 0:
                 control._check_cancelled()
@@ -1388,15 +1416,73 @@ def _secret_placement_has_dictionary_candidates(
             if all(
                 fixed_letters.get(coordinate, letter) == letter
                 for coordinate, letter in zip(
-                    coordinates,
+                    coordinates[identifier],
                     entry.letters,
                     strict=True,
                 )
             ):
-                has_candidate = True
-                break
-        if not has_candidate:
+                candidates.append(entry)
+        if not candidates:
             return False
+        domains[identifier] = tuple(candidates)
+
+    crossings: dict[
+        tuple[str, str],
+        list[tuple[int, int]],
+    ] = defaultdict(list)
+    neighbors: dict[str, set[str]] = defaultdict(set)
+    for coordinate_slots in slots_by_coordinate.values():
+        relevant_at_coordinate = tuple(
+            (identifier, position)
+            for identifier, position in coordinate_slots
+            if identifier in relevant_identifiers
+        )
+        for identifier, position in relevant_at_coordinate:
+            for other_identifier, other_position in relevant_at_coordinate:
+                if identifier == other_identifier:
+                    continue
+                crossings[(identifier, other_identifier)].append(
+                    (position, other_position)
+                )
+                neighbors[identifier].add(other_identifier)
+
+    pending_crossings = deque(crossings)
+    while pending_crossings:
+        if control is not None:
+            control._check_cancelled()
+        identifier, other_identifier = pending_crossings.popleft()
+        crossing_positions = crossings[(identifier, other_identifier)]
+        supported_answers: dict[tuple[str, ...], set[str]] = defaultdict(set)
+        for entry in domains[other_identifier]:
+            signature = tuple(
+                entry.letters[other_position]
+                for _, other_position in crossing_positions
+            )
+            supported_answers[signature].add(entry.answer)
+
+        revised = []
+        for index, entry in enumerate(domains[identifier]):
+            if control is not None and index % 1024 == 0:
+                control._check_cancelled()
+            signature = tuple(
+                entry.letters[position]
+                for position, _ in crossing_positions
+            )
+            answers = supported_answers.get(signature, set())
+            if len(answers) > 1 or (
+                len(answers) == 1 and entry.answer not in answers
+            ):
+                revised.append(entry)
+        if len(revised) == len(domains[identifier]):
+            continue
+        if not revised:
+            return False
+        domains[identifier] = tuple(revised)
+        pending_crossings.extend(
+            (neighbor, identifier)
+            for neighbor in neighbors[identifier]
+            if neighbor != other_identifier
+        )
     return True
 
 
