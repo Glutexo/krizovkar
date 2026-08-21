@@ -963,6 +963,125 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
                 maximum_height=2,
             )
 
+    def test_rejects_secret_component_requiring_duplicate_answer(self) -> None:
+        crossword = generate_empty_template(
+            width=2,
+            height=2,
+            layout="numbered",
+        )
+        requirement = SecretRequirement(words=("AA",))
+        dictionary = CrosswordDictionary(
+            entries=tuple(
+                DictionaryEntry(answer=answer, clues=(answer,))
+                for answer in ("AB", "BB")
+            )
+        )
+
+        unchecked = generate_secret_in_crossword(
+            crossword,
+            requirement,
+            layout="numbered",
+            maximum_width=2,
+            maximum_height=2,
+        )
+        self.assertEqual("empty_slots", unchecked.strategy)
+
+        with self.assertRaisesRegex(
+            GenerationError,
+            "tajenku nelze přidat ani po změně rozvržení a zvětšení",
+        ):
+            generate_secret_in_crossword(
+                crossword,
+                requirement,
+                layout="numbered",
+                dictionary=dictionary,
+                maximum_width=2,
+                maximum_height=2,
+            )
+
+    def test_rejects_arc_consistent_but_unfillable_secret_component(
+        self,
+    ) -> None:
+        crossword = generate_empty_template(
+            width=3,
+            height=2,
+            layout="numbered",
+        )
+        requirement = SecretRequirement(words=("AAA",))
+        dictionary = CrosswordDictionary(
+            entries=tuple(
+                DictionaryEntry(answer=answer, clues=(answer,))
+                for answer in (
+                    "AB",
+                    "AC",
+                    "BA",
+                    "CA",
+                    "BBB",
+                    "BBC",
+                    "BCB",
+                    "BCC",
+                    "CBB",
+                    "CBC",
+                    "CCB",
+                    "CCC",
+                )
+            )
+        )
+
+        with self.assertRaisesRegex(
+            GenerationError,
+            "tajenku nelze přidat ani po změně rozvržení a zvětšení",
+        ):
+            generate_secret_in_crossword(
+                crossword,
+                requirement,
+                layout="numbered",
+                dictionary=dictionary,
+                maximum_width=3,
+                maximum_height=2,
+            )
+
+    def test_skips_unfillable_secret_placement_for_fillable_one(self) -> None:
+        crossword = generate_empty_template(
+            width=3,
+            height=2,
+            layout="numbered",
+        )
+        dictionary = CrosswordDictionary(
+            entries=tuple(
+                DictionaryEntry(answer=answer, clues=(answer,))
+                for answer in (
+                    "AB",
+                    "AC",
+                    "BA",
+                    "CA",
+                    "DA",
+                    "BBB",
+                    "BBC",
+                    "BCB",
+                    "BCC",
+                    "CBB",
+                    "CBC",
+                    "CCB",
+                    "CCC",
+                    "BCD",
+                )
+            )
+        )
+
+        generated = generate_secret_in_crossword(
+            crossword,
+            SecretRequirement(words=("AAA",)),
+            layout="numbered",
+            dictionary=dictionary,
+            maximum_width=3,
+            maximum_height=2,
+        )
+
+        part = generated.document.secrets[0].parts[0]
+        assert isinstance(part, CrosswordSecretSlotPart)
+        self.assertEqual("h2", part.slot_identifier)
+
     def test_enlarges_grid_for_dictionary_compatible_secret_crossings(
         self,
     ) -> None:

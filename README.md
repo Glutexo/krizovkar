@@ -42,7 +42,8 @@ počátečního obsahu: **Prázdná**, **Pouze tajenka** nebo **Vyplněná**.
 Prázdná varianta vytvoří jednoduchý základ bez vnitřních předělů.
 Pouze tajenka pseudonáhodně rozvrhne místa pro hesla, vyžaduje text
 **Tajenky** a vyplní jen její části; **Slovník** je u ní volitelný pro kontrolu
-budoucích křížení. Vyplněná varianta vyžaduje **Slovník**, doplní z něj
+budoucích křížení a společné vyplnitelnosti dotčeného bloku. Vyplněná
+varianta vyžaduje **Slovník**, doplní z něj
 všechna běžná hesla a může navíc obsahovat volitelnou tajenku. Pokud první
 umístění tajenky brání úplnému vyplnění, generátor ji zkusí jinak
 rozdělit, přesunout nebo otočit.
@@ -166,8 +167,9 @@ slovem. Pevná mezera výslovně zakáže rozdělení v daném místě. Nejprve 
 vyhovující prázdná místa, aniž zasáhne do vyplněných hesel. Pokud to nejde,
 zvolí umístění vyžadující odstranění nejmenšího počtu stávajících hesel včetně
 rozporných křížení. Je-li slovník vybraný, musí v něm mít každé prázdné
-heslo, do kterého zvolená tajenka doplní jedno nebo více písmen, alespoň jedno
-použitelné heslo odpovídající celému vzniklému vzoru. Bez slovníku se tato
+heslo, do kterého zvolená tajenka doplní jedno nebo více písmen, použitelné
+kandidáty a celý dotčený blok musí jít společně doplnit bez opakování hesel.
+Bez slovníku se tato
 kontrola nepoužije. Když tajenka nepasuje do současných míst, vytvoří nové
 rozvržení se stejným rozměrem; teprve pokud nestačí ani to, křížovku co
 nejméně zvětší, nejvýše na 50 × 50 polí. Při novém rozvržení nahradí dosavadní

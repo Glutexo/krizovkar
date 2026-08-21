@@ -63,6 +63,8 @@ DEFAULT_SEED = 0
 MAX_CLUE_LENGTH = 48
 FILLING_ATTEMPTS = 4
 MAX_SEARCH_NODES = 250_000
+SECRET_PLACEMENT_CANDIDATES = 8
+SECRET_PLACEMENT_SEARCH_NODES = 10_000
 MAX_CANDIDATE_PATTERNS = 8_192
 PREFERRED_SECRET_PART_LENGTH = 4
 _NON_BREAKING_SPACES = frozenset(
@@ -167,6 +169,15 @@ class _ExistingSecretPlacement:
     slots: tuple[WordSlot, ...]
     word_counts: tuple[int, ...]
     replacements: frozenset[str]
+
+
+@dataclass(frozen=True, slots=True)
+class _SecretPlacementDictionaryEvaluation:
+    """Slovníkové domény jedné možné polohy tajenky."""
+
+    score: tuple[int, ...]
+    relevant_identifiers: frozenset[str]
+    fixed_answers: tuple[tuple[str, str], ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -1324,14 +1335,15 @@ def _part_answers(
     return tuple(answers)
 
 
-def _secret_placement_has_dictionary_candidates(
+def _secret_placement_dictionary_score(
     crossword: CrosswordDocument,
     requirement: SecretRequirement,
     placement: _ExistingSecretPlacement,
     entries_by_length: dict[int, tuple[_Entry, ...]],
+    *,
     control: GenerationControl | None = None,
-) -> bool:
-    """Propaguje kandidáty v bloku prázdných slotů dotčeném tajenkou."""
+) -> _SecretPlacementDictionaryEvaluation | None:
+    """Propaguje a ohodnotí kandidáty v bloku u tajenky."""
 
     secret_answers = dict(
         zip(
@@ -1362,7 +1374,7 @@ def _secret_placement_has_dictionary_candidates(
         ):
             previous = fixed_letters.get(coordinate)
             if previous is not None and previous != letter:
-                return False
+                return None
             fixed_letters[coordinate] = letter
 
     secret_coordinates = frozenset(
@@ -1423,7 +1435,7 @@ def _secret_placement_has_dictionary_candidates(
             ):
                 candidates.append(entry)
         if not candidates:
-            return False
+            return None
         domains[identifier] = tuple(candidates)
 
     crossings: dict[
@@ -1476,13 +1488,83 @@ def _secret_placement_has_dictionary_candidates(
         if len(revised) == len(domains[identifier]):
             continue
         if not revised:
-            return False
+            return None
         domains[identifier] = tuple(revised)
         pending_crossings.extend(
             (neighbor, identifier)
             for neighbor in neighbors[identifier]
             if neighbor != other_identifier
         )
+
+    distinct_answers = {
+        entry.answer for domain in domains.values() for entry in domain
+    }
+    if len(distinct_answers) < len(domains):
+        return None
+    domain_sizes = tuple(sorted(len(domain) for domain in domains.values()))
+    return _SecretPlacementDictionaryEvaluation(
+        score=domain_sizes or (len(distinct_answers) + 1,),
+        relevant_identifiers=frozenset(relevant_identifiers),
+        fixed_answers=tuple(fixed_answers.items()),
+    )
+
+
+def _secret_placement_is_fillable(
+    crossword: CrosswordDocument,
+    evaluation: _SecretPlacementDictionaryEvaluation,
+    entries_by_length: dict[int, tuple[_Entry, ...]],
+    *,
+    seed: int,
+    control: GenerationControl | None,
+) -> bool:
+    """Omezeně zkusí doplnit blok ovlivněný polohou tajenky."""
+
+    fixed_answers = dict(evaluation.fixed_answers)
+    if all(slot.answer is None for slot in crossword.slots):
+        probe_identifiers = {slot.identifier for slot in crossword.slots}
+    else:
+        probe_identifiers = (
+            set(evaluation.relevant_identifiers) | fixed_answers.keys()
+        )
+    probe_slots = tuple(
+        slot
+        for slot in crossword.slots
+        if slot.identifier in probe_identifiers
+    )
+    probe_crossword = replace(
+        crossword,
+        slots=probe_slots,
+        secrets=(),
+    )
+    fixed_assignments = {
+        slot.identifier: _Entry(
+            answer=fixed_answers[slot.identifier],
+            clue=slot.clue or fixed_answers[slot.identifier],
+            letters=split_answer_letters(fixed_answers[slot.identifier]),
+        )
+        for slot in probe_slots
+        if slot.identifier in fixed_answers
+    }
+    required_lengths = {
+        slot.length
+        for slot in probe_slots
+        if slot.identifier not in fixed_assignments
+    }
+    probe_entries = {
+        length: entries_by_length.get(length, ())
+        for length in required_lengths
+    }
+    try:
+        _fill_crossword_slots(
+            probe_crossword,
+            probe_entries,
+            random.Random(seed),
+            control or GenerationControl(),
+            fixed_assignments,
+            max_search_nodes=SECRET_PLACEMENT_SEARCH_NODES,
+        )
+    except _SearchFailed:
+        return False
     return True
 
 
@@ -1506,6 +1588,9 @@ def _find_existing_secret_placement(
         secret_coordinates,
     )
     best: _ExistingSecretPlacement | None = None
+    prefer_dictionary_score = entries_by_length is not None and (
+        empty_only or not any(slot.answer is not None for slot in slot_tuple)
+    )
 
     for lengths, word_counts in _secret_partitions_for_slots(
         requirement,
@@ -1541,6 +1626,12 @@ def _find_existing_secret_placement(
             options_by_part.append(tuple(options))
         if len(options_by_part) != len(lengths):
             continue
+        dictionary_candidates: list[
+            tuple[
+                _SecretPlacementDictionaryEvaluation,
+                _ExistingSecretPlacement,
+            ]
+        ] = []
 
         def search(
             part_index: int,
@@ -1551,12 +1642,20 @@ def _find_existing_secret_placement(
                 options_by_part
             ),
             counts: tuple[int, ...] = word_counts,
+            candidate_evaluations: list[
+                tuple[
+                    _SecretPlacementDictionaryEvaluation,
+                    _ExistingSecretPlacement,
+                ]
+            ] = dictionary_candidates,
         ) -> None:
             nonlocal best
             if control is not None:
                 control._check_cancelled()
-            if best is not None and len(replacements) >= len(
-                best.replacements
+            if (
+                not prefer_dictionary_score
+                and best is not None
+                and len(replacements) >= len(best.replacements)
             ):
                 return
             if part_index == len(options):
@@ -1565,17 +1664,36 @@ def _find_existing_secret_placement(
                     word_counts=counts,
                     replacements=replacements,
                 )
-                if entries_by_length is not None and not (
-                    _secret_placement_has_dictionary_candidates(
-                        crossword,
-                        requirement,
-                        candidate,
-                        entries_by_length,
-                        control,
+                dictionary_evaluation = None
+                if entries_by_length is not None:
+                    dictionary_evaluation = (
+                        _secret_placement_dictionary_score(
+                            crossword,
+                            requirement,
+                            candidate,
+                            entries_by_length,
+                            control=control,
+                        )
                     )
-                ):
-                    return
-                best = candidate
+                    if dictionary_evaluation is None:
+                        return
+                if prefer_dictionary_score:
+                    assert dictionary_evaluation is not None
+                    candidate_evaluations.append(
+                        (dictionary_evaluation, candidate)
+                    )
+                else:
+                    if dictionary_evaluation is not None and not (
+                        _secret_placement_is_fillable(
+                            crossword,
+                            dictionary_evaluation,
+                            entries_by_length,
+                            seed=seed,
+                            control=control,
+                        )
+                    ):
+                        return
+                    best = candidate
                 return
             for option in options[part_index]:
                 if option.coordinates & used_coordinates:
@@ -1588,13 +1706,41 @@ def _find_existing_secret_placement(
                     replacements | option.replacements,
                     (*selected_slots, option.slot),
                 )
-                if empty_only and best is not None:
+                if (
+                    prefer_dictionary_score
+                    and len(candidate_evaluations)
+                    >= SECRET_PLACEMENT_CANDIDATES
+                ) or (
+                    not prefer_dictionary_score
+                    and empty_only
+                    and best is not None
+                ):
                     return
 
         search(0, frozenset(), frozenset(), ())
+        if prefer_dictionary_score:
+            assert entries_by_length is not None
+            for evaluation, candidate in sorted(
+                dictionary_candidates,
+                key=lambda item: item[0].score,
+                reverse=True,
+            ):
+                if _secret_placement_is_fillable(
+                    crossword,
+                    evaluation,
+                    entries_by_length,
+                    seed=seed,
+                    control=control,
+                ):
+                    return candidate
+            continue
         if empty_only and best is not None:
             return best
-        if best is not None and not best.replacements:
+        if (
+            not prefer_dictionary_score
+            and best is not None
+            and not best.replacements
+        ):
             return best
     return best
 
@@ -1861,7 +2007,8 @@ def _place_secret_in_template(
         if placement is None or placement.replacements:
             raise GenerationError(
                 "v křížovce nelze tajenku umístit tak, aby pro každé "
-                "dotčené prázdné heslo existoval kandidát ve slovníku"
+                "dotčené prázdné heslo existoval slučitelný kandidát "
+                "ve slovníku a celý blok šel společně doplnit"
             )
         return _apply_existing_secret_placement(
             template,
@@ -2125,8 +2272,13 @@ def _fill_crossword_slots(
     control: GenerationControl,
     fixed_assignments: dict[str, _Entry] | None = None,
     preferred_assignments: dict[str, _Entry] | None = None,
+    *,
+    max_search_nodes: int | None = None,
 ) -> dict[str, _Entry]:
     control._check_cancelled()
+    search_node_limit = (
+        MAX_SEARCH_NODES if max_search_nodes is None else max_search_nodes
+    )
     candidates_by_length = {
         length: list(entries)
         for length, entries in entries_by_length.items()
@@ -2402,7 +2554,7 @@ def _fill_crossword_slots(
         for entry in selected_candidates:
             control._try_combination()
             search_nodes += 1
-            if search_nodes > MAX_SEARCH_NODES:
+            if search_nodes > search_node_limit:
                 raise _SearchFailed
 
             new_coordinates = []
