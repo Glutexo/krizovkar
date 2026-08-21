@@ -89,12 +89,14 @@ class LatexSourceTest(unittest.TestCase):
         self.assertIn(r"\KrizovkarCellText", legend)
         self.assertIn(
             r"\KrizovkarCellText{10.2mm}{4.2mm}{7.5pt}{7.9pt}"
+            r"{\KrizovkarConsiderWholeWord{SAVEC}}"
             r"{\KrizovkarPreferWholeWord{SAVEC}{SA\-VEC}}",
             legend,
         )
         self.assertIn(r"\textbf{Pomůcka:}", help_source)
         self.assertIn(
-            r"{10.8mm}{10.8mm}{6pt}{6.3pt}{\textbf{Pomůcka:}",
+            r"{10.8mm}{10.8mm}{6pt}{6.3pt}"
+            r"{\KrizovkarRequireWholeWord{\textbf{Pomůcka:}}",
             help_source,
         )
         self.assertEqual(20, empty.count(r"\draw[gray!70,line width=0.65pt]"))
@@ -122,7 +124,9 @@ class LatexSourceTest(unittest.TestCase):
             source,
         )
         self.assertIn(
-            r"\KrizovkarFitWord{NĚM.}\allowbreak{}"
+            r"{\KrizovkarRequireWholeWord{NĚM.}"
+            r"\KrizovkarConsiderWholeWord{VRCHNÍ}}"
+            r"{NĚM.\allowbreak{}"
             r"\KrizovkarPreferWholeWord{VRCHNÍ}{VRCH\-NÍ}",
             source,
         )
@@ -142,15 +146,21 @@ class LatexSourceTest(unittest.TestCase):
         source = create_latex_source(crossword)
 
         self.assertIn(
-            r"\KrizovkarPreferWholeWord{INDONÉS.}{IN\-DONÉS.}"
-            r"\allowbreak{}\KrizovkarFitWord{ATOL}",
+            r"{\KrizovkarConsiderWholeWord{INDONÉS.}"
+            r"\KrizovkarRequireWholeWord{ATOL}}"
+            r"{\KrizovkarPreferWholeWord{INDONÉS.}{IN\-DONÉS.}"
+            r"\allowbreak{}ATOL}",
             source,
         )
         self.assertIn(
-            r"\ifdim\wd\KrizovkarWordBox<1.4\linewidth",
+            r"\ifdim\wd\KrizovkarWordBox<1.4"
+            r"\KrizovkarCellBaseWidth",
             source,
         )
-        self.assertIn("\\else%\n    #2%", source)
+        self.assertIn(
+            r"\ifdim\wd\KrizovkarWordBox>\KrizovkarCellLayoutWidth",
+            source,
+        )
 
     def test_parenthesized_legend_word_shrinks_before_split(self) -> None:
         crossword = CrosswordGrid(
@@ -173,11 +183,38 @@ class LatexSourceTest(unittest.TestCase):
             source,
         )
         self.assertIn(
-            r"\ifdim\wd\KrizovkarWordBox<1.4\linewidth",
+            r"\KrizovkarConsiderWholeWord{(ALTOVKA)}",
             source,
         )
 
-    def test_unbreakable_legend_words_shrink_instead_of_overflowing(self) -> None:
+    def test_all_legend_words_share_one_cell_scale(self) -> None:
+        crossword = CrosswordGrid(
+            format_name="krizovkar",
+            kind="grid",
+            version=1,
+            grid=Grid(
+                width=1,
+                height=1,
+                cells=((LegendCell(texts=("Hliníková folie",)),),),
+            ),
+        )
+
+        source = create_latex_source(crossword)
+
+        self.assertIn(
+            r"{\KrizovkarConsiderWholeWord{HLINÍKOVÁ}"
+            r"\KrizovkarConsiderWholeWord{FOLIE}}",
+            source,
+        )
+        self.assertIn(
+            r"\adjustbox{max width=#1,max totalheight=#2}{%"
+            "\n"
+            r"    \parbox{\KrizovkarCellLayoutWidth}",
+            source,
+        )
+        self.assertNotIn(r"\adjustbox{max width=\linewidth}", source)
+
+    def test_unbreakable_legend_words_scale_the_whole_cell(self) -> None:
         crossword = CrosswordGrid(
             format_name="krizovkar",
             kind="grid",
@@ -192,11 +229,12 @@ class LatexSourceTest(unittest.TestCase):
         source = create_latex_source(crossword)
 
         self.assertIn(
-            r"\KrizovkarFitWord{TLOUCT} \KrizovkarFitWord{STRAKA}",
+            r"{\KrizovkarRequireWholeWord{TLOUCT}"
+            r"\KrizovkarRequireWholeWord{STRAKA}}{TLOUCT STRAKA}",
             source,
         )
         self.assertIn(
-            r"\adjustbox{max width=\linewidth}{#1}",
+            r"\parbox{\KrizovkarCellLayoutWidth}",
             source,
         )
 
@@ -294,15 +332,15 @@ class LatexSourceTest(unittest.TestCase):
         source = create_latex_source(crossword)
 
         self.assertIn(
-            r"\KrizovkarFitWord{50\%\_\#}",
+            r"\KrizovkarRequireWholeWord{50\%\_\#}",
             source,
         )
         self.assertIn(
-            r"\KrizovkarFitWord{\{X\}}",
+            r"\KrizovkarRequireWholeWord{\{X\}}",
             source,
         )
         self.assertIn(r"CI\-TA\-CE", source)
-        self.assertEqual(4, source.count(r"\textquotedbl{}"))
+        self.assertEqual(6, source.count(r"\textquotedbl{}"))
         self.assertIn(r"\textasciigrave{}", source)
 
     def test_czech_letters_and_ch_remain_unicode(self) -> None:

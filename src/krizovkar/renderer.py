@@ -35,7 +35,7 @@ CELL_TEXT_FONT_SIZE_PT = 6.0
 CELL_TEXT_LINE_HEIGHT_PT = 6.3
 LEGEND_TEXT_FONT_SIZE_PT = 7.5
 LEGEND_TEXT_LINE_HEIGHT_PT = 7.9
-# Poměr 1,4 dovolí zmenšit celé slovo nejvýše přibližně o dvě sedminy.
+# Poměr 1,4 dovolí kvůli dělitelnému slovu zmenšit celý text asi o dvě sedminy.
 WHOLE_WORD_MAX_WIDTH_RATIO = 1.4
 MINIMUM_CLUE_AREA_WIDTH_MM = 100.0
 CLUE_COLUMN_GAP_MM = 6.0
@@ -177,6 +177,7 @@ def _escape_latex(
     *,
     typography: bool = False,
     prefer_whole_words: bool = False,
+    word_measurements: list[str] | None = None,
 ) -> str:
     if typography:
         text = mark_hyphenation(protect_prepositions(text))
@@ -222,8 +223,16 @@ def _escape_latex(
             escaped.append(
                 rf"\KrizovkarPreferWholeWord{{{whole}}}{{{hyphenated}}}"
             )
+            if word_measurements is not None:
+                word_measurements.append(
+                    rf"\KrizovkarConsiderWholeWord{{{whole}}}"
+                )
         else:
-            escaped.append(rf"\KrizovkarFitWord{{{whole}}}")
+            escaped.append(whole)
+            if word_measurements is not None:
+                word_measurements.append(
+                    rf"\KrizovkarRequireWholeWord{{{whole}}}"
+                )
         if (
             end < len(text)
             and text[end - 1] in _BREAKABLE_JOINING_PUNCTUATION
@@ -245,19 +254,28 @@ def _cell_text_command(
     font_size_pt: float = CELL_TEXT_FONT_SIZE_PT,
     line_height_pt: float = CELL_TEXT_LINE_HEIGHT_PT,
 ) -> str:
+    word_measurements: list[str] = []
     content = _escape_latex(
         text,
         typography=True,
         prefer_whole_words=True,
+        word_measurements=word_measurements,
     )
     if prefix is not None:
-        content = rf"\textbf{{{_escape_latex(prefix)}}} {content}"
+        escaped_prefix = _escape_latex(prefix)
+        content = rf"\textbf{{{escaped_prefix}}} {content}"
+        word_measurements.insert(
+            0,
+            rf"\KrizovkarRequireWholeWord{{\textbf{{{escaped_prefix}}}}}",
+        )
+    measurements = "".join(word_measurements)
     return (
         rf"\node[inner sep=0pt] at {_point(center_x, center_y)} "
         rf"{{\KrizovkarCellText{{{_millimetres(width_mm)}}}"
         rf"{{{_millimetres(height_mm)}}}"
         rf"{{{_format_number(font_size_pt)}pt}}"
         rf"{{{_format_number(line_height_pt)}pt}}"
+        rf"{{{measurements}}}"
         rf"{{{content}}}}};"
     )
 
@@ -716,28 +734,57 @@ def create_latex_source(
         r"\renewcommand{\familydefault}{\sfdefault}",
         r"\pagestyle{empty}",
         r"\setlength{\parindent}{0pt}",
-        r"\newcommand{\KrizovkarFitWord}[1]{%",
-        r"  \adjustbox{max width=\linewidth}{#1}%",
-        r"}",
         r"\newsavebox{\KrizovkarWordBox}",
-        r"\newcommand{\KrizovkarPreferWholeWord}[2]{%",
+        r"\newlength{\KrizovkarCellBaseWidth}",
+        r"\newlength{\KrizovkarCellLayoutWidth}",
+        r"\newcommand{\KrizovkarWidenCellForWord}[1]{%",
+        r"  \sbox{\KrizovkarWordBox}{#1}%",
+        r"  \ifdim\wd\KrizovkarWordBox>\KrizovkarCellLayoutWidth%",
+        (
+            r"    \setlength{\KrizovkarCellLayoutWidth}"
+            r"{\wd\KrizovkarWordBox}%"
+        ),
+        r"  \fi%",
+        r"}",
+        r"\newcommand{\KrizovkarRequireWholeWord}[1]{%",
+        r"  \KrizovkarWidenCellForWord{#1}%",
+        r"}",
+        r"\newcommand{\KrizovkarConsiderWholeWord}[1]{%",
         r"  \sbox{\KrizovkarWordBox}{#1}%",
         (
             rf"  \ifdim\wd\KrizovkarWordBox<"
-            rf"{_format_number(WHOLE_WORD_MAX_WIDTH_RATIO)}\linewidth%"
+            rf"{_format_number(WHOLE_WORD_MAX_WIDTH_RATIO)}"
+            rf"\KrizovkarCellBaseWidth%"
         ),
-        r"    \KrizovkarFitWord{\usebox{\KrizovkarWordBox}}%",
-        r"  \else%",
-        r"    #2%",
+        r"    \ifdim\wd\KrizovkarWordBox>\KrizovkarCellLayoutWidth%",
+        (
+            r"      \setlength{\KrizovkarCellLayoutWidth}"
+            r"{\wd\KrizovkarWordBox}%"
+        ),
+        r"    \fi%",
         r"  \fi%",
         r"}",
-        r"\newcommand{\KrizovkarCellText}[5]{%",
+        r"\newcommand{\KrizovkarPreferWholeWord}[2]{%",
+        r"  \sbox{\KrizovkarWordBox}{#1}%",
+        r"  \ifdim\wd\KrizovkarWordBox>\KrizovkarCellLayoutWidth%",
+        r"    #2%",
+        r"  \else%",
+        r"    #1%",
+        r"  \fi%",
+        r"}",
+        r"\newcommand{\KrizovkarCellText}[6]{%",
+        r"  \begingroup%",
+        r"  \fontsize{#3}{#4}\selectfont%",
+        r"  \setlength{\KrizovkarCellBaseWidth}{#1}%",
+        r"  \setlength{\KrizovkarCellLayoutWidth}{#1}%",
+        r"  #5%",
         r"  \adjustbox{max width=#1,max totalheight=#2}{%",
         (
-            r"    \parbox{#1}{\centering\fontsize{#3}{#4}\selectfont"
-            r"\sloppy\hspace{0pt}#5}%"
+            r"    \parbox{\KrizovkarCellLayoutWidth}{\centering"
+            r"\fontsize{#3}{#4}\selectfont\sloppy\hspace{0pt}#6}%"
         ),
         r"  }%",
+        r"  \endgroup%",
         r"}",
         r"\newcommand{\KrizovkarLetter}[2]{%",
         r"  \adjustbox{max width=#1,max totalheight=8mm}{%",
