@@ -63,6 +63,7 @@ DEFAULT_SEED = 0
 MAX_CLUE_LENGTH = 48
 FILLING_ATTEMPTS = 4
 MAX_SEARCH_NODES = 250_000
+MAX_CANDIDATE_PATTERNS = 8_192
 PREFERRED_SECRET_PART_LENGTH = 4
 _NON_BREAKING_SPACES = frozenset(
     ("\N{NO-BREAK SPACE}", "\N{NARROW NO-BREAK SPACE}")
@@ -2047,9 +2048,53 @@ def _fill_crossword_slots(
     for candidates in candidates_by_length.values():
         randomizer.shuffle(candidates)
 
+    candidates_by_letter: dict[
+        int,
+        tuple[dict[str, tuple[_Entry, ...]], ...],
+    ] = {}
+    for length, candidates in candidates_by_length.items():
+        mutable_indexes: tuple[dict[str, list[_Entry]], ...] = tuple(
+            defaultdict(list) for _ in range(length)
+        )
+        for entry_index, entry in enumerate(candidates):
+            if entry_index % 1024 == 0:
+                control._check_cancelled()
+            for position, letter in enumerate(entry.letters):
+                mutable_indexes[position][letter].append(entry)
+        candidates_by_letter[length] = tuple(
+            {
+                letter: tuple(indexed_entries)
+                for letter, indexed_entries in position_index.items()
+            }
+            for position_index in mutable_indexes
+        )
+    candidates_for_pattern: dict[
+        tuple[int, tuple[tuple[int, str], ...]],
+        tuple[_Entry, ...],
+    ] = {}
+
     coordinates = {
         slot.identifier: _slot_coordinates(slot) for slot in crossword.slots
     }
+    slots_by_identifier = {
+        slot.identifier: slot for slot in crossword.slots
+    }
+    slots_by_coordinate: dict[
+        GridCoordinate,
+        list[tuple[str, int]],
+    ] = defaultdict(list)
+    for identifier, slot_coordinates in coordinates.items():
+        for position, coordinate in enumerate(slot_coordinates):
+            slots_by_coordinate[coordinate].append((identifier, position))
+    crossings: dict[str, list[tuple[str, int, int]]] = defaultdict(list)
+    for coordinate_slots in slots_by_coordinate.values():
+        for identifier, position in coordinate_slots:
+            crossings[identifier].extend(
+                (other_identifier, position, other_position)
+                for other_identifier, other_position in coordinate_slots
+                if other_identifier != identifier
+            )
+
     assigned: dict[str, _Entry] = dict(fixed_assignments or {})
     letters: dict[GridCoordinate, str] = {}
     used_answers: set[str] = {
@@ -2057,7 +2102,6 @@ def _fill_crossword_slots(
     }
     search_nodes = 0
 
-    slots_by_identifier = {slot.identifier: slot for slot in crossword.slots}
     for identifier, entry in assigned.items():
         slot = slots_by_identifier[identifier]
         if len(entry.letters) != slot.length:
@@ -2068,34 +2112,120 @@ def _fill_crossword_slots(
                 raise _SearchFailed
             letters[coordinate] = letter
 
-    def compatible_entries(slot: WordSlot) -> list[_Entry]:
-        slot_coordinates = coordinates[slot.identifier]
-        candidates = candidates_by_length.get(slot.length, ())
+    def matching_candidates(
+        length: int,
+        constraints: tuple[tuple[int, str], ...],
+    ) -> tuple[_Entry, ...] | list[_Entry]:
+        candidates: tuple[_Entry, ...] | list[_Entry] = candidates_by_length.get(
+            length,
+            (),
+        )
+        if constraints:
+            position_indexes = candidates_by_letter.get(length, ())
+            if position_indexes:
+                pools = tuple(
+                    position_indexes[position].get(letter, ())
+                    for position, letter in constraints
+                )
+                candidates = min(pools, key=len)
+                if len(constraints) > 1:
+                    cache_key = (length, constraints)
+                    cached = candidates_for_pattern.get(cache_key)
+                    if cached is None:
+                        matching = []
+                        for entry_index, entry in enumerate(candidates):
+                            if entry_index % 1024 == 0:
+                                control._check_cancelled()
+                            if all(
+                                entry.letters[position] == letter
+                                for position, letter in constraints
+                            ):
+                                matching.append(entry)
+                        cached = tuple(matching)
+                        if (
+                            len(candidates_for_pattern)
+                            < MAX_CANDIDATE_PATTERNS
+                        ):
+                            candidates_for_pattern[cache_key] = cached
+                    candidates = cached
+        return candidates
+
+    def slot_constraints(
+        slot: WordSlot,
+    ) -> tuple[tuple[int, str], ...]:
+        return tuple(
+            (position, letters[coordinate])
+            for position, coordinate in enumerate(coordinates[slot.identifier])
+            if coordinate in letters
+        )
+
+    def candidate_pool(
+        slot: WordSlot,
+    ) -> tuple[
+        tuple[_Entry, ...] | list[_Entry],
+        tuple[tuple[int, str], ...],
+    ]:
+        constraints = slot_constraints(slot)
+        candidates = matching_candidates(slot.length, constraints)
+        return candidates, constraints
+
+    def candidate_support(
+        slot: WordSlot,
+        entry: _Entry,
+    ) -> tuple[int, ...]:
+        support_counts = []
+        for other_identifier, position, other_position in crossings.get(
+            slot.identifier,
+            (),
+        ):
+            if other_identifier in assigned:
+                continue
+            other_slot = slots_by_identifier[other_identifier]
+            constraints = {
+                constraint_position: letter
+                for constraint_position, letter in slot_constraints(other_slot)
+            }
+            constraints[other_position] = entry.letters[position]
+            pool = matching_candidates(
+                other_slot.length,
+                tuple(sorted(constraints.items())),
+            )
+            support_counts.append(len(pool))
+        return tuple(sorted(support_counts))
+
+    def compatible_entries(
+        slot: WordSlot,
+        candidates: tuple[_Entry, ...] | list[_Entry],
+        constraints: tuple[tuple[int, str], ...],
+        limit: int | None,
+    ) -> list[_Entry] | None:
         preferred = (
             preferred_assignments.get(slot.identifier)
             if preferred_assignments is not None
             else None
         )
-        if preferred is not None and len(preferred.letters) == slot.length:
-            candidates = (
-                preferred,
-                *(
-                    entry
-                    for entry in candidates
-                    if entry.answer != preferred.answer
-                ),
-            )
+        if preferred is not None and len(preferred.letters) != slot.length:
+            preferred = None
         compatible = []
+
+        def add_if_available(entry: _Entry) -> bool:
+            if entry.answer in used_answers:
+                return False
+            compatible.append(entry)
+            return limit is not None and len(compatible) >= limit
+
+        if preferred is not None and all(
+            preferred.letters[position] == letter
+            for position, letter in constraints
+        ) and add_if_available(preferred):
+            return None
         for index, entry in enumerate(candidates):
             if index % 1024 == 0:
                 control._check_cancelled()
-            if entry.answer in used_answers:
+            if preferred is not None and entry.answer == preferred.answer:
                 continue
-            if all(
-                coordinate not in letters or letters[coordinate] == letter
-                for coordinate, letter in zip(slot_coordinates, entry.letters)
-            ):
-                compatible.append(entry)
+            if add_if_available(entry):
+                return None
         return compatible
 
     def search() -> dict[str, _Entry] | None:
@@ -2104,23 +2234,84 @@ def _fill_crossword_slots(
         if len(assigned) == len(crossword.slots):
             return dict(assigned)
 
+        selected_slot_index: int | None = None
         selected_slot: WordSlot | None = None
         selected_candidates: list[_Entry] | None = None
-        for slot in crossword.slots:
-            if slot.identifier in assigned:
+        candidate_slots = []
+        for slot_index, slot in enumerate(crossword.slots):
+            if slot.identifier not in assigned:
+                pool, constraints = candidate_pool(slot)
+                preferred = (
+                    preferred_assignments.get(slot.identifier)
+                    if preferred_assignments is not None
+                    else None
+                )
+                candidate_slots.append(
+                    (
+                        len(pool) + (preferred is not None),
+                        slot_index,
+                        slot,
+                        pool,
+                        constraints,
+                    )
+                )
+
+        for _, slot_index, slot, pool, constraints in sorted(candidate_slots):
+            limit = None
+            if selected_candidates is not None:
+                limit = len(selected_candidates)
+                if (
+                    selected_slot_index is not None
+                    and slot_index < selected_slot_index
+                ):
+                    limit += 1
+            candidates = compatible_entries(
+                slot,
+                pool,
+                constraints,
+                limit,
+            )
+            if candidates is None:
                 continue
-            candidates = compatible_entries(slot)
             if not candidates:
                 return None
             if (
                 selected_candidates is None
-                or len(candidates) < len(selected_candidates)
+                or (len(candidates), slot_index)
+                < (len(selected_candidates), selected_slot_index)
             ):
+                selected_slot_index = slot_index
                 selected_slot = slot
                 selected_candidates = candidates
 
         assert selected_slot is not None
         assert selected_candidates is not None
+        selected_preferred = (
+            preferred_assignments.get(selected_slot.identifier)
+            if preferred_assignments is not None
+            else None
+        )
+        scored_candidates = []
+        for candidate_index, entry in enumerate(selected_candidates):
+            if candidate_index % 256 == 0:
+                control._check_cancelled()
+            scored_candidates.append(
+                (
+                    entry,
+                    (
+                        selected_preferred is not None
+                        and entry.answer == selected_preferred.answer,
+                        candidate_support(selected_slot, entry),
+                    ),
+                )
+            )
+        scored_candidates.sort(
+            key=lambda candidate: candidate[1],
+            reverse=True,
+        )
+        selected_candidates = [
+            entry for entry, _ in scored_candidates
+        ]
         slot_coordinates = coordinates[selected_slot.identifier]
         for entry in selected_candidates:
             control._try_combination()

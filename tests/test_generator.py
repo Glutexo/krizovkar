@@ -7,6 +7,7 @@ import unittest
 from dataclasses import replace
 from itertools import product
 from pathlib import Path
+from unittest.mock import patch
 
 from krizovkar.dictionary import CrosswordDictionary, DictionaryEntry
 from krizovkar.generator import (
@@ -362,6 +363,51 @@ class TemplateGenerationAndFillingTest(unittest.TestCase):
 
         self.assertTrue(all(slot.answer is not None for slot in filled.slots))
         self.assertGreater(control.tried_combinations, 0)
+
+    def test_prefers_candidates_supported_by_crossing_slots(self) -> None:
+        crossword = generate_empty_template(
+            width=3,
+            height=3,
+            layout="numbered",
+        )
+        answers = (
+            "AAB",
+            "AAC",
+            "ABA",
+            "ABB",
+            "ABC",
+            "ADA",
+            "BCC",
+            "BCD",
+            "CAC",
+            "CBC",
+            "CBD",
+            "CDA",
+            "DAC",
+            "DCB",
+            "DCD",
+        )
+        dictionary = CrosswordDictionary(
+            entries=tuple(
+                DictionaryEntry(answer=answer, clues=(answer,))
+                for answer in answers
+            )
+        )
+        control = GenerationControl()
+
+        with (
+            patch("krizovkar.generator.FILLING_ATTEMPTS", 1),
+            patch("krizovkar.generator.MAX_SEARCH_NODES", 10),
+        ):
+            filled = fill_crossword(
+                crossword,
+                dictionary,
+                seed=2,
+                control=control,
+            )
+
+        self.assertTrue(all(slot.answer is not None for slot in filled.slots))
+        self.assertEqual(6, control.tried_combinations)
 
     def test_cancelled_filling_stops_cooperatively(self) -> None:
         crossword = generate_empty_template(
