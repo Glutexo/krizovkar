@@ -83,6 +83,7 @@ from krizovkar.gui import (
     parse_template_secret,
     parse_template_seed,
     parse_template_settings,
+    resize_crossword_document,
     set_crossword_cell_role,
     set_crossword_cell_slot_start,
     set_crossword_cells_role,
@@ -93,6 +94,8 @@ from krizovkar.model import (
     Coordinate,
     CrosswordDocument,
     CrosswordGrid,
+    CrosswordLayout,
+    CrosswordSecret,
     CrosswordSecretCellsPart,
     CrosswordSecretSlotPart,
     EmptyCellRole,
@@ -102,6 +105,7 @@ from krizovkar.model import (
     LetterCellRole,
     ModelError,
     SecretCell,
+    WordSlot,
     dump_crossword_document,
     load_crossword_document,
     load_crossword_grid,
@@ -137,6 +141,92 @@ def _filled_numbered_crossword():
     for identifier, (answer, clue) in entries.items():
         crossword = fill_crossword_slot(crossword, identifier, answer, clue)
     return crossword
+
+
+def _secret_resize_crossword(layout: str) -> CrosswordDocument:
+    if layout == "numbered":
+        vertical_slots = tuple(
+            WordSlot(
+                identifier=f"v{column}",
+                start=Coordinate(1, column),
+                direction="vertical",
+                length=3,
+                answer=answer,
+                clue=f"Sloupec {column}",
+            )
+            for column, answer in enumerate(
+                ("XXA", "YYB", "ZZC", "WWD"),
+                start=1,
+            )
+        )
+        secret_slot = WordSlot(
+            identifier="h1",
+            start=Coordinate(4, 1),
+            direction="horizontal",
+            length=3,
+            answer="ABC",
+            clue="Tajenka",
+        )
+        cells = (
+            (LetterCellRole(),) * 4,
+            (LetterCellRole(),) * 4,
+            (LetterCellRole(),) * 4,
+            (
+                LetterCellRole(),
+                LetterCellRole(),
+                LetterCellRole(),
+                EmptyCellRole(),
+            ),
+        )
+    else:
+        vertical_slots = tuple(
+            WordSlot(
+                identifier=f"v{column}",
+                start=Coordinate(1, column + 1),
+                direction="vertical",
+                length=3,
+                answer=answer,
+                clue=f"Sloupec {column}",
+            )
+            for column, answer in enumerate(
+                ("XXA", "YYB", "ZZC"),
+                start=1,
+            )
+        )
+        secret_slot = WordSlot(
+            identifier="h1",
+            start=Coordinate(4, 2),
+            direction="horizontal",
+            length=3,
+            clue_placement="inline",
+            answer="ABC",
+            clue="Tajenka",
+        )
+        cells = (
+            (EmptyCellRole(), LetterCellRole(), LetterCellRole(), LetterCellRole()),
+            (EmptyCellRole(), LetterCellRole(), LetterCellRole(), LetterCellRole()),
+            (EmptyCellRole(), LetterCellRole(), LetterCellRole(), LetterCellRole()),
+            (
+                LegendCellRole(),
+                LetterCellRole(),
+                LetterCellRole(),
+                LetterCellRole(),
+            ),
+        )
+
+    return CrosswordDocument(
+        format_name="krizovkar",
+        kind="crossword",
+        version=1,
+        grid=CrosswordLayout(width=4, height=4, cells=cells),
+        slots=(*vertical_slots, secret_slot),
+        secrets=(
+            CrosswordSecret(
+                parts=(CrosswordSecretSlotPart("h1", word_count=1),),
+                words=("ABC",),
+            ),
+        ),
+    )
 
 
 def _resizable_preview() -> tuple[CrosswordPreview, Mock]:
@@ -3054,6 +3144,154 @@ class GuiTest(unittest.TestCase):
             all(slot.clue_placement == "external" for slot in crossword.slots)
         )
 
+    def test_resize_removes_only_slots_outside_new_grid(self) -> None:
+        crossword = _filled_numbered_crossword()
+        original_slots = {
+            slot.identifier: slot for slot in crossword.slots
+        }
+
+        resized = resize_crossword_document(
+            crossword,
+            2,
+            3,
+            layout="numbered",
+        )
+
+        self.assertEqual(2, resized.grid.width)
+        self.assertEqual(3, resized.grid.height)
+        self.assertEqual(
+            (original_slots["v1"], original_slots["v2"]),
+            resized.slots,
+        )
+        self.assertEqual(("ADG", "BEH"), tuple(
+            slot.answer for slot in resized.slots
+        ))
+        dump_crossword_document(resized, StringIO())
+
+    def test_resize_to_larger_grid_preserves_content_and_adds_empty_cells(
+        self,
+    ) -> None:
+        crossword = _filled_numbered_crossword()
+
+        resized = resize_crossword_document(
+            crossword,
+            5,
+            4,
+            layout="numbered",
+        )
+
+        self.assertEqual(crossword.slots, resized.slots)
+        self.assertEqual(crossword.secrets, resized.secrets)
+        self.assertTrue(
+            all(
+                isinstance(resized.grid.cells[row][column], LetterCellRole)
+                for row in range(3)
+                for column in range(3)
+            )
+        )
+        self.assertTrue(
+            all(
+                isinstance(resized.grid.cells[row][column], EmptyCellRole)
+                for row, column in (
+                    *((row, column) for row in range(3) for column in (3, 4)),
+                    *((3, column) for column in range(5)),
+                )
+            )
+        )
+
+    def test_numbered_resize_adds_separated_slot_to_preserve_secret(
+        self,
+    ) -> None:
+        crossword = _secret_resize_crossword("numbered")
+        original_vertical_slots = crossword.slots[:-1]
+
+        resized = resize_crossword_document(
+            crossword,
+            4,
+            3,
+            layout="numbered",
+        )
+
+        self.assertEqual(original_vertical_slots, resized.slots[1:])
+        self.assertEqual(crossword.secrets, resized.secrets)
+        secret_slot = resized.slots[0]
+        self.assertEqual("h1", secret_slot.identifier)
+        self.assertEqual(Coordinate(3, 1), secret_slot.start)
+        self.assertEqual("external", secret_slot.clue_placement)
+        self.assertEqual("ABC", secret_slot.answer)
+        grid = create_grid_from_crossword(resized)
+        assert grid.grid.cells is not None
+        secret_row = grid.grid.cells[2]
+        self.assertTrue(
+            all(isinstance(cell, SecretCell) for cell in secret_row[:3])
+        )
+        self.assertIsNotNone(secret_row[0].number)
+        self.assertIn("right", secret_row[2].bars)
+
+    def test_swedish_resize_adds_slot_and_legend_to_preserve_secret(
+        self,
+    ) -> None:
+        crossword = _secret_resize_crossword("swedish")
+        original_vertical_slots = crossword.slots[:-1]
+
+        resized = resize_crossword_document(
+            crossword,
+            4,
+            3,
+            layout="swedish",
+        )
+
+        self.assertEqual(original_vertical_slots, resized.slots[1:])
+        self.assertEqual(crossword.secrets, resized.secrets)
+        secret_slot = resized.slots[0]
+        self.assertEqual("h1", secret_slot.identifier)
+        self.assertEqual(Coordinate(3, 2), secret_slot.start)
+        self.assertEqual("inline", secret_slot.clue_placement)
+        self.assertEqual("ABC", secret_slot.answer)
+        self.assertIsInstance(resized.grid.cells[2][0], LegendCellRole)
+
+    def test_resize_drops_secret_only_when_no_replacement_slot_fits(
+        self,
+    ) -> None:
+        crossword = _secret_resize_crossword("numbered")
+
+        resized = resize_crossword_document(
+            crossword,
+            2,
+            3,
+            layout="numbered",
+        )
+
+        self.assertEqual(crossword.slots[:2], resized.slots)
+        self.assertEqual((), resized.secrets)
+
+    def test_resize_preserves_only_in_bounds_cell_secret(self) -> None:
+        crossword = create_blank_template(
+            CrosswordSettings(3, 3),
+            "numbered",
+        )
+        crossword = set_crossword_cells_role(
+            crossword,
+            (Coordinate(1, 1), Coordinate(2, 2)),
+            "secret",
+        )
+
+        preserved = resize_crossword_document(
+            crossword,
+            2,
+            3,
+            layout="numbered",
+        )
+        removed = resize_crossword_document(
+            crossword,
+            1,
+            3,
+            layout="numbered",
+        )
+
+        self.assertEqual(crossword.secrets, preserved.secrets)
+        self.assertEqual((), removed.secrets)
+
     def test_changes_letter_to_legend_and_splits_crossing_slots(self) -> None:
         crossword = create_blank_template(
             CrosswordSettings(width=3, height=3),
@@ -4812,10 +5050,11 @@ class GuiTest(unittest.TestCase):
     def test_preview_resize_changes_only_its_document_window(self) -> None:
         window = Mock()
         window._save_inline_slot_edit.return_value = True
-        window._crossword = create_blank_template(
+        crossword = create_blank_template(
             CrosswordSettings(4, 4),
             "numbered",
         )
+        window._crossword = crossword
         window._template_layout = "numbered"
         window._template_creation_mode = "generated"
         new_template = create_blank_template(
@@ -4824,16 +5063,17 @@ class GuiTest(unittest.TestCase):
         )
 
         with patch(
-            "krizovkar.gui.create_new_template",
+            "krizovkar.gui.resize_crossword_document",
             return_value=new_template,
-        ) as create_template:
+        ) as resize_crossword:
             CrosswordDocumentWindow._preview_grid_resized(window, 3, 3)
 
         window._save_inline_slot_edit.assert_called_once_with()
-        create_template.assert_called_once_with(
-            CrosswordSettings(3, 3),
-            "numbered",
-            "generated",
+        resize_crossword.assert_called_once_with(
+            crossword,
+            3,
+            3,
+            layout="numbered",
         )
         self.assertIs(new_template, window._crossword)
         self.assertEqual("numbered", window._template_layout)
@@ -4844,10 +5084,11 @@ class GuiTest(unittest.TestCase):
     def test_preview_resize_keeps_empty_template_mode(self) -> None:
         window = Mock()
         window._save_inline_slot_edit.return_value = True
-        window._crossword = create_empty_template(
+        crossword = create_empty_template(
             CrosswordSettings(4, 4),
             "swedish",
         )
+        window._crossword = crossword
         window._template_layout = "swedish"
         window._template_creation_mode = "empty"
         resized = create_empty_template(
@@ -4856,15 +5097,16 @@ class GuiTest(unittest.TestCase):
         )
 
         with patch(
-            "krizovkar.gui.create_new_template",
+            "krizovkar.gui.resize_crossword_document",
             return_value=resized,
-        ) as create_template:
+        ) as resize_crossword:
             CrosswordDocumentWindow._preview_grid_resized(window, 5, 4)
 
-        create_template.assert_called_once_with(
-            CrosswordSettings(5, 4),
-            "swedish",
-            "empty",
+        resize_crossword.assert_called_once_with(
+            crossword,
+            5,
+            4,
+            layout="swedish",
         )
         self.assertIs(resized, window._crossword)
 
@@ -4876,10 +5118,12 @@ class GuiTest(unittest.TestCase):
         window._template_layout = "numbered"
         window._template_creation_mode = "generated"
 
-        with patch("krizovkar.gui.create_new_template") as create_template:
+        with patch(
+            "krizovkar.gui.resize_crossword_document"
+        ) as resize_crossword:
             CrosswordDocumentWindow._preview_grid_resized(window, 3, 3)
 
-        create_template.assert_not_called()
+        resize_crossword.assert_not_called()
         self.assertIs(template, window._crossword)
         window._set_dirty.assert_not_called()
         window._refresh_crossword_view.assert_not_called()
@@ -4893,7 +5137,7 @@ class GuiTest(unittest.TestCase):
         window._template_creation_mode = "generated"
 
         with patch(
-            "krizovkar.gui.create_new_template",
+            "krizovkar.gui.resize_crossword_document",
             side_effect=GuiInputError("rozměr nelze rozdělit"),
         ):
             CrosswordDocumentWindow._preview_grid_resized(window, 4, 4)
@@ -4903,7 +5147,7 @@ class GuiTest(unittest.TestCase):
         window._set_dirty.assert_not_called()
         window._refresh_crossword_view.assert_not_called()
 
-    def test_preview_resize_replaces_filled_crossword_without_confirmation(
+    def test_preview_resize_preserves_filled_crossword_without_confirmation(
         self,
     ) -> None:
         window = Mock()
@@ -4918,27 +5162,20 @@ class GuiTest(unittest.TestCase):
         window._crossword = crossword
         window._template_layout = "numbered"
         window._template_creation_mode = "generated"
-        new_template = create_blank_template(
-            CrosswordSettings(4, 4),
-            "numbered",
-        )
+        window._selected_slot_identifier = "h1"
 
-        with (
-            patch("krizovkar.gui.messagebox.askyesno") as ask,
-            patch(
-                "krizovkar.gui.create_new_template",
-                return_value=new_template,
-            ) as create_template,
-        ):
+        with patch("krizovkar.gui.messagebox.askyesno") as ask:
             CrosswordDocumentWindow._preview_grid_resized(window, 4, 4)
 
         ask.assert_not_called()
-        create_template.assert_called_once_with(
-            CrosswordSettings(4, 4),
-            "numbered",
-            "generated",
+        resized_slot = next(
+            slot
+            for slot in window._crossword.slots
+            if slot.identifier == "h1"
         )
-        self.assertIs(new_template, window._crossword)
+        self.assertEqual("ABC", resized_slot.answer)
+        self.assertEqual("První řádek", resized_slot.clue)
+        self.assertEqual("h1", window._selected_slot_identifier)
         window._set_dirty.assert_called_once_with(True)
 
     def test_menu_action_generates_secret_as_one_undoable_change(self) -> None:
