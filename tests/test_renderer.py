@@ -88,7 +88,8 @@ class LatexSourceTest(unittest.TestCase):
         self.assertIn(r"\fill[black!7]", legend)
         self.assertIn(r"\KrizovkarCellText", legend)
         self.assertIn(
-            r"\KrizovkarCellText{10.2mm}{4.2mm}{7.5pt}{7.9pt}{SA\-VEC}",
+            r"\KrizovkarCellText{10.2mm}{4.2mm}{7.5pt}{7.9pt}"
+            r"{\KrizovkarPreferWholeWord{SAVEC}{SA\-VEC}}",
             legend,
         )
         self.assertIn(r"\textbf{Pomůcka:}", help_source)
@@ -115,11 +116,41 @@ class LatexSourceTest(unittest.TestCase):
 
         source = create_latex_source(crossword)
 
-        self.assertIn(r"IS\-LAND.\allowbreak{}SÍD\-LO", source)
         self.assertIn(
-            r"\KrizovkarFitWord{NĚM}.\allowbreak{}VRCH\-NÍ",
+            r"\KrizovkarPreferWholeWord{ISLAND.}{IS\-LAND.}"
+            r"\allowbreak{}\KrizovkarPreferWholeWord{SÍDLO}{SÍD\-LO}",
             source,
         )
+        self.assertIn(
+            r"\KrizovkarFitWord{NĚM.}\allowbreak{}"
+            r"\KrizovkarPreferWholeWord{VRCHNÍ}{VRCH\-NÍ}",
+            source,
+        )
+
+    def test_slightly_oversized_legend_word_shrinks_before_split(self) -> None:
+        crossword = CrosswordGrid(
+            format_name="krizovkar",
+            kind="grid",
+            version=1,
+            grid=Grid(
+                width=1,
+                height=1,
+                cells=((LegendCell(texts=("Indonés.atol",)),),),
+            ),
+        )
+
+        source = create_latex_source(crossword)
+
+        self.assertIn(
+            r"\KrizovkarPreferWholeWord{INDONÉS.}{IN\-DONÉS.}"
+            r"\allowbreak{}\KrizovkarFitWord{ATOL}",
+            source,
+        )
+        self.assertIn(
+            r"\ifdim\wd\KrizovkarWordBox<1.2\linewidth",
+            source,
+        )
+        self.assertIn("\\else%\n    #2%", source)
 
     def test_unbreakable_legend_words_shrink_instead_of_overflowing(self) -> None:
         crossword = CrosswordGrid(
@@ -238,12 +269,15 @@ class LatexSourceTest(unittest.TestCase):
         source = create_latex_source(crossword)
 
         self.assertIn(
-            r"50\%\_\# \& \textbackslash{} "
-            r"\{\KrizovkarFitWord{X}\}",
+            r"\KrizovkarFitWord{50\%\_\#}",
+            source,
+        )
+        self.assertIn(
+            r"\KrizovkarFitWord{\{X\}}",
             source,
         )
         self.assertIn(r"CI\-TA\-CE", source)
-        self.assertEqual(2, source.count(r"\textquotedbl{}"))
+        self.assertEqual(4, source.count(r"\textquotedbl{}"))
         self.assertIn(r"\textasciigrave{}", source)
 
     def test_czech_letters_and_ch_remain_unicode(self) -> None:

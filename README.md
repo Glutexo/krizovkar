@@ -456,7 +456,7 @@ zachovat počet prázdných částí složené legendy:
 {type: legend, texts: ["Savec", "Pohoří"], arrows: [right, down]}
 ```
 
-Formát počet textů neomezuje estetickým pravidlem. Renderer rozdělí buňku na stejně vysoké části v pořadí shora dolů; případné šipky `right` a `down` přiřadí textům ve stejném pořadí. Text se automaticky zalomí a zmenší tak, aby se do buňky vešel. Slovo, které se vejde celé na samostatný řádek, renderer nedělí. Delší česká slova dělí podle slovníku knihovny Pyphen; neláme je na libovolném znaku. Text spojený bez mezery tečkou nebo obdobným interpunkčním znaménkem může zalomit za tímto znaménkem. Jednopísmenné souhláskové předložky `k`, `s`, `v` a `z` se při vykreslení spojí s následujícím výrazem nezalomitelnou mezerou. Jednoduchou a dvojitou variantu ukazuje [mřížka s legendami](examples/grid-legend.yaml).
+Formát počet textů neomezuje estetickým pravidlem. Renderer rozdělí buňku na stejně vysoké části v pořadí shora dolů; případné šipky `right` a `down` přiřadí textům ve stejném pořadí. Text se automaticky zalomí a zmenší tak, aby se do buňky vešel. Slovo, které se vejde celé na samostatný řádek nebo k tomu potřebuje jen mírné zmenšení, renderer nedělí. Teprve delší česká slova dělí podle slovníku knihovny Pyphen; neláme je na libovolném znaku. Text spojený bez mezery tečkou nebo obdobným interpunkčním znaménkem může zalomit za tímto znaménkem. Jednopísmenné souhláskové předložky `k`, `s`, `v` a `z` se při vykreslení spojí s následujícím výrazem nezalomitelnou mezerou. Jednoduchou a dvojitou variantu ukazuje [mřížka s legendami](examples/grid-legend.yaml).
 LaTeX a PDF vykreslují text všech vepsaných i číslovaných legend velkými
 písmeny; uložené znění v YAML tím nemění.
 

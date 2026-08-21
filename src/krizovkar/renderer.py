@@ -35,6 +35,8 @@ CELL_TEXT_FONT_SIZE_PT = 6.0
 CELL_TEXT_LINE_HEIGHT_PT = 6.3
 LEGEND_TEXT_FONT_SIZE_PT = 7.5
 LEGEND_TEXT_LINE_HEIGHT_PT = 7.9
+# Poměr 1,2 dovolí zmenšit celé slovo nejvýše přibližně o jednu šestinu.
+WHOLE_WORD_MAX_WIDTH_RATIO = 1.2
 MINIMUM_CLUE_AREA_WIDTH_MM = 100.0
 CLUE_COLUMN_GAP_MM = 6.0
 CLUE_GRID_GAP_MM = 7.0
@@ -154,21 +156,19 @@ def _escape_latex_range(
     return "".join(escaped)
 
 
-def _word_group_end(text: str, start: int) -> int:
-    end = start + 1
+def _text_segment_end(text: str, start: int) -> int:
+    end = start
     while end < len(text):
         character = text[end]
-        if character.isalpha() or character == SOFT_HYPHEN:
-            end += 1
-            continue
+        if character.isspace() and character != NON_BREAKING_SPACE:
+            break
+        end += 1
         if (
-            character == NON_BREAKING_SPACE
-            and end + 1 < len(text)
-            and text[end + 1].isalpha()
+            character in _BREAKABLE_JOINING_PUNCTUATION
+            and end < len(text)
+            and not text[end].isspace()
         ):
-            end += 1
-            continue
-        break
+            break
     return end
 
 
@@ -176,11 +176,11 @@ def _escape_latex(
     text: str,
     *,
     typography: bool = False,
-    fit_unbreakable_words: bool = False,
+    prefer_whole_words: bool = False,
 ) -> str:
     if typography:
         text = mark_hyphenation(protect_prepositions(text))
-    if not fit_unbreakable_words:
+    if not prefer_whole_words:
         return _escape_latex_range(
             text,
             0,
@@ -191,7 +191,7 @@ def _escape_latex(
     escaped = []
     start = 0
     while start < len(text):
-        if not text[start].isalpha():
+        if text[start].isspace() and text[start] != NON_BREAKING_SPACE:
             end = start + 1
             escaped.append(
                 _escape_latex_range(
@@ -204,16 +204,32 @@ def _escape_latex(
             start = end
             continue
 
-        end = _word_group_end(text, start)
-        word = _escape_latex_range(
+        end = _text_segment_end(text, start)
+        hyphenated = _escape_latex_range(
             text,
             start,
             end,
-            typography=typography,
+            typography=False,
         )
-        if SOFT_HYPHEN not in text[start:end]:
-            word = rf"\KrizovkarFitWord{{{word}}}"
-        escaped.append(word)
+        whole_text = text[start:end].replace(SOFT_HYPHEN, "")
+        whole = _escape_latex_range(
+            whole_text,
+            0,
+            len(whole_text),
+            typography=False,
+        )
+        if SOFT_HYPHEN in text[start:end]:
+            escaped.append(
+                rf"\KrizovkarPreferWholeWord{{{whole}}}{{{hyphenated}}}"
+            )
+        else:
+            escaped.append(rf"\KrizovkarFitWord{{{whole}}}")
+        if (
+            end < len(text)
+            and text[end - 1] in _BREAKABLE_JOINING_PUNCTUATION
+            and not text[end].isspace()
+        ):
+            escaped.append(r"\allowbreak{}")
         start = end
     return "".join(escaped)
 
@@ -232,7 +248,7 @@ def _cell_text_command(
     content = _escape_latex(
         text,
         typography=True,
-        fit_unbreakable_words=True,
+        prefer_whole_words=True,
     )
     if prefix is not None:
         content = rf"\textbf{{{_escape_latex(prefix)}}} {content}"
@@ -702,6 +718,18 @@ def create_latex_source(
         r"\setlength{\parindent}{0pt}",
         r"\newcommand{\KrizovkarFitWord}[1]{%",
         r"  \adjustbox{max width=\linewidth}{#1}%",
+        r"}",
+        r"\newsavebox{\KrizovkarWordBox}",
+        r"\newcommand{\KrizovkarPreferWholeWord}[2]{%",
+        r"  \sbox{\KrizovkarWordBox}{#1}%",
+        (
+            rf"  \ifdim\wd\KrizovkarWordBox<"
+            rf"{_format_number(WHOLE_WORD_MAX_WIDTH_RATIO)}\linewidth%"
+        ),
+        r"    \KrizovkarFitWord{\usebox{\KrizovkarWordBox}}%",
+        r"  \else%",
+        r"    #2%",
+        r"  \fi%",
         r"}",
         r"\newcommand{\KrizovkarCellText}[5]{%",
         r"  \adjustbox{max width=#1,max totalheight=#2}{%",
