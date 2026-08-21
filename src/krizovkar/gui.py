@@ -1311,7 +1311,7 @@ class CrosswordFillDialog(simpledialog.Dialog):
         self._seed_editor: ttk.Entry
         self._input: CrosswordFillInput | None = None
         self._initial_seed = random.randrange(2**63)
-        super().__init__(parent, "Vygenerovat křížovku")
+        super().__init__(parent, "Vyplnit křížovku")
 
     def body(self, master: tk.Frame) -> tk.Widget:
         _inherit_macos_menu_bar(self)
@@ -1362,7 +1362,7 @@ class CrosswordFillDialog(simpledialog.Dialog):
         buttons = ttk.Frame(self, padding=(16, 0, 16, 16))
         ttk.Button(
             buttons,
-            text="Vygenerovat",
+            text="Vyplnit",
             command=self.ok,
             default="active",
         ).pack(side="right")
@@ -1382,7 +1382,7 @@ class CrosswordFillDialog(simpledialog.Dialog):
         if dictionary_path is None:
             self._input = None
             messagebox.showerror(
-                "Křížovku nelze vygenerovat",
+                "Křížovku nelze vyplnit",
                 "Vyberte slovník.",
                 parent=self,
             )
@@ -1394,7 +1394,7 @@ class CrosswordFillDialog(simpledialog.Dialog):
         except DictionaryError as error:
             self._input = None
             messagebox.showerror(
-                "Křížovku nelze vygenerovat",
+                "Křížovku nelze vyplnit",
                 str(error),
                 parent=self,
             )
@@ -1406,7 +1406,7 @@ class CrosswordFillDialog(simpledialog.Dialog):
         except GuiInputError as error:
             self._input = None
             messagebox.showerror(
-                "Křížovku nelze vygenerovat",
+                "Křížovku nelze vyplnit",
                 str(error),
                 parent=self,
             )
@@ -4053,7 +4053,7 @@ class CrosswordApplication:
             state="disabled",
         )
         self.edit_menu.add_command(
-            label="Vygenerovat křížovku…",
+            label="Vyplnit křížovku…",
             state="disabled",
         )
         menu.add_cascade(label="Úpravy", menu=self.edit_menu)
@@ -4481,7 +4481,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             self.edit_menu.index("end"),
         )
         self.edit_menu.add_command(
-            label="Vygenerovat křížovku…",
+            label="Vyplnit křížovku…",
             command=self.generate_complete_crossword,
         )
         self._fill_crossword_menu_index = cast(
@@ -5020,7 +5020,7 @@ class CrosswordDocumentWindow(ttk.Frame):
             )
         except FillingError as error:
             self._show_action_error(
-                "Křížovku nelze vygenerovat",
+                "Křížovku nelze vyplnit",
                 str(error),
             )
             return

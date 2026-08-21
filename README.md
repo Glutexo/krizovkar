@@ -169,7 +169,7 @@ nejméně zvětší, nejvýše na 50 × 50 polí. Při novém rozvržení nahrad
 obsah bez potvrzení. Celé přidání je jeden krok historie, takže je lze
 vrátit jediným **Zpět**.
 
-Volba **Úpravy → Vygenerovat křížovku…** doplní ze slovníku všechna dosud
+Volba **Úpravy → Vyplnit křížovku…** doplní ze slovníku všechna dosud
 prázdná hesla. Nejprve se pokusí zachovat tajenku i všechna ručně zadaná
 hesla a jejich legendy. Pokud s nimi úplné řešení neexistuje, použije běžná
 vložená hesla jen jako přednostní kandidáty a nahradí ta, která vyplnění

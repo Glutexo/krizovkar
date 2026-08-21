@@ -658,7 +658,7 @@ class GuiTest(unittest.TestCase):
                 "Zpět",
                 "Vpřed",
                 "Přidat tajenku…",
-                "Vygenerovat křížovku…",
+                "Vyplnit křížovku…",
             ],
             [
                 item.kwargs["label"]
@@ -861,7 +861,7 @@ class GuiTest(unittest.TestCase):
                 "Zpět",
                 "Vpřed",
                 "Přidat tajenku…",
-                "Vygenerovat křížovku…",
+                "Vyplnit křížovku…",
             ],
             [
                 item.kwargs["label"]
@@ -1961,7 +1961,7 @@ class GuiTest(unittest.TestCase):
         dialog._secret_editor.focus_set.assert_not_called()
         dialog._dictionary_editor.focus_set.assert_called_once_with()
 
-    def test_crossword_fill_dialog_uses_generation_title_and_random_seed(
+    def test_crossword_fill_dialog_uses_fill_title_and_random_seed(
         self,
     ) -> None:
         parent = Mock()
@@ -1978,7 +1978,7 @@ class GuiTest(unittest.TestCase):
             dialog = CrosswordFillDialog(parent)
 
         random_seed.assert_called_once_with(2**63)
-        initialize.assert_called_once_with(parent, "Vygenerovat křížovku")
+        initialize.assert_called_once_with(parent, "Vyplnit křížovku")
         self.assertEqual(123, dialog._initial_seed)
         self.assertIsNone(dialog._input)
 
@@ -2049,7 +2049,7 @@ class GuiTest(unittest.TestCase):
         )
         bind.assert_called_once_with(seed_editor)
 
-    def test_crossword_fill_dialog_uses_generate_button(self) -> None:
+    def test_crossword_fill_dialog_uses_fill_button(self) -> None:
         dialog = CrosswordFillDialog.__new__(CrosswordFillDialog)
         dialog.ok = Mock()
         dialog.cancel = Mock()
@@ -2068,7 +2068,7 @@ class GuiTest(unittest.TestCase):
         self.assertEqual(
             call(
                 buttons,
-                text="Vygenerovat",
+                text="Vyplnit",
                 command=dialog.ok,
                 default="active",
             ),
@@ -2114,7 +2114,7 @@ class GuiTest(unittest.TestCase):
         self.assertFalse(valid)
         self.assertIsNone(dialog._input)
         show_error.assert_called_once_with(
-            "Křížovku nelze vygenerovat",
+            "Křížovku nelze vyplnit",
             "Vyberte slovník.",
             parent=dialog,
         )
@@ -2139,7 +2139,7 @@ class GuiTest(unittest.TestCase):
         self.assertFalse(valid)
         self.assertIsNone(dialog._input)
         show_error.assert_called_once_with(
-            "Křížovku nelze vygenerovat",
+            "Křížovku nelze vyplnit",
             "slovník není platný",
             parent=dialog,
         )
@@ -2167,7 +2167,7 @@ class GuiTest(unittest.TestCase):
         self.assertFalse(valid)
         self.assertIsNone(dialog._input)
         show_error.assert_called_once_with(
-            "Křížovku nelze vygenerovat",
+            "Křížovku nelze vyplnit",
             "Sémě musí být celé číslo.",
             parent=dialog,
         )
@@ -5199,7 +5199,7 @@ class GuiTest(unittest.TestCase):
 
         self.assertIs(original, window._crossword)
         window._show_action_error.assert_called_once_with(
-            "Křížovku nelze vygenerovat",
+            "Křížovku nelze vyplnit",
             "křížovku nelze vyplnit",
         )
         generate.assert_called_once_with(
