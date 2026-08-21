@@ -116,7 +116,33 @@ class LatexSourceTest(unittest.TestCase):
         source = create_latex_source(crossword)
 
         self.assertIn(r"IS\-LAND.\allowbreak{}SÍD\-LO", source)
-        self.assertIn(r"NĚM.\allowbreak{}VRCH\-NÍ", source)
+        self.assertIn(
+            r"\KrizovkarFitWord{NĚM}.\allowbreak{}VRCH\-NÍ",
+            source,
+        )
+
+    def test_unbreakable_legend_words_shrink_instead_of_overflowing(self) -> None:
+        crossword = CrosswordGrid(
+            format_name="krizovkar",
+            kind="grid",
+            version=1,
+            grid=Grid(
+                width=1,
+                height=1,
+                cells=((LegendCell(texts=("Tlouct straka",)),),),
+            ),
+        )
+
+        source = create_latex_source(crossword)
+
+        self.assertIn(
+            r"\KrizovkarFitWord{TLOUCT} \KrizovkarFitWord{STRAKA}",
+            source,
+        )
+        self.assertIn(
+            r"\adjustbox{max width=\linewidth}{#1}",
+            source,
+        )
 
     def test_numbered_source_keeps_numbers_bars_and_both_clue_columns(self) -> None:
         crossword = load_crossword_grid(GRID_CLASSIC_EXAMPLE)
@@ -212,7 +238,8 @@ class LatexSourceTest(unittest.TestCase):
         source = create_latex_source(crossword)
 
         self.assertIn(
-            r"50\%\_\# \& \textbackslash{} \{X\}",
+            r"50\%\_\# \& \textbackslash{} "
+            r"\{\KrizovkarFitWord{X}\}",
             source,
         )
         self.assertIn(r"CI\-TA\-CE", source)

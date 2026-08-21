@@ -7,7 +7,12 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import BinaryIO, TextIO
 
-from krizovkar.languages.czech import mark_hyphenation, protect_prepositions
+from krizovkar.languages.czech import (
+    NON_BREAKING_SPACE,
+    SOFT_HYPHEN,
+    mark_hyphenation,
+    protect_prepositions,
+)
 from krizovkar.localization import system_error_message
 from krizovkar.model import (
     CrosswordGrid,
@@ -127,11 +132,16 @@ def _point(x: float, y: float) -> str:
     return f"({_format_number(x)},{_format_number(y)})"
 
 
-def _escape_latex(text: str, *, typography: bool = False) -> str:
-    if typography:
-        text = mark_hyphenation(protect_prepositions(text))
+def _escape_latex_range(
+    text: str,
+    start: int,
+    end: int,
+    *,
+    typography: bool,
+) -> str:
     escaped = []
-    for index, character in enumerate(text):
+    for index in range(start, end):
+        character = text[index]
         escaped.append(_LATEX_ESCAPES.get(character, character))
         if (
             typography
@@ -140,6 +150,70 @@ def _escape_latex(text: str, *, typography: bool = False) -> str:
             and not text[index + 1].isspace()
         ):
             escaped.append(r"\allowbreak{}")
+    return "".join(escaped)
+
+
+def _word_group_end(text: str, start: int) -> int:
+    end = start + 1
+    while end < len(text):
+        character = text[end]
+        if character.isalpha() or character == SOFT_HYPHEN:
+            end += 1
+            continue
+        if (
+            character == NON_BREAKING_SPACE
+            and end + 1 < len(text)
+            and text[end + 1].isalpha()
+        ):
+            end += 1
+            continue
+        break
+    return end
+
+
+def _escape_latex(
+    text: str,
+    *,
+    typography: bool = False,
+    fit_unbreakable_words: bool = False,
+) -> str:
+    if typography:
+        text = mark_hyphenation(protect_prepositions(text))
+    if not fit_unbreakable_words:
+        return _escape_latex_range(
+            text,
+            0,
+            len(text),
+            typography=typography,
+        )
+
+    escaped = []
+    start = 0
+    while start < len(text):
+        if not text[start].isalpha():
+            end = start + 1
+            escaped.append(
+                _escape_latex_range(
+                    text,
+                    start,
+                    end,
+                    typography=typography,
+                )
+            )
+            start = end
+            continue
+
+        end = _word_group_end(text, start)
+        word = _escape_latex_range(
+            text,
+            start,
+            end,
+            typography=typography,
+        )
+        if SOFT_HYPHEN not in text[start:end]:
+            word = rf"\KrizovkarFitWord{{{word}}}"
+        escaped.append(word)
+        start = end
     return "".join(escaped)
 
 
@@ -154,7 +228,11 @@ def _cell_text_command(
     font_size_pt: float = CELL_TEXT_FONT_SIZE_PT,
     line_height_pt: float = CELL_TEXT_LINE_HEIGHT_PT,
 ) -> str:
-    content = _escape_latex(text, typography=True)
+    content = _escape_latex(
+        text,
+        typography=True,
+        fit_unbreakable_words=True,
+    )
     if prefix is not None:
         content = rf"\textbf{{{_escape_latex(prefix)}}} {content}"
     return (
@@ -621,6 +699,9 @@ def create_latex_source(
         r"\renewcommand{\familydefault}{\sfdefault}",
         r"\pagestyle{empty}",
         r"\setlength{\parindent}{0pt}",
+        r"\newcommand{\KrizovkarFitWord}[1]{%",
+        r"  \adjustbox{max width=\linewidth}{#1}%",
+        r"}",
         r"\newcommand{\KrizovkarCellText}[5]{%",
         r"  \adjustbox{max width=#1,max totalheight=#2}{%",
         (
