@@ -147,10 +147,35 @@ class LatexSourceTest(unittest.TestCase):
             source,
         )
         self.assertIn(
-            r"\ifdim\wd\KrizovkarWordBox<1.2\linewidth",
+            r"\ifdim\wd\KrizovkarWordBox<1.4\linewidth",
             source,
         )
         self.assertIn("\\else%\n    #2%", source)
+
+    def test_parenthesized_legend_word_shrinks_before_split(self) -> None:
+        crossword = CrosswordGrid(
+            format_name="krizovkar",
+            kind="grid",
+            version=1,
+            grid=Grid(
+                width=1,
+                height=1,
+                cells=(
+                    (LegendCell(texts=("Hudební nástroj (altovka)",)),),
+                ),
+            ),
+        )
+
+        source = create_latex_source(crossword)
+
+        self.assertIn(
+            r"\KrizovkarPreferWholeWord{(ALTOVKA)}{(AL\-TOV\-KA)}",
+            source,
+        )
+        self.assertIn(
+            r"\ifdim\wd\KrizovkarWordBox<1.4\linewidth",
+            source,
+        )
 
     def test_unbreakable_legend_words_shrink_instead_of_overflowing(self) -> None:
         crossword = CrosswordGrid(

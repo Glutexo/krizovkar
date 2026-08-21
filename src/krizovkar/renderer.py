@@ -35,8 +35,8 @@ CELL_TEXT_FONT_SIZE_PT = 6.0
 CELL_TEXT_LINE_HEIGHT_PT = 6.3
 LEGEND_TEXT_FONT_SIZE_PT = 7.5
 LEGEND_TEXT_LINE_HEIGHT_PT = 7.9
-# Poměr 1,2 dovolí zmenšit celé slovo nejvýše přibližně o jednu šestinu.
-WHOLE_WORD_MAX_WIDTH_RATIO = 1.2
+# Poměr 1,4 dovolí zmenšit celé slovo nejvýše přibližně o dvě sedminy.
+WHOLE_WORD_MAX_WIDTH_RATIO = 1.4
 MINIMUM_CLUE_AREA_WIDTH_MM = 100.0
 CLUE_COLUMN_GAP_MM = 6.0
 CLUE_GRID_GAP_MM = 7.0
