@@ -1043,15 +1043,10 @@ class PdfExportDialog(simpledialog.Dialog):
         _inherit_macos_menu_bar(self)
         master.configure(padx=16, pady=12)
         master.columnconfigure(0, weight=1)
-        ttk.Label(
-            master,
-            text="Zvolte formát stránky pro tiskové PDF.",
-        ).grid(row=0, column=0, sticky="w")
         ttk.Label(master, text="Formát stránky").grid(
-            row=1,
+            row=0,
             column=0,
             sticky="w",
-            pady=(12, 0),
         )
         self._page_format_value = tk.StringVar(
             master=master,
@@ -1064,7 +1059,7 @@ class PdfExportDialog(simpledialog.Dialog):
             values=SUPPORTED_PAGE_FORMATS,
             textvariable=self._page_format_value,
         )
-        page_format.grid(row=2, column=0, sticky="ew", pady=(3, 0))
+        page_format.grid(row=1, column=0, sticky="ew", pady=(3, 0))
         return page_format
 
     def buttonbox(self) -> None:

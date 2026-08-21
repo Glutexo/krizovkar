@@ -37,6 +37,7 @@ from krizovkar.gui import (
     CrosswordSourceWindow,
     GuiInputError,
     NewTemplateResult,
+    PdfExportDialog,
     SecretGenerationDialog,
     SecretGenerationInput,
     TemplateGenerationDialog,
@@ -1573,6 +1574,41 @@ class GuiTest(unittest.TestCase):
         self.assertEqual(
             ("CHATA", "CHATA"),
             parse_slot_content("CHATA", "  ", 4),
+        )
+
+    def test_pdf_export_dialog_omits_format_hint(self) -> None:
+        dialog = PdfExportDialog.__new__(PdfExportDialog)
+        dialog._initial_page_format = "A4"
+        master = Mock()
+        page_format_value = Mock()
+        page_format = Mock()
+
+        with (
+            patch("krizovkar.gui._inherit_macos_menu_bar"),
+            patch("krizovkar.gui.ttk.Label") as label,
+            patch(
+                "krizovkar.gui.tk.StringVar",
+                return_value=page_format_value,
+            ),
+            patch(
+                "krizovkar.gui.ttk.Combobox",
+                return_value=page_format,
+            ),
+        ):
+            initial_focus = PdfExportDialog.body(dialog, master)
+
+        self.assertIs(page_format, initial_focus)
+        label.assert_called_once_with(master, text="Formát stránky")
+        label.return_value.grid.assert_called_once_with(
+            row=0,
+            column=0,
+            sticky="w",
+        )
+        page_format.grid.assert_called_once_with(
+            row=1,
+            column=0,
+            sticky="ew",
+            pady=(3, 0),
         )
 
     def test_template_generation_dialog_uses_crossword_title(self) -> None:
