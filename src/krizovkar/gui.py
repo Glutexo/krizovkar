@@ -99,12 +99,25 @@ _RESIZE_TEMPLATE_CANDIDATE_LIMIT = 64
 _RESIZE_SECRET_SEARCH_LIMIT = 10_000
 _WINDOW_MENU_SELECTION_VARIABLE = "krizovkar_active_window"
 _SHADOW_ANSWER_TAG = "shadow-answer"
-_SLOT_LIST_PLACEMENT_MAIN = "main"
 _SLOT_LIST_PLACEMENT_WINDOW = "window"
+_SLOT_LIST_PLACEMENT_BELOW = "below"
+_SLOT_LIST_PLACEMENT_LEFT = "left"
+_SLOT_LIST_PLACEMENT_RIGHT = "right"
 _SLOT_LIST_PLACEMENT_OPTIONS = (
-    ("V hlavním okně", _SLOT_LIST_PLACEMENT_MAIN),
-    ("V samostatném okně", _SLOT_LIST_PLACEMENT_WINDOW),
+    ("Ve vlastním okně", _SLOT_LIST_PLACEMENT_WINDOW),
+    ("Pod křížovkou", _SLOT_LIST_PLACEMENT_BELOW),
+    ("Nalevo od křížovky", _SLOT_LIST_PLACEMENT_LEFT),
+    ("Napravo od křížovky", _SLOT_LIST_PLACEMENT_RIGHT),
 )
+_SLOT_LIST_EMBEDDED_PLACEMENTS = frozenset(
+    {
+        _SLOT_LIST_PLACEMENT_BELOW,
+        _SLOT_LIST_PLACEMENT_LEFT,
+        _SLOT_LIST_PLACEMENT_RIGHT,
+    }
+)
+_CROSSWORD_PREVIEW_PANE_WEIGHT = 3
+_SLOT_LIST_PANE_WEIGHT = 2
 _NO_DOCUMENT_SLOT_LIST_PLACEMENT_VARIABLE = (
     "krizovkar_no_document_slot_list_placement"
 )
@@ -4962,7 +4975,7 @@ class CrosswordApplication:
         self.slot_list_placement_menu = _create_slot_list_placement_menu(
             self.view_menu,
             variable=_NO_DOCUMENT_SLOT_LIST_PLACEMENT_VARIABLE,
-            selected=_SLOT_LIST_PLACEMENT_MAIN,
+            selected=_SLOT_LIST_PLACEMENT_BELOW,
             command=None,
         )
         self.view_menu.add_cascade(
@@ -5265,7 +5278,7 @@ class CrosswordDocumentWindow(ttk.Frame):
         self._slot_edit_identifier: str | None = None
         self._slot_answer_editor: ttk.Entry | None = None
         self._slot_clue_editor: ttk.Entry | None = None
-        self._slot_list_placement = _SLOT_LIST_PLACEMENT_MAIN
+        self._slot_list_placement = _SLOT_LIST_PLACEMENT_BELOW
         self._slot_list_window: tk.Toplevel | None = None
         self._slot_list_placement_variable = (
             f"krizovkar_slot_list_placement_{id(self)}"
@@ -5591,8 +5604,73 @@ class CrosswordDocumentWindow(ttk.Frame):
         workspace.columnconfigure(0, weight=1)
         workspace.rowconfigure(0, weight=1)
         self.crossword_workspace = workspace
-        self._build_crossword_preview(workspace)
-        self._build_slot_list(workspace)
+        self._build_crossword_workspace()
+
+    def _build_crossword_workspace(self) -> None:
+        workspace = self.crossword_workspace
+        if self._slot_list_placement == _SLOT_LIST_PLACEMENT_WINDOW:
+            self.crossword_split = None
+            self.slot_list_pane = None
+            preview_pane = ttk.Frame(workspace)
+            self.crossword_preview_pane = preview_pane
+            preview_pane.grid(row=0, column=0, sticky="nsew")
+            preview_pane.columnconfigure(0, weight=1)
+            preview_pane.rowconfigure(0, weight=1)
+            self._build_crossword_preview(preview_pane)
+            self._build_slot_list_window()
+            return
+
+        orientation = (
+            "vertical"
+            if self._slot_list_placement == _SLOT_LIST_PLACEMENT_BELOW
+            else "horizontal"
+        )
+        split = ttk.Panedwindow(workspace, orient=orientation)
+        self.crossword_split = split
+        split.grid(row=0, column=0, sticky="nsew")
+
+        preview_pane = ttk.Frame(split)
+        preview_pane.columnconfigure(0, weight=1)
+        preview_pane.rowconfigure(0, weight=1)
+        self.crossword_preview_pane = preview_pane
+        slot_list_pane = ttk.Frame(split)
+        slot_list_pane.columnconfigure(0, weight=1)
+        slot_list_pane.rowconfigure(0, weight=1)
+        self.slot_list_pane = slot_list_pane
+        self._build_crossword_preview(preview_pane)
+        self._build_slot_list(slot_list_pane)
+
+        panes = (
+            (
+                (slot_list_pane, _SLOT_LIST_PANE_WEIGHT),
+                (preview_pane, _CROSSWORD_PREVIEW_PANE_WEIGHT),
+            )
+            if self._slot_list_placement == _SLOT_LIST_PLACEMENT_LEFT
+            else (
+                (preview_pane, _CROSSWORD_PREVIEW_PANE_WEIGHT),
+                (slot_list_pane, _SLOT_LIST_PANE_WEIGHT),
+            )
+        )
+        for pane, weight in panes:
+            split.add(pane, weight=weight)
+
+    def _build_slot_list_window(self) -> None:
+        slot_list_window = tk.Toplevel(self.root)
+        self._slot_list_window = slot_list_window
+        slot_list_window.title(self._slot_list_window_title())
+        slot_list_window.geometry("780x340")
+        slot_list_window.minsize(520, 220)
+        slot_list_window.columnconfigure(0, weight=1)
+        slot_list_window.rowconfigure(0, weight=1)
+        slot_list_window.protocol(
+            "WM_DELETE_WINDOW",
+            lambda: self._set_slot_list_placement(
+                _SLOT_LIST_PLACEMENT_BELOW
+            ),
+        )
+        self._build_slot_list(slot_list_window, standalone=True)
+        slot_list_window.lift()
+        slot_list_window.focus_force()
 
     def _build_crossword_preview(self, parent: ttk.Frame) -> None:
         preview_frame = ttk.LabelFrame(
@@ -5652,10 +5730,10 @@ class CrosswordDocumentWindow(ttk.Frame):
             )
         self.slots_frame = slots_frame
         slots_frame.grid(
-            row=0 if standalone else 1,
+            row=0,
             column=0,
-            sticky="nsew" if standalone else "ew",
-            pady=0 if standalone else (12, 0),
+            sticky="nsew",
+            pady=0,
         )
         slots_frame.columnconfigure(0, weight=1)
         slots_frame.rowconfigure(0, weight=1)
@@ -5755,10 +5833,19 @@ class CrosswordDocumentWindow(ttk.Frame):
             return "break"
         return None
 
+    def _rebuild_crossword_workspace(self) -> None:
+        slot_list_window = self._slot_list_window
+        self._slot_list_window = None
+        if slot_list_window is not None:
+            slot_list_window.destroy()
+        for child in self.crossword_workspace.winfo_children():
+            child.destroy()
+        self._build_crossword_workspace()
+
     def _set_slot_list_placement(self, placement: str) -> None:
         if placement not in {
-            _SLOT_LIST_PLACEMENT_MAIN,
             _SLOT_LIST_PLACEMENT_WINDOW,
+            *_SLOT_LIST_EMBEDDED_PLACEMENTS,
         }:
             raise ValueError(f"Neznámé umístění tabulky: {placement}")
         if placement == self._slot_list_placement:
@@ -5772,35 +5859,11 @@ class CrosswordDocumentWindow(ttk.Frame):
             self._sync_slot_list_placement_menu()
             return
 
-        self.slots_frame.destroy()
-        if placement == _SLOT_LIST_PLACEMENT_WINDOW:
-            slot_list_window = tk.Toplevel(self.root)
-            self._slot_list_window = slot_list_window
-            self._slot_list_placement = placement
-            slot_list_window.title(self._slot_list_window_title())
-            slot_list_window.geometry("780x340")
-            slot_list_window.minsize(520, 220)
-            slot_list_window.columnconfigure(0, weight=1)
-            slot_list_window.rowconfigure(0, weight=1)
-            slot_list_window.protocol(
-                "WM_DELETE_WINDOW",
-                lambda: self._set_slot_list_placement(
-                    _SLOT_LIST_PLACEMENT_MAIN
-                ),
-            )
-            self._build_slot_list(slot_list_window, standalone=True)
-            slot_list_window.lift()
-            slot_list_window.focus_force()
-        else:
-            slot_list_window = self._slot_list_window
-            self._slot_list_window = None
-            self._slot_list_placement = placement
-            if slot_list_window is not None:
-                slot_list_window.destroy()
-            self._build_slot_list(self.crossword_workspace)
-
+        self._slot_list_placement = placement
+        self._rebuild_crossword_workspace()
         self._sync_slot_list_placement_menu()
         self._rebuild_slot_tree()
+        self._refresh_crossword_view()
 
     def _sync_slot_list_placement_menu(self) -> None:
         self.slot_list_placement_menu.setvar(

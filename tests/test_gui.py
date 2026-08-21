@@ -685,7 +685,7 @@ class GuiTest(unittest.TestCase):
         window_menu = Mock()
         help_menu = Mock()
         window._slot_list_placement_variable = "slot_list_placement"
-        window._slot_list_placement = "main"
+        window._slot_list_placement = "below"
         window._set_slot_list_placement = Mock()
 
         with (
@@ -809,15 +809,20 @@ class GuiTest(unittest.TestCase):
         )
         slot_list_placement_menu.setvar.assert_called_once_with(
             "slot_list_placement",
-            "main",
+            "below",
         )
         placement_items = slot_list_placement_menu.add_radiobutton.call_args_list
         self.assertEqual(
-            ["V hlavním okně", "V samostatném okně"],
+            [
+                "Ve vlastním okně",
+                "Pod křížovkou",
+                "Nalevo od křížovky",
+                "Napravo od křížovky",
+            ],
             [item.kwargs["label"] for item in placement_items],
         )
         self.assertEqual(
-            ["main", "window"],
+            ["window", "below", "left", "right"],
             [item.kwargs["value"] for item in placement_items],
         )
         self.assertTrue(
@@ -826,7 +831,7 @@ class GuiTest(unittest.TestCase):
                 for item in placement_items
             )
         )
-        placement_items[1].kwargs["command"]()
+        placement_items[0].kwargs["command"]()
         window._set_slot_list_placement.assert_called_once_with("window")
         menu.add_cascade.assert_has_calls(
             [
@@ -1004,13 +1009,18 @@ class GuiTest(unittest.TestCase):
         )
         slot_list_placement_menu.setvar.assert_called_once_with(
             "krizovkar_no_document_slot_list_placement",
-            "main",
+            "below",
         )
         placement_items = (
             slot_list_placement_menu.add_radiobutton.call_args_list
         )
         self.assertEqual(
-            ["V hlavním okně", "V samostatném okně"],
+            [
+                "Ve vlastním okně",
+                "Pod křížovkou",
+                "Nalevo od křížovky",
+                "Napravo od křížovky",
+            ],
             [item.kwargs["label"] for item in placement_items],
         )
         self.assertTrue(
@@ -4092,7 +4102,7 @@ class GuiTest(unittest.TestCase):
             )
 
         frame_init.assert_called_once_with(root, padding=(12, 10))
-        self.assertEqual("main", window._slot_list_placement)
+        self.assertEqual("below", window._slot_list_placement)
         self.assertIsNone(window._slot_list_window)
         self.assertTrue(
             window._slot_list_placement_variable.startswith(
@@ -4679,30 +4689,47 @@ class GuiTest(unittest.TestCase):
         self.assertEqual("→ 5", window._slot_label(slots["h2"]))
         self.assertEqual("↓ 2", window._slot_label(slots["v1"]))
 
-    def test_slot_table_moves_to_separate_window_and_back(self) -> None:
+    def test_slot_table_placement_rebuilds_workspace(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
-        window.root = Mock()
-        window._path = Path("krizovka.yaml")
-        window._dirty = False
-        window._slot_list_placement = "main"
+        window._slot_list_placement = "below"
         window._slot_list_window = None
         window._slot_list_placement_variable = "slot_list_placement"
         window.slot_list_placement_menu = Mock()
         window._save_inline_slot_edit = Mock(return_value=True)
-        window.slots_frame = Mock()
-        window.crossword_workspace = Mock()
         window._selected_slot_identifier = "v1"
-        window._build_slot_list = Mock()
+        window._rebuild_crossword_workspace = Mock()
         window._rebuild_slot_tree = Mock()
+        window._refresh_crossword_view = Mock()
+
+        window._set_slot_list_placement("left")
+
+        self.assertEqual("left", window._slot_list_placement)
+        self.assertIsNone(window._slot_list_window)
+        self.assertEqual("v1", window._selected_slot_identifier)
+        window.slot_list_placement_menu.setvar.assert_called_once_with(
+            "slot_list_placement",
+            "left",
+        )
+        window._rebuild_crossword_workspace.assert_called_once_with()
+        window._rebuild_slot_tree.assert_called_once_with()
+        window._refresh_crossword_view.assert_called_once_with()
+
+    def test_separate_slot_table_window_closes_back_below_preview(self) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window.root = Mock()
+        window._path = Path("krizovka.yaml")
+        window._dirty = False
+        window._slot_list_window = None
+        window._build_slot_list = Mock()
+        window._set_slot_list_placement = Mock()
         slot_list_window = Mock()
 
         with patch(
             "krizovkar.gui.tk.Toplevel",
             return_value=slot_list_window,
         ) as toplevel:
-            window._set_slot_list_placement("window")
+            window._build_slot_list_window()
 
-        window.slots_frame.destroy.assert_called_once_with()
         toplevel.assert_called_once_with(window.root)
         slot_list_window.title.assert_called_once_with(
             "Místa pro hesla — krizovka.yaml"
@@ -4717,58 +4744,32 @@ class GuiTest(unittest.TestCase):
         )
         slot_list_window.lift.assert_called_once_with()
         slot_list_window.focus_force.assert_called_once_with()
-        self.assertEqual("window", window._slot_list_placement)
         self.assertIs(slot_list_window, window._slot_list_window)
-        self.assertEqual("v1", window._selected_slot_identifier)
-        window.slot_list_placement_menu.setvar.assert_called_once_with(
-            "slot_list_placement",
-            "window",
-        )
-        window._rebuild_slot_tree.assert_called_once_with()
 
-        detached_slots_frame = Mock()
-        window.slots_frame = detached_slots_frame
-        window._build_slot_list.reset_mock()
-        window._rebuild_slot_tree.reset_mock()
         close_command = slot_list_window.protocol.call_args.args[1]
         close_command()
 
-        detached_slots_frame.destroy.assert_called_once_with()
-        slot_list_window.destroy.assert_called_once_with()
-        window._build_slot_list.assert_called_once_with(
-            window.crossword_workspace
-        )
-        self.assertEqual("main", window._slot_list_placement)
-        self.assertIsNone(window._slot_list_window)
-        self.assertEqual("v1", window._selected_slot_identifier)
-        window.slot_list_placement_menu.setvar.assert_called_with(
-            "slot_list_placement",
-            "main",
-        )
-        window._rebuild_slot_tree.assert_called_once_with()
-        self.assertEqual(2, window._save_inline_slot_edit.call_count)
+        window._set_slot_list_placement.assert_called_once_with("below")
 
     def test_invalid_inline_edit_prevents_moving_slot_table(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
-        window._slot_list_placement = "main"
+        window._slot_list_placement = "below"
         window._slot_list_window = None
         window._slot_list_placement_variable = "slot_list_placement"
         window.slot_list_placement_menu = Mock()
         window._save_inline_slot_edit = Mock(return_value=False)
-        window.slots_frame = Mock()
-        window._build_slot_list = Mock()
+        window._rebuild_crossword_workspace = Mock()
         window._rebuild_slot_tree = Mock()
+        window._refresh_crossword_view = Mock()
 
-        with patch("krizovkar.gui.tk.Toplevel") as toplevel:
-            window._set_slot_list_placement("window")
+        window._set_slot_list_placement("window")
 
-        window.slots_frame.destroy.assert_not_called()
-        toplevel.assert_not_called()
-        window._build_slot_list.assert_not_called()
+        window._rebuild_crossword_workspace.assert_not_called()
         window._rebuild_slot_tree.assert_not_called()
+        window._refresh_crossword_view.assert_not_called()
         window.slot_list_placement_menu.setvar.assert_called_once_with(
             "slot_list_placement",
-            "main",
+            "below",
         )
 
     def test_crossword_preview_detects_every_edge_and_corner(self) -> None:
@@ -4871,8 +4872,7 @@ class GuiTest(unittest.TestCase):
     def test_crossword_document_uses_full_width_workspace(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
         window.crossword_tab = Mock()
-        window._build_crossword_preview = Mock()
-        window._build_slot_list = Mock()
+        window._build_crossword_workspace = Mock()
         workspace = Mock()
 
         with patch(
@@ -4892,8 +4892,162 @@ class GuiTest(unittest.TestCase):
             sticky="nsew",
         )
         self.assertIs(workspace, window.crossword_workspace)
-        window._build_crossword_preview.assert_called_once_with(workspace)
-        window._build_slot_list.assert_called_once_with(workspace)
+        workspace.columnconfigure.assert_called_once_with(0, weight=1)
+        workspace.rowconfigure.assert_called_once_with(0, weight=1)
+        window._build_crossword_workspace.assert_called_once_with()
+
+    def test_crossword_workspace_embeds_slot_table_in_selected_position(
+        self,
+    ) -> None:
+        cases = (
+            (
+                "below",
+                "vertical",
+                (("preview", 3), ("slots", 2)),
+            ),
+            (
+                "left",
+                "horizontal",
+                (("slots", 2), ("preview", 3)),
+            ),
+            (
+                "right",
+                "horizontal",
+                (("preview", 3), ("slots", 2)),
+            ),
+        )
+
+        for placement, orientation, pane_order in cases:
+            with self.subTest(placement=placement):
+                window = CrosswordDocumentWindow.__new__(
+                    CrosswordDocumentWindow
+                )
+                window.crossword_workspace = Mock()
+                window._slot_list_placement = placement
+                window._build_crossword_preview = Mock()
+                window._build_slot_list = Mock()
+                split = Mock()
+                preview_pane = Mock()
+                slot_list_pane = Mock()
+                panes = {
+                    "preview": preview_pane,
+                    "slots": slot_list_pane,
+                }
+
+                with (
+                    patch(
+                        "krizovkar.gui.ttk.Panedwindow",
+                        return_value=split,
+                    ) as panedwindow_type,
+                    patch(
+                        "krizovkar.gui.ttk.Frame",
+                        side_effect=(preview_pane, slot_list_pane),
+                    ) as frame_type,
+                ):
+                    window._build_crossword_workspace()
+
+                panedwindow_type.assert_called_once_with(
+                    window.crossword_workspace,
+                    orient=orientation,
+                )
+                split.grid.assert_called_once_with(
+                    row=0,
+                    column=0,
+                    sticky="nsew",
+                )
+                self.assertEqual(2, frame_type.call_count)
+                frame_type.assert_has_calls([call(split), call(split)])
+                preview_pane.columnconfigure.assert_called_once_with(
+                    0,
+                    weight=1,
+                )
+                preview_pane.rowconfigure.assert_called_once_with(
+                    0,
+                    weight=1,
+                )
+                slot_list_pane.columnconfigure.assert_called_once_with(
+                    0,
+                    weight=1,
+                )
+                slot_list_pane.rowconfigure.assert_called_once_with(
+                    0,
+                    weight=1,
+                )
+                window._build_crossword_preview.assert_called_once_with(
+                    preview_pane
+                )
+                window._build_slot_list.assert_called_once_with(
+                    slot_list_pane
+                )
+                self.assertIs(split, window.crossword_split)
+                self.assertIs(preview_pane, window.crossword_preview_pane)
+                self.assertIs(slot_list_pane, window.slot_list_pane)
+                self.assertEqual(
+                    [
+                        call(panes[name], weight=weight)
+                        for name, weight in pane_order
+                    ],
+                    split.add.call_args_list,
+                )
+
+    def test_crossword_workspace_detaches_slot_table_to_own_window(
+        self,
+    ) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        window.crossword_workspace = Mock()
+        window._slot_list_placement = "window"
+        window._build_crossword_preview = Mock()
+        window._build_slot_list_window = Mock()
+        preview_pane = Mock()
+
+        with (
+            patch(
+                "krizovkar.gui.ttk.Panedwindow",
+            ) as panedwindow_type,
+            patch(
+                "krizovkar.gui.ttk.Frame",
+                return_value=preview_pane,
+            ) as frame_type,
+        ):
+            window._build_crossword_workspace()
+
+        panedwindow_type.assert_not_called()
+        frame_type.assert_called_once_with(window.crossword_workspace)
+        preview_pane.grid.assert_called_once_with(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+        preview_pane.columnconfigure.assert_called_once_with(0, weight=1)
+        preview_pane.rowconfigure.assert_called_once_with(0, weight=1)
+        window._build_crossword_preview.assert_called_once_with(preview_pane)
+        window._build_slot_list_window.assert_called_once_with()
+        self.assertIsNone(window.crossword_split)
+        self.assertIsNone(window.slot_list_pane)
+        self.assertIs(preview_pane, window.crossword_preview_pane)
+
+    def test_rebuilding_crossword_workspace_replaces_all_placement_widgets(
+        self,
+    ) -> None:
+        window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)
+        detached_window = Mock()
+        old_preview = Mock()
+        old_split = Mock()
+        window._slot_list_window = detached_window
+        window.crossword_workspace = Mock()
+        window.crossword_workspace.winfo_children.return_value = (
+            old_preview,
+            old_split,
+        )
+        window._build_crossword_workspace = Mock()
+
+        window._rebuild_crossword_workspace()
+
+        detached_window.destroy.assert_called_once_with()
+        old_preview.destroy.assert_called_once_with()
+        old_split.destroy.assert_called_once_with()
+        self.assertIsNone(window._slot_list_window)
+        window._build_crossword_workspace.assert_called_once_with()
 
     def test_document_content_does_not_add_another_outer_margin(self) -> None:
         window = CrosswordDocumentWindow.__new__(CrosswordDocumentWindow)

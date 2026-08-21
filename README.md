@@ -211,9 +211,11 @@ dokumentu se nepřepne. Změny provedené v hlavním okně jeho zdroj také
 automaticky aktualizují. Zavření příslušného dokumentu zavře i jeho okno
 zdroje.
 
-Podnabídka **Zobrazení → Místa pro hesla** přepíná tabulku mezi volbami
-**V hlavním okně** a **V samostatném okně**. Zavření samostatného okna vrátí
-tabulku zpět do hlavního okna téhož dokumentu.
+Podnabídka **Zobrazení → Místa pro hesla** umístí tabulku **Ve vlastním
+okně**, **Pod křížovkou**, **Nalevo od křížovky** nebo **Napravo od
+křížovky**. U tří variant v hlavním okně lze dělicí příčku mezi tabulkou a
+náhledem táhnout a měnit tak poměr obou oblastí. Zavření vlastního okna vrátí
+tabulku pod křížovku téhož dokumentu.
 
 Nabídka **Okno** uvádí všechna otevřená dokumentová okna. Aktuální okno
 označí a výběrem jiné položky přenese příslušný dokument dopředu.
